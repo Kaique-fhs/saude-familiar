@@ -324,3 +324,13 @@ table.nutri th:first-child, table.nutri td:first-child { text-align: left; }
 .ponto.completo { background: var(--primary); }
 .ponto.parcial { background: var(--accent-soft); border: 1px solid var(--accent); }
 @media (min-width: 900px) { .dia, .calendario { max-width: 640px; } }
+
+/* Atalho do plano para a frequência */
+.status-dia {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 14px; margin-bottom: 16px; min-height: 56px; color: var(--fg); text-decoration: none;
+}
+.status-dia .detalhes { display: block; font-size: .85rem; color: var(--muted); }
+.status-dia > span:last-child { font-size: 1.2rem; color: var(--primary); }
+.status-dia:hover { border-color: var(--primary); }

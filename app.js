@@ -314,7 +314,7 @@
       '<div class="dia-topo"><h3 id="titulo-dia">' + rotuloDia(diaSel) + ': ' + feitas.length + ' de ' + TOTAL_REF + ' refeições</h3>' +
       (seq ? '<span class="sequencia">' + seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') + '</span>' : '') + '</div>' +
       '<div class="barra" aria-hidden="true"><span style="width:' + Math.round(feitas.length / TOTAL_REF * 100) + '%"></span></div>' +
-      '<p class="dica-dia">Toque nas refeições que você fez' + (diaSel === hojeChave() ? '' : ' nesse dia') + '. Para marcar outro dia, toque nele no calendário abaixo.</p>' +
+      '<p class="dica-dia">Toque nas refeições que você fez' + (diaSel === hojeChave() ? '' : ' nesse dia') + '. Esqueceu um dia? Toque nele no calendário abaixo.</p>' +
       '<div class="chips" role="group" aria-label="Refeições feitas">' +
       PLANO.refeicoes.map(function (r) {
         var ok = feitas.indexOf(r.id) >= 0;
@@ -360,13 +360,13 @@
   function telaPlano() {
     var atual = refeicaoAtual(), t = PLANO.nutrientes.total;
     var h = '<h2 class="titulo-secao">Meu plano do dia</h2>' +
-      '<p class="descricao">Marque as refeições que você fez e acompanhe os dias cumpridos no calendário. Toque em cada refeição para ver as opções de troca.</p>' +
+      '<p class="descricao">Toque em cada refeição para ver as opções de troca. A refeição do horário atual já vem aberta.</p>' +
       '<div class="resumo" aria-label="Total do dia">' +
       '<div><b>' + t.kcal + '</b><span>kcal</span></div>' +
       '<div><b>' + t.proteinas + '</b><span>proteínas</span></div>' +
       '<div><b>' + t.carboidratos + '</b><span>carboidratos</span></div>' +
       '<div><b>' + t.lipidios + '</b><span>gorduras</span></div></div>' +
-      blocoDia() +
+      statusHoje() +
       '<div class="plano-grade">';
     PLANO.refeicoes.forEach(function (r) {
       var eAgora = r.id === atual;
@@ -392,7 +392,7 @@
       }
       h += '</div></details>';
     });
-    h += '</div>' + blocoCalendario() + '<h3 class="subtitulo">Nutrientes por refeição</h3><div class="tabela-wrap"><table class="nutri">' +
+    h += '</div><h3 class="subtitulo">Nutrientes por refeição</h3><div class="tabela-wrap"><table class="nutri">' +
       '<thead><tr><th>Refeição</th><th>Prot.</th><th>Gord.</th><th>Carb.</th><th>Calorias</th></tr></thead><tbody>' +
       PLANO.nutrientes.linhas.map(function (l) { return '<tr>' + l.map(function (c) { return '<td>' + c + '</td>'; }).join("") + '</tr>'; }).join("") +
       '<tr><td><b>Total</b></td><td><b>' + t.proteinas + '</b></td><td><b>' + t.lipidios + '</b></td><td><b>' + t.carboidratos + '</b></td><td><b>' + t.kcal + ' kcal</b></td></tr>' +
@@ -417,16 +417,17 @@
     var q = semAcento(termo.trim());
     return lista.filter(function (r) {
       if (filtro === "selecionadas" && sel.indexOf(r.id) < 0) return false;
-      if (filtro !== "todas" && filtro !== "selecionadas" && r.tipo !== filtro) return false;
+      if (filtro === "favoritas" && favs.indexOf(r.id) < 0) return false;
+      if (TIPOS[filtro] && r.tipo !== filtro) return false;
       if (!q) return true;
       return semAcento(r.nome + " " + r.ingredientes.join(" ")).indexOf(q) >= 0;
     });
   }
 
   function telaReceitas() {
-    var botoes = [["todas", "Todas"], ["doce", "Doces"], ["salgado", "Salgadas"], ["pao", "Pães"], ["selecionadas", "Na lista (" + sel.length + ")"]];
+    var botoes = [["todas", "Todas"], ["favoritas", "Favoritas (" + favs.length + ")"], ["doce", "Doces"], ["salgado", "Salgadas"], ["pao", "Pães"], ["selecionadas", "Na lista (" + sel.length + ")"]];
     return '<h2 class="titulo-secao">Receitas</h2>' +
-      '<p class="descricao">' + RECEITAS.length + ' receitas do caderno. Toque em <b>Adicionar</b> nas que você vai fazer e veja tudo o que comprar na aba Compras.</p>' +
+      '<p class="descricao">' + RECEITAS.length + ' receitas do caderno. Toque no coração para favoritar e em <b>Adicionar</b> nas que você vai fazer para montar a lista de compras.</p>' +
       '<label for="busca" class="sr">Buscar receita ou ingrediente</label>' +
       '<input id="busca" class="busca" type="search" placeholder="Buscar receita ou ingrediente (ex.: banana)" value="' + esc(termo) + '">' +
       '<div class="filtros" role="group" aria-label="Filtrar receitas">' +
@@ -435,16 +436,23 @@
   }
   function gradeHtml() {
     var l = filtrar(RECEITAS);
-    return l.length ? l.map(cartao).join("") : '<p class="vazio">Nenhuma receita encontrada.</p>';
+    if (l.length) return l.map(cartao).join("");
+    if (filtro === "favoritas" && !favs.length) return '<p class="vazio">Você ainda não favoritou nenhuma receita. Toque no coração de uma receita para ela aparecer aqui.</p>';
+    return '<p class="vazio">Nenhuma receita encontrada.</p>';
   }
 
-  function telaFavoritas() {
-    var l = RECEITAS.filter(function (r) { return favs.indexOf(r.id) >= 0; });
-    return '<h2 class="titulo-secao">Favoritas</h2>' +
-      '<p class="descricao">As receitas que você marcou com o coração ficam aqui, salvas neste aparelho.</p>' +
-      (l.length ? '<div class="grade">' + l.map(cartao).join("") + '</div>'
-        : '<div class="vazio">Você ainda não favoritou nenhuma receita.<br><br><a class="btn primario" href="#receitas">Ver receitas</a></div>') +
-      telaBackup();
+  function statusHoje() {
+    var n = feitasNoDia(hojeChave()).length, seq = sequencia();
+    return '<a class="status-dia" href="#frequencia">' +
+      '<span><b>Hoje: ' + n + ' de ' + TOTAL_REF + ' refeições marcadas</b>' +
+      '<span class="detalhes">' + (seq ? seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') + ' · ' : '') + 'Toque para marcar e ver o calendário</span></span>' +
+      '<span aria-hidden="true">→</span></a>';
+  }
+
+  function telaFrequencia() {
+    return '<h2 class="titulo-secao">Frequência</h2>' +
+      '<p class="descricao">Marque as refeições que você fez e acompanhe no calendário os dias em que cumpriu o plano.</p>' +
+      blocoDia() + blocoCalendario() + telaBackup();
   }
 
   function telaReceita(id) {
@@ -571,7 +579,7 @@
   // ---------- backup (favoritas, listas e escolhas) ----------
   function telaBackup() {
     return '<section class="backup"><h3 class="subtitulo">Cópia de segurança</h3>' +
-      '<p class="descricao">Suas favoritas, listas e escolhas ficam só neste aparelho. Salve uma cópia para não perder nada ou para passar para outro aparelho.</p>' +
+      '<p class="descricao">Os dias marcados, as favoritas e as listas ficam só neste aparelho. Salve uma cópia para não perder nada ou para passar para outro aparelho.</p>' +
       '<div class="linha-acoes"><button class="btn" id="baixar-backup">' + ICON.share + 'Salvar cópia</button>' +
       '<button class="btn" id="restaurar-backup">Restaurar cópia</button>' +
       '<input class="sr" type="file" id="arquivo-backup" accept="application/json,.json" tabindex="-1" aria-hidden="true"></div></section>';
@@ -623,7 +631,8 @@
     var html;
     if (aba === "receita") { html = telaReceita(partes[1]); aba = "receitas"; }
     else if (aba === "receitas") html = telaReceitas();
-    else if (aba === "favoritas") html = telaFavoritas();
+    else if (aba === "favoritas") { filtro = "favoritas"; html = telaReceitas(); aba = "receitas"; }
+    else if (aba === "frequencia") html = telaFrequencia();
     else if (aba === "compras") html = telaCompras();
     else if (aba === "quero" || aba === "despensa") { html = telaDespensa(); aba = "quero"; }
     else { html = telaPlano(); aba = "plano"; }
