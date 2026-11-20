@@ -652,6 +652,14 @@
     }
     dlg.innerHTML = h;
     preencherFotos(dlg);
+    if (!leitura && regAtual.fotoAntiga) {
+      // foto já registrada: não pode ser trocada nem apagada (dá para ajustar o que comeu)
+      dlg.querySelectorAll("#reg-camera, #reg-apagar, .reg-regra, #reg-arq-camera").forEach(function (el) { el.hidden = true; });
+      var trava = document.createElement("p");
+      trava.className = "reg-travada";
+      trava.textContent = "A foto registrada não pode ser trocada nem apagada.";
+      dlg.querySelector(".reg-foto").appendChild(trava);
+    }
     if (leitura) {
       // dia passado: só consulta
       dlg.querySelectorAll("input, select").forEach(function (el) { el.disabled = true; });
@@ -683,7 +691,7 @@
 
   var FOTO_MAX_MINUTOS = 15; // foto mais antiga que isso não vale (veio da galeria)
   function receberFoto(arquivo) {
-    if (!arquivo) return;
+    if (!arquivo || !regAtual || regAtual.fotoAntiga) return; // foto registrada não pode ser trocada
     var aviso = dlg.querySelector("#reg-sem-foto");
     if (arquivo.lastModified && Date.now() - arquivo.lastModified > FOTO_MAX_MINUTOS * 60000) {
       aviso.hidden = false;
@@ -720,6 +728,7 @@
     if (dia !== hojeChave()) { fecharRegistro(); toast("O dia virou. Abra o registro de novo para marcar hoje."); rerenderMantendoScroll(); return; }
     var botao = dlg.querySelector("#reg-salvar");
     botao.disabled = true; botao.textContent = "Salvando...";
+    if (fotoAntiga) blob = null; // nunca troca uma foto já registrada
     var passo = Promise.resolve(fotoAntiga);
     if (blob) {
       var novoId = "f-" + dia + "-" + ref + "-" + Date.now();
@@ -751,6 +760,7 @@
 
   function apagarRegistro() {
     var dia = regAtual.dia, ref = regAtual.ref;
+    if (regAtual.fotoAntiga) { toast("Registro com foto não pode ser apagado."); return; }
     var antesReg = (registros[dia] || {})[ref] || null;
     var marcados = marcadosDe(ref);
     var antesDia = (marcados[dia] || []).slice();
@@ -889,7 +899,7 @@
       '<div class="meta"><span class="chip">' + r.kcal + ' kcal</span><span class="tag-sit">' + (s === "feita" ? ICON.check : '') + TEXTO_SITUACAO[s] + '</span></div>' +
       (s === "feita" && reg ? '<p class="descricao">' + esc(resumoRegistro(reg)) + '</p>' : '') +
       '<div class="acoes"><button class="btn' + (s === "feita" ? '' : ' primario') + '" data-registrar="' + r.id + '" data-hoje>' + ICON.camera +
-      (s === "feita" ? 'Ver ou mudar o registro' : 'Marcar o que comi') + '</button></div>' +
+      (s === "feita" ? 'Ver o registro' : 'Marcar o que comi') + '</button></div>' +
       '<h3>O que comer</h3>';
     r.itens.forEach(function (it) {
       h += '<div class="item"><div class="principal">' + esc(it.principal) + '</div>';

@@ -482,3 +482,4 @@ dialog#registro::backdrop { background: rgba(0,0,0,.55); }
 /* Compartilhar no WhatsApp */
 .btn.whats { width: 100%; background: #15803d; border-color: #15803d; color: #fff; }
 .btn.whats svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; }
+.reg-travada { margin: 4px 0 0; font-weight: 700; color: var(--primary-strong); }
