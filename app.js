@@ -795,29 +795,67 @@
     dlg.addEventListener("close", function () { if (regAtual) fecharRegistro(); });
   }
 
+  // Visões do calendário: tudo junto, só alimentação ou só exercício físico.
+  var MODOS_CAL = [
+    ["completo", "Completo"],
+    ["alimentacao", "Alimentação"],
+    ["exercicio", "Exercício físico"]
+  ];
+  var modoCal = ler("mp-modo-cal", "completo");
+  if (!MODOS_CAL.some(function (m) { return m[0] === modoCal; })) modoCal = "completo";
+
+  // Quanto foi feito e quanto era para fazer no dia, conforme a visão escolhida.
+  function contagemDia(k, modo) {
+    if (modo === "alimentacao") return { n: feitasNoDia(k).length, tot: TOTAL_REF };
+    if (modo === "exercicio") return { n: treinosFeitos(k).length, tot: exerciciosDoDia(k).length };
+    return { n: feitosDoDia(k), tot: totalDoDia(k) };
+  }
+
   function blocoCalendario() {
     var ano = mesVisto.getFullYear(), mes = mesVisto.getMonth();
     var primeiro = new Date(ano, mes, 1), dias = new Date(ano, mes + 1, 0).getDate();
-    var hoje = hojeChave(), cumpridos = 0;
+    var hoje = hojeChave(), cumpridos = 0, comMeta = 0;
     var h = '<section class="calendario" aria-labelledby="titulo-cal">' +
+      '<div class="cal-modos" role="group" aria-label="O que mostrar no calendário">' + MODOS_CAL.map(function (m) {
+        return '<button data-modocal="' + m[0] + '" aria-pressed="' + (modoCal === m[0]) + '">' + m[1] + '</button>';
+      }).join("") + '</div>' +
       '<div class="cal-topo"><button class="btn-fav" id="mes-ant" aria-label="Mês anterior">' + ICON.back + '</button>' +
       '<h3 id="titulo-cal">' + MESES[mes].charAt(0).toUpperCase() + MESES[mes].slice(1) + ' de ' + ano + '</h3>' +
       '<button class="btn-fav seta-dir" id="mes-prox" aria-label="Próximo mês"' + (ano * 12 + mes >= new Date().getFullYear() * 12 + new Date().getMonth() ? ' disabled' : '') + '>' + ICON.back + '</button></div>' +
       '<div class="cal-grade">' + SEMANA.map(function (s) { return '<span class="cal-sem" aria-hidden="true">' + s.charAt(0).toUpperCase() + '</span>'; }).join("");
     for (var i = 0; i < primeiro.getDay(); i++) h += '<span></span>';
     for (var dia = 1; dia <= dias; dia++) {
-      var k = chaveData(new Date(ano, mes, dia)), n = feitosDoDia(k), tot = totalDoDia(k), futuro = k > hoje;
-      if (n >= tot) cumpridos++;
-      var classe = n >= tot ? "completo" : (n ? "parcial" : "");
-      var desc = dia + " de " + MESES[mes] + ": " + (n >= tot ? "cumprido" : n ? n + " de " + tot + " itens (refeições e exercícios)" : "nada marcado");
+      var k = chaveData(new Date(ano, mes, dia)), c = contagemDia(k, modoCal), n = c.n, tot = c.tot, futuro = k > hoje;
+      var classe, desc = dia + " de " + MESES[mes] + ": ";
+      if (!tot) {
+        // visão de exercício num dia sem treino programado
+        classe = "descanso"; desc += "sem treino programado";
+      } else {
+        if (!futuro) comMeta++;
+        if (n >= tot) cumpridos++;
+        classe = n >= tot ? "completo" : (n ? "parcial" : "");
+        var oque = modoCal === "alimentacao" ? "refeições" : modoCal === "exercicio" ? "exercícios" : "itens (refeições e exercícios)";
+        desc += n >= tot ? "cumprido" : n ? n + " de " + tot + " " + oque : "nada marcado";
+      }
       h += '<button class="cal-dia ' + classe + (k === hoje ? ' hoje' : '') + (k === diaSel ? ' sel' : '') + '" data-dia="' + k + '"' +
         (futuro ? ' disabled' : '') + ' aria-pressed="' + (k === diaSel) + '" aria-label="' + desc + '">' + dia +
         (n && n < tot ? '<small>' + n + '/' + tot + '</small>' : '') + '</button>';
     }
-    h += '</div><p class="cal-legenda"><span class="ponto completo"></span>Dia cumprido (refeições e exercícios) <span class="ponto parcial"></span>Em parte' +
-      '<br><b>' + cumpridos + '</b> dia' + (cumpridos === 1 ? '' : 's') + ' cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + MESES[mes] + '.</p></section>';
+    var legenda, resumo, nomeMes = MESES[mes];
+    if (modoCal === "alimentacao") {
+      legenda = '<span class="ponto completo"></span>5 de 5 refeições <span class="ponto parcial"></span>Em parte';
+      resumo = '<b>' + cumpridos + '</b> dia' + (cumpridos === 1 ? '' : 's') + ' com alimentação completa em ' + nomeMes + '.';
+    } else if (modoCal === "exercicio") {
+      legenda = '<span class="ponto completo"></span>Treino feito <span class="ponto parcial"></span>Em parte <span class="ponto descanso"></span>Sem treino';
+      resumo = '<b>' + cumpridos + '</b> de ' + comMeta + ' dia' + (comMeta === 1 ? '' : 's') + ' de treino cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + nomeMes + '.';
+    } else {
+      legenda = '<span class="ponto completo"></span>Dia cumprido (refeições e exercícios) <span class="ponto parcial"></span>Em parte';
+      resumo = '<b>' + cumpridos + '</b> dia' + (cumpridos === 1 ? '' : 's') + ' cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + nomeMes + '.';
+    }
+    h += '</div><p class="cal-legenda">' + legenda + '<br>' + resumo + '</p></section>';
     return h;
   }
+
 
   function rotuloHora(r) { return r.hora || (r.id === "acordar" ? "Acordar" : "Manhã"); }
 
@@ -1350,7 +1388,7 @@
     var ativo = document.activeElement, seletor = null;
     if (ativo && ativo !== document.body) {
       if (ativo.id) seletor = "#" + CSS.escape(ativo.id);
-      else ["fav", "sel", "filtro", "desp", "registrar", "treino", "dia"].some(function (k) {
+      else ["fav", "sel", "filtro", "desp", "registrar", "treino", "dia", "modocal"].some(function (k) {
         if (ativo.dataset && ativo.dataset[k] !== undefined) {
           seletor = (ativo.tagName.toLowerCase()) + "[data-" + k + '="' + CSS.escape(ativo.dataset[k]) + '"]';
           return true;
@@ -1382,6 +1420,8 @@
       diaSel = b.dataset.dia; rerenderMantendoScroll();
       var bloco = document.querySelector(".dia");
       if (bloco && bloco.getBoundingClientRect().top < 0) bloco.scrollIntoView({ block: "start" });
+    } else if (b.dataset.modocal) {
+      modoCal = b.dataset.modocal; gravar("mp-modo-cal", modoCal); rerenderMantendoScroll();
     } else if (b.id === "compartilhar-dia") {
       compartilharResultadoDia(diaSel);
     } else if (b.id === "voltar-hoje") {
