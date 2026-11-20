@@ -319,7 +319,8 @@
     return '<h2 class="titulo-secao">Favoritas</h2>' +
       '<p class="descricao">As receitas que você marcou com o coração ficam aqui, salvas neste aparelho.</p>' +
       (l.length ? '<div class="grade">' + l.map(cartao).join("") + '</div>'
-        : '<div class="vazio">Você ainda não favoritou nenhuma receita.<br><br><a class="btn primario" href="#receitas">Ver receitas</a></div>');
+        : '<div class="vazio">Você ainda não favoritou nenhuma receita.<br><br><a class="btn primario" href="#receitas">Ver receitas</a></div>') +
+      telaBackup();
   }
 
   function telaReceita(id) {
@@ -409,14 +410,77 @@
   }
 
   function telaDespensa() {
+    // Ingredientes primeiro e receitas depois: assim os botões não mudam de lugar ao tocar.
     return '<h2 class="titulo-secao">O que quero comer</h2>' +
-      '<p class="descricao">Escolha os ingredientes que você está com vontade de comer. As receitas que levam mais deles aparecem primeiro.</p>' +
-      '<div id="resultado-despensa">' + resultadoDespensa() + '</div>' +
-      '<div class="cabecalho-despensa"><h3 class="subtitulo">Ingredientes escolhidos (' + despensa.length + ')</h3>' +
-      (despensa.length ? '<button class="btn mini" id="limpar-despensa">Desmarcar todos</button>' : '') + '</div>' +
+      '<p class="descricao">Escolha os ingredientes que você está com vontade de comer. As receitas que levam mais deles aparecem logo abaixo, das mais combinadas para as menos.</p>' +
+      '<div class="cabecalho-despensa"><h3 class="subtitulo" id="qtd-escolhidos">' + textoEscolhidos() + '</h3>' +
+      '<button class="btn mini" id="limpar-despensa"' + (despensa.length ? '' : ' hidden') + '>Desmarcar todos</button></div>' +
       '<label for="busca-despensa" class="sr">Buscar ingrediente</label>' +
       '<input id="busca-despensa" class="busca" type="search" placeholder="Buscar ingrediente (ex.: banana)" value="' + esc(termoDesp) + '">' +
-      '<div id="chips-despensa">' + chipsDespensa() + '</div>';
+      '<div id="chips-despensa">' + chipsDespensa() + '</div>' +
+      '<h3 class="subtitulo titulo-resultado" id="receitas-combinadas" tabindex="-1">Receitas que combinam</h3>' +
+      '<div id="resultado-despensa">' + resultadoDespensa() + '</div>' +
+      '<button class="btn primario flutuante" id="ir-receitas"' + (despensa.length ? '' : ' hidden') + '>' + textoBotaoFlutuante() + '</button>';
+  }
+
+  function textoEscolhidos() { return "Ingredientes escolhidos (" + despensa.length + ")"; }
+  function textoBotaoFlutuante() {
+    var n = despensa.length ? receitasCombinadas().length : 0;
+    return "Ver " + n + " receita" + (n === 1 ? "" : "s") + " ↓";
+  }
+
+  // Atualiza só as partes que mudam, sem redesenhar a tela inteira.
+  function atualizarQueroComer(focarDesp) {
+    document.getElementById("chips-despensa").innerHTML = chipsDespensa();
+    document.getElementById("resultado-despensa").innerHTML = resultadoDespensa();
+    document.getElementById("qtd-escolhidos").textContent = textoEscolhidos();
+    document.getElementById("limpar-despensa").hidden = !despensa.length;
+    var fl = document.getElementById("ir-receitas");
+    fl.hidden = !despensa.length;
+    fl.textContent = textoBotaoFlutuante();
+    if (focarDesp) {
+      var el = main.querySelector('[data-desp="' + CSS.escape(focarDesp) + '"]');
+      if (el) el.focus();
+    }
+  }
+
+  // ---------- backup (favoritas, listas e escolhas) ----------
+  function telaBackup() {
+    return '<section class="backup"><h3 class="subtitulo">Cópia de segurança</h3>' +
+      '<p class="descricao">Suas favoritas, listas e escolhas ficam só neste aparelho. Salve uma cópia para não perder nada ou para passar para outro aparelho.</p>' +
+      '<div class="linha-acoes"><button class="btn" id="baixar-backup">' + ICON.share + 'Salvar cópia</button>' +
+      '<button class="btn" id="restaurar-backup">Restaurar cópia</button>' +
+      '<input class="sr" type="file" id="arquivo-backup" accept="application/json,.json" tabindex="-1" aria-hidden="true"></div></section>';
+  }
+
+  function baixarBackup() {
+    var dados = { app: "meu-prato", versao: 1, salvoEm: new Date().toISOString(), favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa };
+    var blob = new Blob([JSON.stringify(dados, null, 2)], { type: "application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "meu-prato-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    toast("Cópia salva");
+  }
+
+  function restaurarBackup(arquivo) {
+    var leitor = new FileReader();
+    leitor.onload = function () {
+      try {
+        var d = JSON.parse(leitor.result);
+        if (!d || d.app !== "meu-prato") throw new Error("arquivo");
+        var ids = RECEITAS.map(function (r) { return r.id; });
+        var soReceitas = function (l) { return Array.isArray(l) ? l.filter(function (id) { return ids.indexOf(id) >= 0; }) : []; };
+        favs = soReceitas(d.favs);
+        sel = soReceitas(d.sel);
+        checks = d.checks && typeof d.checks === "object" ? d.checks : {};
+        checksPlano = d.checksPlano && typeof d.checksPlano === "object" ? d.checksPlano : {};
+        despensa = Array.isArray(d.quero) ? d.quero.filter(function (p) { return TODOS_PRODUTOS[p]; }) : [];
+        salvarTudo(); render(); toast("Cópia restaurada");
+      } catch (e) { toast("Esse arquivo não é uma cópia do Meu Prato"); }
+    };
+    leitor.readAsText(arquivo);
   }
 
   // ---------- roteamento ----------
@@ -445,10 +509,21 @@
 
   function rerenderMantendoScroll() {
     var y = window.scrollY;
-    var foco = document.activeElement && document.activeElement.id;
+    // Lembra qual botão estava em foco para devolver o foco a ele depois de redesenhar.
+    var ativo = document.activeElement, seletor = null;
+    if (ativo && ativo !== document.body) {
+      if (ativo.id) seletor = "#" + CSS.escape(ativo.id);
+      else ["fav", "sel", "filtro", "desp"].some(function (k) {
+        if (ativo.dataset && ativo.dataset[k] !== undefined) {
+          seletor = (ativo.tagName.toLowerCase()) + "[data-" + k + '="' + CSS.escape(ativo.dataset[k]) + '"]';
+          return true;
+        }
+        return false;
+      });
+    }
     render();
     window.scrollTo(0, y);
-    if (foco) { var el = document.getElementById(foco); if (el) el.focus(); }
+    if (seletor) { var el = main.querySelector(seletor); if (el) el.focus({ preventScroll: true }); }
   }
 
   // ---------- eventos ----------
@@ -465,9 +540,18 @@
       rerenderMantendoScroll();
     } else if (b.dataset.desp) {
       alternar(despensa, b.dataset.desp); salvarTudo();
-      rerenderMantendoScroll();
+      atualizarQueroComer(b.dataset.desp);
     } else if (b.id === "limpar-despensa") {
-      despensa = []; salvarTudo(); rerenderMantendoScroll();
+      despensa = []; salvarTudo(); atualizarQueroComer();
+      document.getElementById("busca-despensa").focus();
+    } else if (b.id === "ir-receitas") {
+      var alvo = document.getElementById("receitas-combinadas");
+      alvo.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+      alvo.focus({ preventScroll: true });
+    } else if (b.id === "restaurar-backup") {
+      document.getElementById("arquivo-backup").click();
+    } else if (b.id === "baixar-backup") {
+      baixarBackup();
     } else if (b.dataset.filtro) {
       filtro = b.dataset.filtro; rerenderMantendoScroll();
     } else if (b.id === "limpar") {
@@ -486,6 +570,7 @@
 
   main.addEventListener("change", function (e) {
     var t = e.target;
+    if (t.id === "arquivo-backup" && t.files && t.files[0]) { restaurarBackup(t.files[0]); t.value = ""; return; }
     if (t.dataset.check) { if (t.checked) checks[t.dataset.check] = true; else delete checks[t.dataset.check]; salvarTudo(); }
     if (t.dataset.checkplano) { if (t.checked) checksPlano[t.dataset.checkplano] = true; else delete checksPlano[t.dataset.checkplano]; salvarTudo(); }
   });
