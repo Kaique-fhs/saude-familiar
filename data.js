@@ -160,10 +160,11 @@ window.PLANO = {
     ],
     total: { proteinas: "111.6g", lipidios: "39.3g", carboidratos: "134.1g", kcal: 1294, fibras: "21.0g" }
   },
-  // Exercícios obrigatórios. dias: 0 = domingo, 1 = segunda, 2 = terça ... 5 = sexta, 6 = sábado
+  // Exercícios obrigatórios. dias: 0 = domingo, 1 = segunda, 2 = terça ... 5 = sexta, 6 = sábado.
+  // Para mudar a agenda: ponha "ate" na linha antiga (último dia que valia) e crie outra com "desde".
   exercicios: [
-    { id: "pilates", nome: "Pilates", dias: [1, 2] },
-    { id: "academia", nome: "Academia", dias: [2, 5] }
+    { id: "pilates", nome: "Pilates", dias: [1, 2], desde: "2026-11-01" },
+    { id: "academia", nome: "Academia", dias: [2, 5], desde: "2026-11-01" }
   ],
   compras: [
     "Abacaxi", "Abobrinha italiana", "Acém", "Atum em óleo", "Aveia em flocos", "Banana maçã",

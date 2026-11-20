@@ -11,7 +11,7 @@
     catch (e) { return padrao; }
   }
   function gravar(chave, valor) {
-    try { localStorage.setItem(chave, JSON.stringify(valor)); } catch (e) { /* sem armazenamento */ }
+    try { localStorage.setItem(chave, JSON.stringify(valor)); return true; } catch (e) { return false; }
   }
   var favs = ler("mp-favs", []);
   var sel = ler("mp-sel", []);
@@ -33,23 +33,40 @@
       }
     } catch (e) { /* navegador sem suporte */ }
   }
-  pedirPersistencia(); // { "2026-11-20": { almoco: { escolhas, receita, foto, hora } } }
+  pedirPersistencia();
+
+  // Relê tudo do armazenamento (outra janela do app pode ter gravado algo).
+  function recarregarEstado() {
+    favs = ler("mp-favs", []); sel = ler("mp-sel", []); checks = ler("mp-checks", {});
+    checksPlano = ler("mp-checks-plano", {}); despensa = ler("mp-quero", []); diario = ler("mp-diario", {});
+    ultimoBackup = ler("mp-ultimo-backup", null); treinos = ler("mp-treinos", {}); registros = ler("mp-registros", {});
+    backupsMes = ler("mp-backups-mes", {});
+  } // { "2026-11-20": { almoco: { escolhas, receita, foto, hora } } }
   var diaSel = hojeChave(); // dia que está sendo marcado
   var mesVisto = new Date(); mesVisto.setDate(1);
   var filtro = "todas";
   var termo = "";
 
   function salvarTudo() {
-    gravar("mp-favs", favs);
-    gravar("mp-sel", sel);
-    gravar("mp-checks", checks);
-    gravar("mp-checks-plano", checksPlano);
-    gravar("mp-quero", despensa);
-    gravar("mp-diario", diario);
-    gravar("mp-registros", registros);
-    gravar("mp-treinos", treinos);
+    var ok = true;
+    ok = gravar("mp-favs", favs) && ok;
+    ok = gravar("mp-sel", sel) && ok;
+    ok = gravar("mp-checks", checks) && ok;
+    ok = gravar("mp-checks-plano", checksPlano) && ok;
+    ok = gravar("mp-quero", despensa) && ok;
+    ok = gravar("mp-diario", diario) && ok;
+    ok = gravar("mp-registros", registros) && ok;
+    ok = gravar("mp-treinos", treinos) && ok;
+    if (!ok) avisarFalhaGravacao();
     atualizarContador();
   }
+  var ultimoAvisoFalha = 0;
+  function avisarFalhaGravacao() {
+    if (Date.now() - ultimoAvisoFalha < 10000) return;
+    ultimoAvisoFalha = Date.now();
+    setTimeout(function () { toast("Não consegui salvar: o armazenamento do celular está cheio. Libere espaço e tente de novo."); }, 50);
+  }
+
 
   function alternar(lista, id) {
     var i = lista.indexOf(id);
@@ -343,7 +360,10 @@
   var DIAS_LONGOS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
   function exerciciosDoDia(k) {
     var ds = dataDaChave(k).getDay();
-    return (PLANO.exercicios || []).filter(function (e) { return e.dias.indexOf(ds) >= 0; });
+    // "desde"/"ate" (AAAA-MM-DD, opcionais): mudar a agenda não muda os dias que já passaram
+    return (PLANO.exercicios || []).filter(function (e) {
+      return e.dias.indexOf(ds) >= 0 && (!e.desde || k >= e.desde) && (!e.ate || k <= e.ate);
+    });
   }
   function treinosFeitos(k) {
     var prog = exerciciosDoDia(k).map(function (e) { return e.id; });
@@ -761,6 +781,7 @@
   function apagarRegistro() {
     var dia = regAtual.dia, ref = regAtual.ref;
     if (regAtual.fotoAntiga) { toast("Registro com foto não pode ser apagado."); return; }
+    if (dia !== hojeChave()) { fecharRegistro(); toast("Dias passados ficam só para consulta."); rerenderMantendoScroll(); return; }
     var antesReg = (registros[dia] || {})[ref] || null;
     var marcados = marcadosDe(ref);
     var antesDia = (marcados[dia] || []).slice();
@@ -1008,7 +1029,7 @@
     var pendentes = mesesComDados().filter(function (m) {
       if (m >= atual || !mesTemFotos(m)) return false;
       var p = m.split("-"), fimDoMes = chaveData(new Date(+p[0], +p[1], 0));
-      return !backupsMes[m] || backupsMes[m] < fimDoMes; // cópia salva antes do mês acabar não tem todas as fotos
+      return !backupsMes[m] || backupsMes[m] <= fimDoMes; // cópia salva antes do mês acabar não tem todas as fotos
     });
     if (pendentes.length) {
       mesAlvo = pendentes[pendentes.length - 1];
@@ -1204,13 +1225,18 @@
       if (chaveMes(k) !== mes) return;
       Object.keys(registros[k]).forEach(function (ref) { var f = registros[k][ref].foto; if (f && ids.indexOf(f) < 0) ids.push(f); });
     });
-    var fotos = {};
+    var fotos = {}, faltando = 0;
+    // cada foto separada: se uma falhar, as outras continuam
     return ids.reduce(function (p, id) {
       return p.then(function () {
-        return lerFoto(id).then(function (blob) { return blob ? blobParaTexto(blob).then(function (t) { fotos[id] = t; }) : null; });
+        return lerFoto(id).then(function (blob) {
+          if (!blob) { faltando++; return null; }
+          return blobParaTexto(blob).then(function (t) { fotos[id] = t; });
+        }).catch(function () { faltando++; });
       });
-    }, Promise.resolve()).then(function () { return fotos; }).catch(function () { return fotos; });
+    }, Promise.resolve()).then(function () { return { fotos: fotos, faltando: faltando, total: ids.length }; });
   }
+
 
 
   // A cópia é montada primeiro (lê as fotos, leva um instante). No celular, o menu de
@@ -1220,7 +1246,13 @@
     var celular = window.matchMedia && matchMedia("(pointer: coarse)").matches;
     return celular && arquivo && navigator.canShare && navigator.canShare({ files: [arquivo] });
   }
-  function concluirBackup(msg, mes) {
+  function concluirBackup(msg, mes, faltando) {
+    if (faltando) {
+      // não marca o mês como salvo: a cópia não tem todas as fotos
+      msg = "Atenção: " + faltando + " foto" + (faltando === 1 ? "" : "s") + " de " + nomeMes(mes).toLowerCase() +
+        " não está" + (faltando === 1 ? "" : "ão") + " neste celular e ficou" + (faltando === 1 ? "" : "aram") + " fora. Guarde também a cópia antiga.";
+      mes = null;
+    }
     if (mes) { backupsMes[mes] = hojeChave(); gravar("mp-backups-mes", backupsMes); }
     copiaPronta = null;
     ultimoBackup = hojeChave(); gravar("mp-ultimo-backup", ultimoBackup);
@@ -1233,11 +1265,11 @@
     a.download = c.nome;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
-    concluirBackup("Cópia salva em Downloads", c.mes);
+    concluirBackup("Cópia salva em Downloads", c.mes, c.faltando);
   }
   function compartilharCopia(c) {
     navigator.share({ files: [c.arquivo], title: "Cópia do Meu Prato" })
-      .then(function () { concluirBackup("Cópia salva", c.mes); })
+      .then(function () { concluirBackup("Cópia salva", c.mes, c.faltando); })
       .catch(function (err) {
         if (err && err.name === "AbortError") { toast("Cópia não salva"); return; }
         baixarArquivo(c);
@@ -1248,10 +1280,11 @@
     mes = mes || chaveMes(hojeChave());
     if (copiaPronta && copiaPronta.mes === mes && Date.now() - copiaPronta.feitaEm < 120000) { compartilharCopia(copiaPronta); return; }
     toast("Preparando a cópia de " + nomeMes(mes).toLowerCase() + "...");
-    fotosParaCopia(mes).then(function (fotos) {
+    fotosParaCopia(mes).then(function (res) {
+      var fotos = res.fotos;
       // todos os dados (sem fotos) vão em toda cópia; as fotos, só as do mês escolhido
       var dados = { app: "meu-prato", versao: 4, salvoEm: new Date().toISOString(), mesFotos: mes, favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario, registros: registros, treinos: treinos, fotos: fotos };
-      var c = { mes: mes, texto: JSON.stringify(dados), nome: "meu-prato-" + mes + "-salvo-em-" + hojeChave() + ".json", feitaEm: Date.now(), arquivo: null };
+      var c = { mes: mes, faltando: res.faltando, texto: JSON.stringify(dados), nome: "meu-prato-" + mes + "-salvo-em-" + hojeChave() + ".json", feitaEm: Date.now(), arquivo: null };
       try { c.arquivo = new File([c.texto], c.nome, { type: "application/json" }); } catch (e) { c.arquivo = null; }
       if (podeCompartilhar(c.arquivo)) {
         copiaPronta = c;
@@ -1285,7 +1318,10 @@
             if (l.length) novoDiario[k] = l;
           });
         }
-        Object.keys(novoDiario).forEach(function (k) { diario[k] = novoDiario[k]; });
+        var hojeK = hojeChave();
+        function unir(a, b) { var u = (a || []).slice(); (b || []).forEach(function (x) { if (u.indexOf(x) < 0) u.push(x); }); return u; }
+        // soma com o que já está no aparelho: uma cópia antiga nunca desmarca o que foi feito depois
+        Object.keys(novoDiario).forEach(function (k) { if (k <= hojeK) diario[k] = unir(diario[k], novoDiario[k]); });
         // registros e fotos (cópias da versão 3 em diante)
         var novosReg = {}, fotosCopia = d.fotos && typeof d.fotos === "object" ? d.fotos : {};
         if (d.registros && typeof d.registros === "object") {
@@ -1306,7 +1342,15 @@
             });
           });
         }
-        Object.keys(novosReg).forEach(function (k) { registros[k] = Object.assign(registros[k] || {}, novosReg[k]); });
+        Object.keys(novosReg).forEach(function (k) {
+          if (k > hojeK) return;
+          registros[k] = registros[k] || {};
+          Object.keys(novosReg[k]).forEach(function (ref) {
+            var local = registros[k][ref];
+            if (local && local.foto) return; // registro com foto no aparelho não é trocado pela cópia
+            registros[k][ref] = novosReg[k][ref];
+          });
+        });
         var idsEx = (PLANO.exercicios || []).map(function (e) { return e.id; }), novosTreinos = {};
         if (d.treinos && typeof d.treinos === "object") {
           Object.keys(d.treinos).forEach(function (k) {
@@ -1315,7 +1359,7 @@
             if (l.length) novosTreinos[k] = l;
           });
         }
-        Object.keys(novosTreinos).forEach(function (k) { treinos[k] = novosTreinos[k]; });
+        Object.keys(novosTreinos).forEach(function (k) { if (k <= hojeK) treinos[k] = unir(treinos[k], novosTreinos[k]); });
         var gravarFotos = Object.keys(fotosCopia).filter(function (id) { return fotoEmUso(id) && /^data:image\//.test(fotosCopia[id]); })
           .reduce(function (p, id) {
             return p.then(function () { return fetch(fotosCopia[id]).then(function (r) { return r.blob(); }).then(function (b) { return salvarFoto(id, b); }); });
@@ -1492,15 +1536,29 @@
 
   // Se o app ficou aberto de um dia para o outro, "Hoje" passa para o dia novo.
   var ultimoHoje = hojeChave();
-  document.addEventListener("visibilitychange", function () {
-    if (document.hidden) return;
+  function checarVirada() {
     var agora = hojeChave();
-    if (agora === ultimoHoje) return;
+    if (agora === ultimoHoje) return false;
     if (diaSel === ultimoHoje) diaSel = agora;
     ultimoHoje = agora;
     mesVisto = new Date(); mesVisto.setDate(1);
+    if (dlg && dlg.open) fecharRegistro();
     rerenderMantendoScroll();
+    return true;
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) return;
+    if (!(dlg && dlg.open)) { recarregarEstado(); }
+    if (!checarVirada() && !(dlg && dlg.open)) rerenderMantendoScroll();
   });
+  // outra janela do app gravou algo: relê para não apagar o que ela fez
+  window.addEventListener("storage", function (e) {
+    if (e.key && e.key.indexOf("mp-") !== 0) return;
+    recarregarEstado();
+    if (!(dlg && dlg.open)) rerenderMantendoScroll();
+  });
+  setInterval(function () { if (!document.hidden) checarVirada(); }, 30000);
+
 
   // No plano, a refeição "Agora" e o relógio acompanham a hora enquanto o app fica aberto.
   setInterval(function () {

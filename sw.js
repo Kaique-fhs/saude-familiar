@@ -1,13 +1,13 @@
 // Guarda o site no aparelho para abrir sem internet.
 // Mudanças nos arquivos chegam sozinhas na abertura seguinte do app.
 // Aumentar VERSAO (e o ?v= no index.html) é opcional: faz a mudança valer já na próxima abertura.
-var VERSAO = "meu-prato-v25";
+var VERSAO = "meu-prato-v26";
 var ARQUIVOS = [
   "./",
   "./index.html",
-  "./styles.css?v=25",
-  "./data.js?v=25",
-  "./app.js?v=25",
+  "./styles.css?v=26",
+  "./data.js?v=26",
+  "./app.js?v=26",
   "./logo.svg",
   "./icon-192.png",
   "./icon-512.png",
@@ -37,9 +37,13 @@ self.addEventListener("fetch", function (e) {
     e.respondWith(
       // no-cache: confere com o servidor em vez de usar a cópia do cache HTTP (que o GitHub guarda por 10 min).
       fetch(new Request(req.url, { cache: "no-cache", credentials: "same-origin" })).then(function (res) {
-        var copia = res.clone();
-        caches.open(VERSAO).then(function (c) { c.put("./index.html", copia); });
-        return res;
+        if (res.ok) {
+          var copia = res.clone();
+          caches.open(VERSAO).then(function (c) { c.put("./index.html", copia); });
+          return res;
+        }
+        // página de erro do servidor: usa a cópia boa guardada, se houver
+        return caches.match("./index.html").then(function (guardada) { return guardada || res; });
       }).catch(function () { return caches.match("./index.html"); })
     );
     return;
