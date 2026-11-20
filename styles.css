@@ -472,3 +472,9 @@ dialog#registro::backdrop { background: rgba(0,0,0,.55); }
 .ex-hoje { display: flex !important; align-items: center; gap: 6px; color: var(--accent) !important; font-weight: 700; }
 .ex-hoje svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
 @media (min-width: 900px) { .agenda { max-width: 640px; } }
+
+/* Regra rígida e cópia por mês */
+.reg-regra { margin: 8px 0 0; }
+.reg-leitura { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.campo-mes { display: block; font-weight: 700; margin: 4px 0 6px; }
+.backup select.busca { margin-bottom: 12px; }

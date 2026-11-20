@@ -22,7 +22,18 @@
   var diario = ler("mp-diario", {});
   var ultimoBackup = ler("mp-ultimo-backup", null);
   var treinos = ler("mp-treinos", {}); // { "2026-11-24": ["academia", "pilates"] }
-  var registros = ler("mp-registros", {}); // { "2026-11-20": { almoco: { escolhas, receita, foto, hora } } }
+  var registros = ler("mp-registros", {});
+  var backupsMes = ler("mp-backups-mes", {}); // { "2026-11": "2026-11-30" } dia em que a cópia de cada mês foi salva
+
+  // Pede ao navegador para não apagar os dados do app quando faltar espaço (fotos, dias marcados).
+  function pedirPersistencia() {
+    try {
+      if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persisted().then(function (ja) { if (!ja) return navigator.storage.persist(); }).catch(function () {});
+      }
+    } catch (e) { /* navegador sem suporte */ }
+  }
+  pedirPersistencia(); // { "2026-11-20": { almoco: { escolhas, receita, foto, hora } } }
   var diaSel = hojeChave(); // dia que está sendo marcado
   var mesVisto = new Date(); mesVisto.setDate(1);
   var filtro = "todas";
@@ -364,7 +375,7 @@
       (exerciciosDoDia(diaSel).length ? ' · ' + treinosFeitos(diaSel).length + ' de ' + exerciciosDoDia(diaSel).length + ' exercício' + (exerciciosDoDia(diaSel).length === 1 ? '' : 's') : '') + '</h3>' +
       (seq ? '<span class="sequencia">' + seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') + '</span>' : '') + '</div>' +
       '<div class="barra" aria-hidden="true"><span style="width:' + Math.round(feitosDoDia(diaSel) / totalDoDia(diaSel) * 100) + '%"></span></div>' +
-      '<p class="dica-dia">Registre cada refeição e cada exercício com uma foto. O dia só fica completo com as duas partes. Esqueceu um dia? Toque nele no calendário abaixo.</p>' +
+      '<p class="dica-dia">Registre cada refeição e cada exercício com uma foto tirada na hora. O dia só fica completo com as duas partes. Os registros só podem ser feitos no próprio dia; os dias passados ficam para consulta no calendário.</p>' +
       '<h4 class="titulo-secao-dia">' + ICON.prato + 'Refeições <span class="contagem">' + feitas.length + ' de ' + TOTAL_REF + '</span></h4>' +
       '<ul class="lista refeicoes-dia">' +
       PLANO.refeicoes.map(function (r) {
@@ -372,7 +383,8 @@
         var icone = reg && reg.foto
           ? '<img class="mini-foto" data-foto="' + esc(reg.foto) + '" alt="">'
           : '<span class="' + (ok ? 'ok' : 'pendente') + '" aria-hidden="true">' + (ok ? ICON.check : ICON.camera) + '</span>';
-        var detalhe = reg ? resumoRegistro(reg) : ok ? "Marcada sem foto · toque para completar" : (r.hora ? r.hora + " · " : "") + "Toque para registrar";
+        var passado = diaSel !== hojeChave();
+        var detalhe = reg ? resumoRegistro(reg) : ok ? (passado ? "Marcada sem foto" : "Marcada sem foto · toque para completar") : passado ? "Não registrada" : (r.hora ? r.hora + " · " : "") + "Toque para registrar";
         return '<li><button class="linha-ref" data-registrar="' + r.id + '" aria-label="' + esc(r.nome) + ': ' + (ok ? "registrada" : "não registrada") + '. ' + esc(detalhe) + '">' + icone +
           '<span class="flex1"><span class="nome">' + esc(r.nome) + '</span><span class="detalhes">' + esc(detalhe) + '</span></span>' +
           '<span class="seta-linha" aria-hidden="true">›</span></button></li>';
@@ -391,7 +403,8 @@
       var icone = reg && reg.foto
         ? '<img class="mini-foto" data-foto="' + esc(reg.foto) + '" alt="">'
         : '<span class="' + (ok ? 'ok' : 'pendente') + '" aria-hidden="true">' + (ok ? ICON.check : ICON.camera) + '</span>';
-      var detalhe = reg ? (reg.hora ? reg.hora + " · " : "") + (reg.foto ? "Treino registrado" : "sem foto") : ok ? "Marcado sem foto · toque para completar" : "Toque para registrar com foto";
+      var passado = k !== hojeChave();
+      var detalhe = reg ? (reg.hora ? reg.hora + " · " : "") + (reg.foto ? "Treino registrado" : "sem foto") : ok ? "Marcado sem foto" : passado ? "Não registrado" : "Toque para registrar com foto";
       return '<li><button class="linha-ref" data-registrar="' + e.id + '" aria-label="' + esc(e.nome) + ': ' + (ok ? "registrado" : "não registrado") + '. ' + esc(detalhe) + '">' + icone +
         '<span class="flex1"><span class="nome">' + esc(e.nome) + '</span><span class="detalhes">' + esc(detalhe) + '</span></span>' +
         '<span class="seta-linha" aria-hidden="true">›</span></button></li>';
@@ -462,17 +475,17 @@
     }
   }
 
-  // Reduz a foto para no máximo 1280 px e salva em JPEG (cerca de 100 a 200 KB).
+  // Reduz a foto para no máximo 1024 px e salva em JPEG (cerca de 60 a 120 KB): basta para comprovar.
   function comprimirFoto(arquivo) {
     return new Promise(function (ok, erro) {
       var img = new Image(), u = URL.createObjectURL(arquivo);
       img.onload = function () {
-        var max = 1280, w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, max / Math.max(w, h));
+        var max = 1024, w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, max / Math.max(w, h));
         var c = document.createElement("canvas");
         c.width = Math.round(w * k); c.height = Math.round(h * k);
         c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
         URL.revokeObjectURL(u);
-        c.toBlob(function (b) { if (b) ok(b); else erro(new Error("foto")); }, "image/jpeg", 0.72);
+        c.toBlob(function (b) { if (b) ok(b); else erro(new Error("foto")); }, "image/jpeg", 0.65);
       };
       img.onerror = function () { URL.revokeObjectURL(u); erro(new Error("foto")); };
       img.src = u;
@@ -493,6 +506,8 @@
     var r = ex ? { id: ex.id, nome: ex.nome, itens: [] } : refPorId(refId);
     if (!r) return;
     var ant = (registros[diaSel] || {})[refId] || null;
+    var leitura = diaSel !== hojeChave();
+    if (leitura && !ant) { toast("Só dá para registrar no próprio dia."); return; }
     var escolhidas = ant ? ant.escolhas || [] : null;
     regAtual = { ref: refId, dia: diaSel, blob: null, fotoAntiga: ant ? ant.foto : null, previa: null };
     var fotoObrig = FOTO_OPCIONAL.indexOf(refId) < 0;
@@ -523,9 +538,9 @@
     h += '<div class="reg-foto"><img id="reg-previa" alt="' + (ex ? 'Foto do treino' : 'Foto do prato') + '"' + (regAtual.fotoAntiga ? ' data-foto="' + esc(regAtual.fotoAntiga) + '"' : ' hidden') + '>' +
       '<p class="reg-sem-foto" id="reg-sem-foto"' + (regAtual.fotoAntiga ? ' hidden' : '') + '>' + ICON.camera + (fotoObrig ? (ex ? 'Falta a foto do treino' : 'Falta a foto do prato') : 'Sem foto') + '</p>' +
       '<div class="linha-acoes"><button type="button" class="btn primario" id="reg-camera">' + ICON.camera + (regAtual.fotoAntiga ? 'Tirar outra foto' : 'Tirar foto') + '</button>' +
-      '<button type="button" class="btn" id="reg-galeria">Escolher da galeria</button></div>' +
+      '</div>' +
       '<input type="file" id="reg-arq-camera" accept="image/*" capture="environment" class="sr" tabindex="-1" aria-hidden="true">' +
-      '<input type="file" id="reg-arq-galeria" accept="image/*" class="sr" tabindex="-1" aria-hidden="true"></div>' +
+      '<p class="detalhes reg-regra">A foto precisa ser tirada agora, pela câmera.</p></div>' +
       '<div class="reg-rodape">' + (ant || marcadosDe(refId)[diaSel] && marcadosDe(refId)[diaSel].indexOf(refId) >= 0 ? '<button type="button" class="btn" id="reg-apagar">Apagar registro</button>' : '') +
       '<button type="submit" class="btn primario" id="reg-salvar">Salvar registro</button></div></form>';
 
@@ -537,7 +552,17 @@
     }
     dlg.innerHTML = h;
     preencherFotos(dlg);
-    atualizarBotaoSalvar();
+    if (leitura) {
+      // dia passado: só consulta
+      dlg.querySelectorAll("input, select").forEach(function (el) { el.disabled = true; });
+      dlg.querySelectorAll("#reg-camera, #reg-apagar, #reg-salvar, #reg-sem-foto, .reg-regra").forEach(function (el) { el.hidden = true; });
+      var aviso = document.createElement("p");
+      aviso.className = "reg-leitura";
+      aviso.textContent = "Registro de " + rotuloDia(diaSel).toLowerCase() + ". Dias passados ficam só para consulta.";
+      dlg.querySelector(".reg-topo").after(aviso);
+    } else {
+      atualizarBotaoSalvar();
+    }
     dlg.showModal();
     dlg.scrollTop = 0;
   }
@@ -556,9 +581,15 @@
     if (dlg && dlg.open) dlg.close();
   }
 
+  var FOTO_MAX_MINUTOS = 15; // foto mais antiga que isso não vale (veio da galeria)
   function receberFoto(arquivo) {
     if (!arquivo) return;
     var aviso = dlg.querySelector("#reg-sem-foto");
+    if (arquivo.lastModified && Date.now() - arquivo.lastModified > FOTO_MAX_MINUTOS * 60000) {
+      aviso.hidden = false;
+      aviso.textContent = "Essa foto é antiga. Tire uma foto agora, pela câmera.";
+      return;
+    }
     aviso.hidden = false; aviso.textContent = "Preparando a foto...";
     comprimirFoto(arquivo).then(function (blob) {
       if (!regAtual) return;
@@ -586,12 +617,13 @@
     var campoReceita = dlg.querySelector("#reg-receita");
     var receita = campoReceita ? campoReceita.value || null : null;
     var dia = regAtual.dia, ref = regAtual.ref, fotoAntiga = regAtual.fotoAntiga, blob = regAtual.blob;
+    if (dia !== hojeChave()) { fecharRegistro(); toast("O dia virou. Abra o registro de novo para marcar hoje."); rerenderMantendoScroll(); return; }
     var botao = dlg.querySelector("#reg-salvar");
     botao.disabled = true; botao.textContent = "Salvando...";
     var passo = Promise.resolve(fotoAntiga);
     if (blob) {
       var novoId = "f-" + dia + "-" + ref + "-" + Date.now();
-      passo = salvarFoto(novoId, blob).then(function () { return novoId; });
+      passo = salvarFoto(novoId, blob).then(function () { pedirPersistencia(); return novoId; });
     }
     passo.then(function (fotoId) {
       var antes = (registros[dia] || {})[ref];
@@ -640,7 +672,6 @@
       if (!b) return;
       if (b.id === "reg-fechar") fecharRegistro();
       else if (b.id === "reg-camera") dlg.querySelector("#reg-arq-camera").click();
-      else if (b.id === "reg-galeria") dlg.querySelector("#reg-arq-galeria").click();
       else if (b.id === "reg-apagar") apagarRegistro();
     });
     dlg.addEventListener("change", function (e) {
@@ -818,21 +849,34 @@
   }
 
   // Lembra de salvar cópia: nunca salvou e já tem 7+ dias marcados, ou a última cópia tem 30+ dias.
+  // Lembra de salvar cópia: mês passado com fotos sem cópia completa; ou, no mês atual,
+  // nunca salvou e já tem 7+ dias marcados, ou a última cópia tem 30+ dias.
   function lembreteBackup() {
-    var dias = Object.keys(diario).length;
-    if (!dias) return "";
-    var motivo = "";
-    if (!ultimoBackup) {
-      if (dias >= 7) motivo = "Você já marcou " + dias + " dias e ainda não salvou nenhuma cópia.";
+    var atual = chaveMes(hojeChave()), motivo = "", mesAlvo = atual;
+    var pendentes = mesesComDados().filter(function (m) {
+      if (m >= atual || !mesTemFotos(m)) return false;
+      var p = m.split("-"), fimDoMes = chaveData(new Date(+p[0], +p[1], 0));
+      return !backupsMes[m] || backupsMes[m] < fimDoMes; // cópia salva antes do mês acabar não tem todas as fotos
+    });
+    if (pendentes.length) {
+      mesAlvo = pendentes[pendentes.length - 1];
+      motivo = "As fotos de " + nomeMes(mesAlvo).toLowerCase() + " ainda não têm cópia completa.";
     } else {
-      var passaram = Math.floor((dataDaChave(hojeChave()) - dataDaChave(ultimoBackup)) / 864e5);
-      if (passaram >= 30) motivo = "Sua última cópia foi há " + passaram + " dias.";
+      var dias = Object.keys(diario).length;
+      if (!dias) return "";
+      if (!ultimoBackup) {
+        if (dias >= 7) motivo = "Você já marcou " + dias + " dias e ainda não salvou nenhuma cópia.";
+      } else {
+        var passaram = Math.floor((dataDaChave(hojeChave()) - dataDaChave(ultimoBackup)) / 864e5);
+        if (passaram >= 30) motivo = "Sua última cópia foi há " + passaram + " dias.";
+      }
     }
     if (!motivo) return "";
     return '<div class="lembrete" role="note"><p><b>Salve uma cópia de segurança.</b> ' + motivo +
-      ' Os dias marcados ficam só neste celular: se ele for trocado ou formatado, eles se perdem.</p>' +
-      '<button class="btn primario" id="baixar-backup">' + ICON.share + 'Salvar cópia agora</button></div>';
+      ' Os dias marcados e as fotos ficam só neste celular: se ele for trocado ou formatado, eles se perdem.</p>' +
+      '<button class="btn primario" id="baixar-backup" data-mes="' + mesAlvo + '">' + ICON.share + 'Salvar cópia de ' + nomeMes(mesAlvo).toLowerCase() + '</button></div>';
   }
+
 
   function telaFrequencia() {
     return '<h2 class="titulo-secao">Frequência</h2>' +
@@ -963,12 +1007,19 @@
 
   // ---------- backup (favoritas, listas e escolhas) ----------
   function telaBackup() {
+    var atual = chaveMes(hojeChave());
     return '<section class="backup"><h3 class="subtitulo">Cópia de segurança</h3>' +
-      '<p class="descricao">Os dias marcados, as favoritas e as listas ficam só neste aparelho. Salve uma cópia para não perder nada ou para passar para outro aparelho.</p>' +
+      '<p class="descricao">Os dias marcados, as fotos, as favoritas e as listas ficam só neste aparelho. Cada cópia leva <b>todos os dados</b> e as <b>fotos do mês escolhido</b>. Salve uma cópia por mês.</p>' +
+      '<label class="campo-mes" for="mes-backup">Mês das fotos</label>' +
+      '<select id="mes-backup" class="busca">' + mesesComDados().map(function (m) {
+        var salvo = backupsMes[m] ? " · cópia salva em " + backupsMes[m].split("-").reverse().slice(0, 2).join("/") : "";
+        return '<option value="' + m + '"' + (m === atual ? ' selected' : '') + '>' + nomeMes(m) + (m === atual ? " (atual)" : "") + salvo + '</option>';
+      }).join("") + '</select>' +
       '<div class="linha-acoes"><button class="btn" id="baixar-backup">' + ICON.share + 'Salvar cópia</button>' +
       '<button class="btn" id="restaurar-backup">Restaurar cópia</button>' +
       '<input class="sr" type="file" id="arquivo-backup" accept="application/json,.json" tabindex="-1" aria-hidden="true"></div></section>';
   }
+
 
   function blobParaTexto(blob) {
     return new Promise(function (ok, erro) {
@@ -980,9 +1031,25 @@
   }
 
   // Junta as fotos usadas nos registros, em texto, para irem dentro da cópia.
-  function fotosParaCopia() {
+  function chaveMes(k) { return k.slice(0, 7); }
+  function nomeMes(m) { var p = m.split("-"); var n = MESES[+p[1] - 1]; return n.charAt(0).toUpperCase() + n.slice(1) + " de " + p[0]; }
+  function mesesComDados() {
+    var ms = {};
+    ms[chaveMes(hojeChave())] = true;
+    [diario, registros, treinos].forEach(function (o) { Object.keys(o).forEach(function (k) { ms[chaveMes(k)] = true; }); });
+    return Object.keys(ms).sort().reverse();
+  }
+  function mesTemFotos(m) {
+    return Object.keys(registros).some(function (k) {
+      return chaveMes(k) === m && Object.keys(registros[k]).some(function (ref) { return !!registros[k][ref].foto; });
+    });
+  }
+
+  // Junta as fotos do mês escolhido, em texto, para irem dentro da cópia.
+  function fotosParaCopia(mes) {
     var ids = [];
     Object.keys(registros).forEach(function (k) {
+      if (chaveMes(k) !== mes) return;
       Object.keys(registros[k]).forEach(function (ref) { var f = registros[k][ref].foto; if (f && ids.indexOf(f) < 0) ids.push(f); });
     });
     var fotos = {};
@@ -993,6 +1060,7 @@
     }, Promise.resolve()).then(function () { return fotos; }).catch(function () { return fotos; });
   }
 
+
   // A cópia é montada primeiro (lê as fotos, leva um instante). No celular, o menu de
   // compartilhar só abre logo após um toque, então lá são dois toques: preparar e salvar.
   var copiaPronta = null;
@@ -1000,7 +1068,8 @@
     var celular = window.matchMedia && matchMedia("(pointer: coarse)").matches;
     return celular && arquivo && navigator.canShare && navigator.canShare({ files: [arquivo] });
   }
-  function concluirBackup(msg) {
+  function concluirBackup(msg, mes) {
+    if (mes) { backupsMes[mes] = hojeChave(); gravar("mp-backups-mes", backupsMes); }
     copiaPronta = null;
     ultimoBackup = hojeChave(); gravar("mp-ultimo-backup", ultimoBackup);
     toast(msg);
@@ -1012,23 +1081,25 @@
     a.download = c.nome;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
-    concluirBackup("Cópia salva em Downloads");
+    concluirBackup("Cópia salva em Downloads", c.mes);
   }
   function compartilharCopia(c) {
     navigator.share({ files: [c.arquivo], title: "Cópia do Meu Prato" })
-      .then(function () { concluirBackup("Cópia salva"); })
+      .then(function () { concluirBackup("Cópia salva", c.mes); })
       .catch(function (err) {
         if (err && err.name === "AbortError") { toast("Cópia não salva"); return; }
         baixarArquivo(c);
       });
   }
 
-  function baixarBackup() {
-    if (copiaPronta && Date.now() - copiaPronta.feitaEm < 120000) { compartilharCopia(copiaPronta); return; }
-    toast("Preparando a cópia...");
-    fotosParaCopia().then(function (fotos) {
-      var dados = { app: "meu-prato", versao: 3, salvoEm: new Date().toISOString(), favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario, registros: registros, treinos: treinos, fotos: fotos };
-      var c = { texto: JSON.stringify(dados), nome: "meu-prato-backup-" + hojeChave() + ".json", feitaEm: Date.now(), arquivo: null };
+  function baixarBackup(mes) {
+    mes = mes || chaveMes(hojeChave());
+    if (copiaPronta && copiaPronta.mes === mes && Date.now() - copiaPronta.feitaEm < 120000) { compartilharCopia(copiaPronta); return; }
+    toast("Preparando a cópia de " + nomeMes(mes).toLowerCase() + "...");
+    fotosParaCopia(mes).then(function (fotos) {
+      // todos os dados (sem fotos) vão em toda cópia; as fotos, só as do mês escolhido
+      var dados = { app: "meu-prato", versao: 4, salvoEm: new Date().toISOString(), mesFotos: mes, favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario, registros: registros, treinos: treinos, fotos: fotos };
+      var c = { mes: mes, texto: JSON.stringify(dados), nome: "meu-prato-" + mes + "-salvo-em-" + hojeChave() + ".json", feitaEm: Date.now(), arquivo: null };
       try { c.arquivo = new File([c.texto], c.nome, { type: "application/json" }); } catch (e) { c.arquivo = null; }
       if (podeCompartilhar(c.arquivo)) {
         copiaPronta = c;
@@ -1039,6 +1110,7 @@
       }
     });
   }
+
 
   function restaurarBackup(arquivo) {
     var leitor = new FileReader();
@@ -1061,7 +1133,7 @@
             if (l.length) novoDiario[k] = l;
           });
         }
-        diario = novoDiario;
+        Object.keys(novoDiario).forEach(function (k) { diario[k] = novoDiario[k]; });
         // registros e fotos (cópias da versão 3 em diante)
         var novosReg = {}, fotosCopia = d.fotos && typeof d.fotos === "object" ? d.fotos : {};
         if (d.registros && typeof d.registros === "object") {
@@ -1070,7 +1142,8 @@
             Object.keys(d.registros[k]).forEach(function (ref) {
               var x = d.registros[k][ref];
               if ((idsRef.indexOf(ref) < 0 && !exPorId(ref)) || !x || typeof x !== "object") return;
-              var foto = typeof x.foto === "string" && typeof fotosCopia[x.foto] === "string" && /^data:image\//.test(fotosCopia[x.foto]) ? x.foto : null;
+              // mantém a referência da foto mesmo se a imagem não veio nesta cópia (vem na cópia do mês dela)
+              var foto = typeof x.foto === "string" && /^f-[\w-]+$/.test(x.foto) ? x.foto : null;
               novosReg[k] = novosReg[k] || {};
               novosReg[k][ref] = {
                 escolhas: Array.isArray(x.escolhas) ? x.escolhas.filter(function (t) { return typeof t === "string"; }) : [],
@@ -1081,7 +1154,7 @@
             });
           });
         }
-        registros = novosReg;
+        Object.keys(novosReg).forEach(function (k) { registros[k] = Object.assign(registros[k] || {}, novosReg[k]); });
         var idsEx = (PLANO.exercicios || []).map(function (e) { return e.id; }), novosTreinos = {};
         if (d.treinos && typeof d.treinos === "object") {
           Object.keys(d.treinos).forEach(function (k) {
@@ -1090,7 +1163,7 @@
             if (l.length) novosTreinos[k] = l;
           });
         }
-        treinos = novosTreinos;
+        Object.keys(novosTreinos).forEach(function (k) { treinos[k] = novosTreinos[k]; });
         var gravarFotos = Object.keys(fotosCopia).filter(function (id) { return fotoEmUso(id) && /^data:image\//.test(fotosCopia[id]); })
           .reduce(function (p, id) {
             return p.then(function () { return fetch(fotosCopia[id]).then(function (r) { return r.blob(); }).then(function (b) { return salvarFoto(id, b); }); });
@@ -1220,7 +1293,8 @@
     } else if (b.id === "restaurar-backup") {
       document.getElementById("arquivo-backup").click();
     } else if (b.id === "baixar-backup") {
-      baixarBackup();
+      var campoMes = document.getElementById("mes-backup");
+      baixarBackup(b.dataset.mes || (campoMes && campoMes.value));
     } else if (b.dataset.filtro) {
       filtro = b.dataset.filtro; rerenderMantendoScroll();
     } else if (b.id === "limpar") {
