@@ -73,6 +73,7 @@
     [/farinha de amendoa/, "Farinha de amêndoas"],
     [/amendoa torrada/, "Amêndoa torrada"],
     [/\bovos?\b|clara|gema/, "Ovos"],
+    [/atum.*ou.*frango/, "Atum em lata ou frango"],
     [/atum/, "Atum em lata"],
     [/frango/, "Peito / filé de frango"],
     [/carne moida/, "Carne moída"],
@@ -124,7 +125,7 @@
     [/tempero/, "Temperos naturais"]
   ];
   var CATEGORIA = {
-    "Ovos": "Proteínas", "Atum em lata": "Proteínas", "Peito / filé de frango": "Proteínas", "Carne moída": "Proteínas",
+    "Ovos": "Proteínas", "Atum em lata": "Proteínas", "Atum em lata ou frango": "Proteínas", "Peito / filé de frango": "Proteínas", "Carne moída": "Proteínas",
     "Queijo parmesão ralado": "Laticínios", "Queijo muçarela": "Laticínios", "Iogurte natural desnatado": "Laticínios",
     "Leite de castanha de caju com coco": "Bebidas vegetais", "Leite de amêndoa": "Bebidas vegetais",
     "Sal": "Temperos", "Temperos naturais": "Temperos", "Orégano": "Temperos", "Canela em pó": "Temperos", "Cheiro verde": "Hortifrúti",
@@ -146,6 +147,45 @@
     return [ingrediente.replace(/^\w+:\s*/, "")];
   }
 
+  // Produtos que podem ser trocados um pelo outro na receita.
+  var ALTERNATIVAS = { "Atum em lata ou frango": ["Atum em lata", "Peito / filé de frango"] };
+  function expandir(lista) {
+    var out = [];
+    lista.forEach(function (p) { out = out.concat(ALTERNATIVAS[p] || [p]); });
+    return out;
+  }
+
+  // Lê a quantidade de um ingrediente: gramas, ml ou unidades (ex.: "1-2 ovos").
+  var MEDIDAS = /^(e\b|colher|col\b|col\.|xicara|pitada|copo|lata|fatia|dente|prato|concha|tablete)/;
+  function quantidade(texto) {
+    var t = semAcento(texto).replace(/^(massa|cobertura):\s*/, "").replace(/\(ou [^)]*\)/g, "");
+    var u = t.match(/-\s*(\d+)\s+unidades?\b/);
+    if (u) return { un: [parseInt(u[1], 10), parseInt(u[1], 10)] };
+    var m = t.match(/\((\d+(?:[.,]\d+)?)\s*(g|ml)\)/) || t.match(/(\d+(?:[.,]\d+)?)\s*(g|ml)\b/);
+    if (m) { var q = {}; q[m[2]] = parseFloat(m[1].replace(",", ".")); return q; }
+    m = t.match(/^(\d+)(?:\s*-\s*(\d+))?\s+(.*)$/);
+    if (m && !MEDIDAS.test(m[3])) return { un: [parseInt(m[1], 10), parseInt(m[2] || m[1], 10)] };
+    return null;
+  }
+  function somar(usos) {
+    var s = { g: 0, ml: 0, un: [0, 0] }, alguma = 0;
+    usos.forEach(function (u) {
+      var q = quantidade(u.texto);
+      if (!q) return;
+      alguma++;
+      if (q.g) s.g += q.g;
+      if (q.ml) s.ml += q.ml;
+      if (q.un) { s.un[0] += q.un[0]; s.un[1] += q.un[1]; }
+    });
+    if (alguma < 2) return "";
+    var partes = [];
+    if (s.g) partes.push(Math.round(s.g) + " g");
+    if (s.ml) partes.push(Math.round(s.ml) + " ml");
+    if (s.un[1]) partes.push((s.un[0] === s.un[1] ? s.un[0] : s.un[0] + "–" + s.un[1]) + " unid.");
+    var falta = usos.length - alguma;
+    return partes.join(" + ") + (falta ? " + " + falta + " sem medida" : "");
+  }
+
   function montarListaReceitas() {
     var mapa = {};
     sel.forEach(function (id) {
@@ -161,6 +201,7 @@
     var porCat = {};
     Object.keys(mapa).forEach(function (k) {
       var it = mapa[k];
+      it.total = somar(it.usos);
       (porCat[it.cat] = porCat[it.cat] || []).push(it);
     });
     return ORDEM_CAT.filter(function (c) { return porCat[c]; }).map(function (c) {
@@ -180,7 +221,7 @@
     var req = {}, opc = {};
     r.ingredientes.forEach(function (ing) {
       produtosDe(ing).forEach(function (p) {
-        TODOS_PRODUTOS[p] = CATEGORIA[p] || "Mercearia";
+        expandir([p]).forEach(function (q) { TODOS_PRODUTOS[q] = CATEGORIA[q] || "Mercearia"; });
         if (BASICOS.indexOf(p) >= 0) return;
         if (opcional(ing)) opc[p] = true; else req[p] = true;
       });
@@ -203,7 +244,7 @@
   // "Quero comer": ordena as receitas por quantos dos ingredientes escolhidos elas levam
   function receitasCombinadas() {
     return RECEITAS.map(function (r) {
-      var tem = NECESSARIOS[r.id].concat(OPCIONAIS[r.id]);
+      var tem = expandir(NECESSARIOS[r.id].concat(OPCIONAIS[r.id]));
       var combina = despensa.filter(function (p) { return tem.indexOf(p) >= 0; });
       return { r: r, combina: combina, cobertura: combina.length / Math.max(1, NECESSARIOS[r.id].length) };
     }).filter(function (a) { return a.combina.length > 0; })
@@ -217,7 +258,7 @@
     grupos.forEach(function (g) {
       linhas.push("*" + g.cat + "*");
       g.itens.forEach(function (it) {
-        linhas.push("- " + it.nome + (it.usos.length ? " (" + it.usos.map(function (u) { return u.texto; }).join("; ") + ")" : ""));
+        linhas.push("- " + it.nome + (it.total ? " — total: " + it.total : "") + (it.usos.length ? " (" + it.usos.map(function (u) { return u.texto; }).join("; ") + ")" : ""));
       });
       linhas.push("");
     });
@@ -358,7 +399,7 @@
         g.itens.forEach(function (it) {
           var k = "r:" + it.nome;
           h += '<li><label><input type="checkbox" data-check="' + esc(k) + '"' + (checks[k] ? " checked" : "") + '>' +
-            '<span><span class="nome">' + esc(it.nome) + '</span>' +
+            '<span><span class="nome">' + esc(it.nome) + '</span>' + (it.total ? '<span class="total">Total: ' + esc(it.total) + '</span>' : '') +
             it.usos.map(function (u) { return '<span class="detalhes">' + esc(u.texto) + ' · <i>' + esc(u.receita) + '</i></span>'; }).join("") +
             '</span></label></li>';
         });

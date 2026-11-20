@@ -288,3 +288,4 @@ table.nutri th:first-child, table.nutri td:first-child { text-align: left; }
 #resultado-despensa { padding-bottom: 72px; }
 .backup { margin-top: 28px; padding-top: 8px; border-top: 1px solid var(--border); }
 @media (min-width: 900px) { .flutuante { bottom: 24px; } }
+.lista .total { display: block; font-size: .85rem; font-weight: 700; color: var(--primary-strong); margin: 2px 0 2px; }

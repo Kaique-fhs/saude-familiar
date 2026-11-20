@@ -164,8 +164,8 @@ window.PLANO = {
     "Abacaxi", "Abobrinha italiana", "Acém", "Atum em óleo", "Aveia em flocos", "Banana maçã",
     "Banana da terra", "Batata inglesa", "Café arábica", "Chuchu", "Coco seco",
     "Cuscuz de milho (Dona Raiz)", "Filé de frango", "Goma de tapioca", "Inhame", "Iogurte natural",
-    "Mamão formosa", "Mandioca/Aipim", "Maçã argentina", "Melancia", "Melão", "Morango",
-    "Ovo de galinha", "Patinho sem gordura moído", "Peito de frango", "Pão de forma integral",
+    "Mamão formosa", "Mandioca cozida", "Mandioca/Aipim", "Maçã argentina", "Melancia", "Melão", "Morango",
+    "Ovo de galinha", "Patinho moído refogado ao sugo", "Patinho sem gordura moído", "Peito de frango", "Pão de forma integral",
     "Pão francês", "Queijo muçarela", "Quinoa em flocos (Vitalin)", "Salada de folhas",
     "Semente de abóbora", "Semente de girassol", "Semente de linhaça dourada", "Sobrecoxa de frango",
     "Tomate cereja", "Tâmara desidratada", "Uva Rubi ou Itália",
@@ -192,17 +192,17 @@ window.RECEITAS = [
     dica: "Depois de pronto, pode ir ao forno em potência média por cerca de 15 minutos até virar torrada."
   },
   {
-    id: "bolinho-caneca-cacau", nome: "Bolinho de caneca de cacau", tipo: "doce", rendimento: "1 porção",
+    id: "bolinho-caneca-cacau", nome: "Bolinho de caneca da Nutri", tipo: "doce", rendimento: "1 porção",
     ingredientes: ["1 ovo de galinha", "1 banana prata grande", "Farelo/farinha de aveia - 3 colheres de sopa", "Cacau em pó - 1 colher de sobremesa"],
     preparo: ["Bata todos os ingredientes até a massa ficar homogênea.", "Leve à frigideira em fogo baixo até a consistência de panqueca, ou coloque a massa numa caneca e leve ao micro-ondas por 2 a 3 minutos (dependendo da potência) para fazer um bolinho."]
   },
   {
     id: "bolinho-caneca-chocolate", nome: "Bolinho de caneca de chocolate 70%", tipo: "doce", rendimento: "1 porção",
-    ingredientes: ["Açúcar mascavo - 2 colheres de sobremesa cheias (24g)", "Chocolate 70% - 1 tablete (10g)", "Farinha de coco - 1 colher de sopa (12g)", "Fermento químico em pó - 1 colher de chá cheia (3g)", "Iogurte natural desnatado - 1 colher de sopa (15g)", "Ovo de galinha cru - 1 unidade grande (50g)"],
+    ingredientes: ["Açúcar mascavo - 2 colheres de sobremesa cheias (24g)", "Chocolate 70% Arcor - 1 tablete (10g)", "Farinha de coco - 1 colher de sopa (12g)", "Fermento químico em pó - 1 colher de chá cheia (3g)", "Iogurte natural desnatado - 1 colher de sopa (15g)", "Ovo de galinha cru - 1 unidade grande (50g)"],
     preparo: ["Bata tudo com um garfo em uma caneca ou outro recipiente de vidro.", "Leve ao micro-ondas por cerca de 3 minutos, abrindo e olhando, e ajuste o tempo conforme a necessidade."]
   },
   {
-    id: "panqueca-aveia-banana", nome: "Panqueca de aveia com banana", tipo: "doce", rendimento: "1 porção",
+    id: "panqueca-aveia-banana", nome: "Panqueca de aveia em flocos com banana", tipo: "doce", rendimento: "1 porção",
     ingredientes: ["1-2 ovos*", "3-6 colheres de sopa de aveia em flocos*", "1 banana maçã amassada", "1 colher de chá de canela em pó", "1 colher de chá de cacau em pó (opcional)"],
     preparo: ["Num prato, quebre os ovos, adicione a aveia, metade da banana amassada, canela e cacau e misture até ficar homogêneo.", "Numa frigideira antiaderente untada com um pouco de azeite ou óleo de coco, em fogo baixo, adicione a massa e deixe cozinhar; vire e espere cozinhar do outro lado.", "Finalize com a outra metade da banana amassada e uma pitada de canela."],
     dica: "*Seguir a quantidade do plano alimentar."
@@ -224,7 +224,7 @@ window.RECEITAS = [
     dica: "Recheios opcionais: 2 rodelas de tomate + manjericão fresco; 1 colher de sopa de frango desfiado + cheiro verde; 1 fatia fina de queijo minas derretido; ou 1 banana em rodelas + canela (nessa opção, não tempere a massa)."
   },
   {
-    id: "bolo-maca-amendoas", nome: "Bolo de maçã com farinha de amêndoas", tipo: "doce", rendimento: "1 forma",
+    id: "bolo-maca-amendoas", nome: "Bolo de maçã com farinha de amêndoas", tipo: "doce", rendimento: "1 porção",
     ingredientes: ["4 ovos", "1 e 1/2 xícara de chá de farinha de amêndoas", "1 e 1/2 xícara de chá de farelo de aveia", "Cascas de 2 maçãs", "2 maçãs raladas sem casca", "1 e 1/2 xícara de chá de uvas passas", "2/3 xícara de chá de manteiga ghee, óleo ou manteiga", "2 colheres de café de canela em pó", "1 colher de sopa de fermento em pó", "1 pitada de sal"],
     preparo: ["Bata no liquidificador os ovos com as cascas de maçã, a uva passa e a manteiga até triturar a uva e a mistura ficar homogênea.", "Junte os demais ingredientes e mexa bem, deixando o fermento por último.", "Distribua em uma forma untada e salpique a maçã ralada e a canela.", "Asse em forno pré-aquecido a 165 °C."],
     dica: "Se a massa ficar muito pesada, acrescente 3 colheres de sopa de leite ou água."
@@ -241,7 +241,7 @@ window.RECEITAS = [
     preparo: ["Bata os ingredientes com um mixer e separe a massa em duas partes.", "Massa salgada: misture 1 colher de chá de creme de ricota, sal, orégano e açafrão (sem lactose: só temperos verdes e sal).", "Massa doce: misture 1 colher de chá de néctar de coco (ou açúcar demerara), 1 colher de chá de cacau em pó e 1 pitada de canela."]
   },
   {
-    id: "bolo-banana-aveia", nome: "Bolo integral de banana e aveia", tipo: "doce", rendimento: "1 forma",
+    id: "bolo-banana-aveia", nome: "Bolo Integral de Banana e Aveia", tipo: "doce", rendimento: "1 porção",
     ingredientes: ["9 bananas", "6 ovos", "1 xícara de chá de azeite extra virgem", "2 xícaras de uva passa", "1 xícara de farinha de aveia", "1 colher de sopa de fermento em pó", "Canela em pó a gosto"],
     preparo: ["Bata todos os ingredientes no liquidificador, exceto o fermento. Reserve um pouco de uva passa sem bater.", "Acrescente o fermento e a uva passa reservada e incorpore à massa.", "Unte uma forma redonda (de pudim), forre com papel manteiga e polvilhe canela (opcional).", "Leve ao forno pré-aquecido a 180 °C por 40 minutos ou até dourar.", "Se quiser, decore com rodelas de banana."]
   },
@@ -251,13 +251,13 @@ window.RECEITAS = [
     preparo: ["Misture tudo e coloque na panela antiaderente.", "Tampe e deixe assar em fogo bem baixo (é rápido).", "Quando soltar do fundo, vire do outro lado."]
   },
   {
-    id: "mix-sementes", nome: "Mix de sementes", tipo: "doce", rendimento: "30 porções",
+    id: "mix-sementes", nome: "Mix de Sementes", tipo: "doce", rendimento: "30 porções",
     ingredientes: ["Castanha-do-pará - 100g", "Semente de abóbora - 50g", "Aveia em flocos sem glúten - 100g", "Amêndoa torrada com sal - 100g", "Macadâmia - 50g", "Semente de chia - 20g", "Tâmara seca - 30g"],
     preparo: ["Triture as castanhas separadamente em pedaços grandes.", "Pique as tâmaras.", "Junte às sementes, misture bem e guarde em pote bem fechado."]
   },
   {
     id: "pudim-chia", nome: "Pudim de chia", tipo: "doce", rendimento: "4 porções",
-    ingredientes: ["Leite de castanha de caju com leite de coco - 300ml", "Semente de chia - 4 colheres de sopa cheias (60g)", "Uva passa preta - 2 colheres de sopa cheias (36g)", "Morango - 15 unidades médias (180g)", "Kiwi - 2 unidades médias (152g)"],
+    ingredientes: ["Leite de castanha de caju com leite de coco orgânico A Tal da Castanha - 300ml", "Semente de chia - 4 colheres de sopa cheias (60g)", "Uva passa preta - 2 colheres de sopa cheias (36g)", "Morango - 15 unidades médias (180g)", "Kiwi - 2 unidades médias (152g)"],
     preparo: ["Pique as frutas e misture com a uva passa.", "Misture a chia ao leite e reserve até formar um gel.", "Em tacinhas ou num bowl de vidro, monte camadas de frutas e do creme de chia.", "Deixe na geladeira até firmar."],
     dica: "Pode servir com um fio de mel por cima."
   },
@@ -267,12 +267,12 @@ window.RECEITAS = [
     preparo: ["Misture todos os ingredientes.", "Guarde em pote tampado na geladeira por até 3 dias."]
   },
   {
-    id: "salada-alface-carne", nome: "Salada de alface americana com carne e corn flakes", tipo: "salgado", rendimento: "6 porções",
+    id: "salada-alface-carne", nome: "Salada de Alface Americana com carne e corn flakes", tipo: "salgado", rendimento: "6 porções",
     ingredientes: ["Alface americana - 300g", "Carne moída refogada - 300g", "Abacate - 1 unidade pequena (370g)", "Alho - 1 dente (3g)", "Azeite de oliva - 5 colheres de sopa rasas (40g)", "Flocos de milho sem glúten - 1 prato raso (80g)", "Rabanete - 200g"],
     preparo: ["Refogue a carne com temperos a gosto, deixando-a mais seca.", "Bata o abacate no liquidificador com o alho, o azeite e sal.", "Rale o rabanete no ralo grosso.", "Disponha as folhas de alface na travessa, depois a camada de rabanete e a carne.", "No prato, adicione o molho de abacate e 2 colheres de flocos de milho por cima."]
   },
   {
-    id: "pizza-abobrinha", nome: "Pizza com massa de abobrinha", tipo: "salgado", rendimento: "1 pizza",
+    id: "pizza-abobrinha", nome: "Pizza com massa de abobrinha", tipo: "salgado", rendimento: "1 porção",
     ingredientes: ["Massa: 3 abobrinhas médias raladas", "2 colheres de chá de sal", "1 ovo", "1 xícara de chá de parmesão ralado", "3-6 colheres de sopa de aveia em flocos", "1 colher de chá de orégano desidratado", "Azeite para untar", "Cobertura: 1 cenoura ralada temperada com sal e pimenta-do-reino", "1 xícara de chá de azeitonas pretas picadas", "3 tomates sem pele e sementes, em fatias (com sal e orégano)", "100g de muçarela de búfala fatiada", "100g de muçarela comum fatiada"],
     preparo: ["Tempere a abobrinha com o sal e deixe numa peneira por 15 minutos.", "Coloque num pano e esprema para retirar todo o líquido.", "Transfira para uma tigela e junte o ovo, o parmesão, a aveia e o orégano.", "Amasse até obter uma massa firme e compacta.", "Abra a massa com as mãos nas costas de uma fôrma de pizza untada com azeite.", "Leve ao forno preaquecido a 250 °C por 15 minutos.", "Deslize a massa para outra fôrma untada (para assar do outro lado) e leve ao forno por mais 15 minutos.", "Cubra com a cenoura, a azeitona e o tomate e distribua as muçarelas.", "Asse por mais uns 10 minutos ou até os queijos derreterem."]
   },
