@@ -69,6 +69,19 @@
 
   var toastEl = document.getElementById("toast"), toastT;
   var desfazerAtual = null;
+  function toastAcao(msg, rotulo, acao) {
+    clearTimeout(toastT);
+    desfazerAtual = null;
+    toastEl.innerHTML = "";
+    toastEl.appendChild(document.createTextNode(msg));
+    var bt = document.createElement("button");
+    bt.type = "button"; bt.className = "desfazer"; bt.textContent = rotulo;
+    bt.addEventListener("click", function () { toastEl.classList.remove("show", "com-acao"); acao(); });
+    toastEl.appendChild(bt);
+    toastEl.classList.add("com-acao", "show");
+    toastT = setTimeout(function () { toastEl.classList.remove("show", "com-acao"); }, 8000);
+  }
+
   function toast(msg, desfazer) {
     clearTimeout(toastT);
     desfazerAtual = desfazer || null;
@@ -97,6 +110,7 @@
     chevron: '<svg class="seta" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>',
     share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>',
     prato: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12h18a9 9 0 0 1-18 0zM12 9V4M8 9l-1-3M16 9l1-3"/></svg>',
+    whats: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 20l1.3-3.9A8 8 0 1 1 8 19z"/><path stroke-linecap="round" stroke-linejoin="round" d="M9.5 9.5c.3 1.8 1.7 3.6 3.6 4.4l1.2-1 1.7.8c-.2 1-1 1.6-2 1.5-2.9-.3-5.5-3-5.8-5.8-.1-1 .5-1.8 1.5-2l.8 1.7z"/></svg>',
     peso: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/></svg>',
     camera: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
     back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"/></svg>'
@@ -492,6 +506,50 @@
     });
   }
 
+  // ---------- compartilhar a entrega (foto + texto) no WhatsApp ----------
+  function textoEntrega(dia, ref, reg) {
+    var ex = exPorId(ref), r = ex || refPorId(ref);
+    var quando = rotuloDia(dia).toLowerCase() + (reg.hora ? " às " + reg.hora : "");
+    var linhas = [(ex ? "💪 " + ex.nome + " feito" : "✅ " + r.nome + " registrado") + " (" + quando + ")"];
+    if (!ex) {
+      var comidas = (reg.escolhas || []).map(nomeCurto);
+      if (comidas.length) linhas.push("Comi: " + comidas.join(", "));
+      var rec = reg.receita && porId(reg.receita);
+      if (rec) linhas.push("Receita: " + rec.nome);
+    }
+    var nEx = exerciciosDoDia(dia).length;
+    linhas.push("No dia: " + feitasNoDia(dia).length + " de " + TOTAL_REF + " refeições" +
+      (nEx ? " · " + treinosFeitos(dia).length + " de " + nEx + " exercício" + (nEx === 1 ? "" : "s") : ""));
+    if (diaCompleto(dia)) linhas.push("🎉 Dia completo!");
+    return linhas.join("\n");
+  }
+
+  function abrirWhatsSoTexto(texto) {
+    window.open("https://wa.me/?text=" + encodeURIComponent(texto), "_blank", "noopener");
+  }
+
+  // Precisa ser chamada direto no toque (o celular só abre o menu de compartilhar logo após um toque),
+  // por isso a foto já chega pronta em "blob".
+  function compartilharEntrega(dia, ref, blob) {
+    var reg = (registros[dia] || {})[ref];
+    if (!reg) return;
+    var texto = textoEntrega(dia, ref, reg), arquivo = null;
+    if (blob) { try { arquivo = new File([blob], "meu-prato-" + dia + "-" + ref + ".jpg", { type: "image/jpeg" }); } catch (e) { arquivo = null; } }
+    if (arquivo && navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+      navigator.share({ files: [arquivo], text: texto }).catch(function (err) {
+        if (!err || err.name !== "AbortError") abrirWhatsSoTexto(texto);
+      });
+      return;
+    }
+    if (navigator.share && window.matchMedia && matchMedia("(pointer: coarse)").matches) {
+      navigator.share({ text: texto }).catch(function (err) {
+        if (!err || err.name !== "AbortError") abrirWhatsSoTexto(texto);
+      });
+      return;
+    }
+    abrirWhatsSoTexto(texto);
+  }
+
   // ---------- registro de uma refeição: o que comeu + foto ----------
   var FOTO_OPCIONAL = ["acordar"]; // "Ao acordar" é só água com limão
   var dlg = null, regAtual = null;
@@ -509,7 +567,11 @@
     var leitura = diaSel !== hojeChave();
     if (leitura && !ant) { toast("Só dá para registrar no próprio dia."); return; }
     var escolhidas = ant ? ant.escolhas || [] : null;
-    regAtual = { ref: refId, dia: diaSel, blob: null, fotoAntiga: ant ? ant.foto : null, previa: null };
+    regAtual = { ref: refId, dia: diaSel, blob: null, fotoAntiga: ant ? ant.foto : null, previa: null, blobSalvo: null };
+    if (ant && ant.foto) {
+      var esperando = regAtual;
+      lerFoto(ant.foto).then(function (b) { if (regAtual === esperando) regAtual.blobSalvo = b || null; }).catch(function () {});
+    }
     var fotoObrig = FOTO_OPCIONAL.indexOf(refId) < 0;
 
     var h = '<form class="reg" novalidate>' +
@@ -542,7 +604,9 @@
       '<input type="file" id="reg-arq-camera" accept="image/*" capture="environment" class="sr" tabindex="-1" aria-hidden="true">' +
       '<p class="detalhes reg-regra">A foto precisa ser tirada agora, pela câmera.</p></div>' +
       '<div class="reg-rodape">' + (ant || marcadosDe(refId)[diaSel] && marcadosDe(refId)[diaSel].indexOf(refId) >= 0 ? '<button type="button" class="btn" id="reg-apagar">Apagar registro</button>' : '') +
-      '<button type="submit" class="btn primario" id="reg-salvar">Salvar registro</button></div></form>';
+      '<button type="submit" class="btn primario" id="reg-salvar">Salvar registro</button></div>' +
+      (ant ? '<button type="button" class="btn whats" id="reg-compartilhar">' + ICON.whats + 'Compartilhar no WhatsApp</button>' : '') +
+      '</form>';
 
     if (!dlg) {
       dlg = document.createElement("dialog");
@@ -638,8 +702,11 @@
       if (blob && fotoAntiga) apagarSeOrfa(fotoAntiga);
       fecharRegistro();
       rerenderMantendoScroll();
-      if (novo && diaCompleto(dia)) toast(rotuloDia(dia) + " cumprido! Parabéns");
-      else toast("Registro salvo");
+      var msg = novo && diaCompleto(dia) ? rotuloDia(dia) + " cumprido! Parabéns" : "Registro salvo";
+      var fotoParaEnviar = blob ? Promise.resolve(blob) : fotoId ? lerFoto(fotoId).catch(function () { return null; }) : Promise.resolve(null);
+      fotoParaEnviar.then(function (b) {
+        toastAcao(msg, "Compartilhar", function () { compartilharEntrega(dia, ref, b); });
+      });
     }).catch(function () {
       botao.disabled = false; botao.textContent = "Salvar registro";
       toast("Não consegui guardar a foto. Veja se o celular tem espaço livre.");
@@ -673,6 +740,7 @@
       if (b.id === "reg-fechar") fecharRegistro();
       else if (b.id === "reg-camera") dlg.querySelector("#reg-arq-camera").click();
       else if (b.id === "reg-apagar") apagarRegistro();
+      else if (b.id === "reg-compartilhar" && regAtual) compartilharEntrega(regAtual.dia, regAtual.ref, regAtual.blobSalvo);
     });
     dlg.addEventListener("change", function (e) {
       if (e.target.type === "file") { receberFoto(e.target.files && e.target.files[0]); e.target.value = ""; }

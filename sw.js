@@ -1,13 +1,13 @@
 // Guarda o site no aparelho para abrir sem internet.
 // Mudanças nos arquivos chegam sozinhas na abertura seguinte do app.
 // Aumentar VERSAO (e o ?v= no index.html) é opcional: faz a mudança valer já na próxima abertura.
-var VERSAO = "meu-prato-v19";
+var VERSAO = "meu-prato-v20";
 var ARQUIVOS = [
   "./",
   "./index.html",
-  "./styles.css?v=19",
-  "./data.js?v=19",
-  "./app.js?v=19",
+  "./styles.css?v=20",
+  "./data.js?v=20",
+  "./app.js?v=20",
   "./logo.svg",
   "./icon-192.png",
   "./icon-512.png",
