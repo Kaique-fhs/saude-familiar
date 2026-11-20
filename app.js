@@ -20,6 +20,7 @@
   var despensa = ler("mp-quero", []);
   var termoDesp = "";
   var diario = ler("mp-diario", {});
+  var ultimoBackup = ler("mp-ultimo-backup", null);
   var diaSel = hojeChave(); // dia que está sendo marcado
   var mesVisto = new Date(); mesVisto.setDate(1);
   var filtro = "todas";
@@ -52,12 +53,27 @@
   var TIPOS = { doce: "Doce", salgado: "Salgada", pao: "Pão" };
 
   var toastEl = document.getElementById("toast"), toastT;
-  function toast(msg) {
-    toastEl.textContent = msg;
-    toastEl.classList.add("show");
+  var desfazerAtual = null;
+  function toast(msg, desfazer) {
     clearTimeout(toastT);
-    toastT = setTimeout(function () { toastEl.classList.remove("show"); }, 1800);
+    desfazerAtual = desfazer || null;
+    toastEl.innerHTML = "";
+    toastEl.appendChild(document.createTextNode(msg));
+    if (desfazer) {
+      var bt = document.createElement("button");
+      bt.type = "button"; bt.className = "desfazer"; bt.textContent = "Desfazer";
+      bt.addEventListener("click", function () {
+        var f = desfazerAtual; desfazerAtual = null;
+        toastEl.classList.remove("show", "com-acao");
+        if (f) { f(); salvarTudo(); rerenderMantendoScroll(); toast("Desfeito"); }
+      });
+      toastEl.appendChild(bt);
+    }
+    toastEl.classList.toggle("com-acao", !!desfazer);
+    toastEl.classList.add("show");
+    toastT = setTimeout(function () { toastEl.classList.remove("show", "com-acao"); desfazerAtual = null; }, desfazer ? 6000 : 1800);
   }
+
 
   var ICON = {
     heart: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1.1L12 21l7.8-7.5 1-1.1a5.5 5.5 0 0 0 0-7.8z"/></svg>',
@@ -449,10 +465,27 @@
       '<span aria-hidden="true">→</span></a>';
   }
 
+  // Lembra de salvar cópia: nunca salvou e já tem 7+ dias marcados, ou a última cópia tem 30+ dias.
+  function lembreteBackup() {
+    var dias = Object.keys(diario).length;
+    if (!dias) return "";
+    var motivo = "";
+    if (!ultimoBackup) {
+      if (dias >= 7) motivo = "Você já marcou " + dias + " dias e ainda não salvou nenhuma cópia.";
+    } else {
+      var passaram = Math.floor((dataDaChave(hojeChave()) - dataDaChave(ultimoBackup)) / 864e5);
+      if (passaram >= 30) motivo = "Sua última cópia foi há " + passaram + " dias.";
+    }
+    if (!motivo) return "";
+    return '<div class="lembrete" role="note"><p><b>Salve uma cópia de segurança.</b> ' + motivo +
+      ' Os dias marcados ficam só neste celular: se ele for trocado ou formatado, eles se perdem.</p>' +
+      '<button class="btn primario" id="baixar-backup">' + ICON.share + 'Salvar cópia agora</button></div>';
+  }
+
   function telaFrequencia() {
     return '<h2 class="titulo-secao">Frequência</h2>' +
       '<p class="descricao">Marque as refeições que você fez e acompanhe no calendário os dias em que cumpriu o plano.</p>' +
-      blocoDia() + blocoCalendario() + telaBackup();
+      lembreteBackup() + blocoDia() + blocoCalendario() + telaBackup();
   }
 
   function telaReceita(id) {
@@ -593,7 +626,9 @@
     a.download = "meu-prato-backup-" + new Date().toISOString().slice(0, 10) + ".json";
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    ultimoBackup = hojeChave(); gravar("mp-ultimo-backup", ultimoBackup);
     toast("Cópia salva");
+    if (location.hash === "#frequencia") rerenderMantendoScroll();
   }
 
   function restaurarBackup(arquivo) {
@@ -624,6 +659,33 @@
     leitor.readAsText(arquivo);
   }
 
+  // ---------- aviso para instalar o app ----------
+  var pedidoInstalacao = null;
+  var instalado = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+  var ehIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  window.addEventListener("beforeinstallprompt", function (e) {
+    e.preventDefault(); pedidoInstalacao = e; rerenderMantendoScroll();
+  });
+  window.addEventListener("appinstalled", function () { instalado = true; pedidoInstalacao = null; render(); toast("App instalado"); });
+
+  function avisoInstalar() {
+    if (instalado || ler("mp-instalar-dispensado", false)) return "";
+    var corpo;
+    if (pedidoInstalacao) {
+      corpo = '<p><b>Instale o Meu Prato no celular.</b> Ele abre como um app, funciona sem internet e guarda seus dados com mais segurança.</p>' +
+        '<div class="linha-acoes"><button class="btn primario" id="instalar">Instalar app</button>';
+    } else if (ehIOS) {
+      corpo = '<p><b>Instale o Meu Prato no iPhone.</b> Assim ele funciona sem internet e o Safari não apaga seus dias marcados.</p>' +
+        '<ol class="passos-ios"><li>Toque em <b>Compartilhar</b> ' + ICON.share + ' na barra do Safari.</li>' +
+        '<li>Escolha <b>Adicionar à Tela de Início</b>.</li><li>Toque em <b>Adicionar</b>.</li></ol>' +
+        '<div class="linha-acoes">';
+    } else {
+      return "";
+    }
+    return '<section class="aviso-instalar" aria-label="Instalar o app">' + corpo +
+      '<button class="btn" id="dispensar-instalar">Agora não</button></div></section>';
+  }
+
   // ---------- roteamento ----------
   function render() {
     var hash = location.hash.replace(/^#/, "") || "plano";
@@ -636,7 +698,7 @@
     else if (aba === "compras") html = telaCompras();
     else if (aba === "quero" || aba === "despensa") { html = telaDespensa(); aba = "quero"; }
     else { html = telaPlano(); aba = "plano"; }
-    main.innerHTML = html;
+    main.innerHTML = avisoInstalar() + html;
     document.querySelectorAll(".abas a").forEach(function (a) {
       if (a.dataset.aba === aba) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
@@ -693,9 +755,17 @@
     } else if (b.dataset.desp) {
       alternar(despensa, b.dataset.desp); salvarTudo();
       atualizarQueroComer(b.dataset.desp);
+    } else if (b.id === "instalar" && pedidoInstalacao) {
+      pedidoInstalacao.prompt();
+      pedidoInstalacao.userChoice.then(function () { pedidoInstalacao = null; rerenderMantendoScroll(); });
+    } else if (b.id === "dispensar-instalar") {
+      gravar("mp-instalar-dispensado", true); rerenderMantendoScroll();
+      toast("Tudo bem. Dá para instalar depois pelo menu do navegador.");
     } else if (b.id === "limpar-despensa") {
+      var antesQuero = despensa.slice();
       despensa = []; salvarTudo(); atualizarQueroComer();
       document.getElementById("busca-despensa").focus();
+      toast("Ingredientes desmarcados", function () { despensa = antesQuero; });
     } else if (b.id === "ir-receitas") {
       var alvo = document.getElementById("receitas-combinadas");
       alvo.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
@@ -707,9 +777,13 @@
     } else if (b.dataset.filtro) {
       filtro = b.dataset.filtro; rerenderMantendoScroll();
     } else if (b.id === "limpar") {
-      sel = []; checks = {}; salvarTudo(); render(); toast("Lista limpa");
+      var antesSel = sel.slice(), antesChecks = Object.assign({}, checks);
+      sel = []; checks = {}; salvarTudo(); render();
+      toast("Lista de compras limpa", function () { sel = antesSel; checks = antesChecks; });
     } else if (b.id === "desmarcar") {
+      var antesMarcados = Object.assign({}, checks);
       checks = {}; salvarTudo(); rerenderMantendoScroll();
+      toast("Itens desmarcados", function () { checks = antesMarcados; });
     } else if (b.id === "compartilhar") {
       var texto = listaComoTexto(montarListaReceitas());
       if (navigator.share) {
