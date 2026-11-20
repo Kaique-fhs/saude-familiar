@@ -325,15 +325,61 @@ table.nutri th:first-child, table.nutri td:first-child { text-align: left; }
 .ponto.parcial { background: var(--accent-soft); border: 1px solid var(--accent); }
 @media (min-width: 900px) { .dia, .calendario { max-width: 640px; } }
 
-/* Atalho do plano para a frequência */
-.status-dia {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+/* Plano do dia: agora, lista de refeições e tela de cada refeição */
+.agora-topo {
   background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 12px 14px; margin-bottom: 16px; min-height: 56px; color: var(--fg); text-decoration: none;
+  padding: 12px 14px; margin: 8px 0 12px;
 }
-.status-dia .detalhes { display: block; font-size: .85rem; color: var(--muted); }
-.status-dia > span:last-child { font-size: 1.2rem; color: var(--primary); }
-.status-dia:hover { border-color: var(--primary); }
+.agora-topo p { margin: 0; }
+.agora-hora { font-size: 1.05rem; }
+.agora-hora b { font-family: Rubik, sans-serif; font-size: 1.3rem; }
+.agora-progresso { font-size: .88rem; color: var(--muted); margin-top: 2px !important; }
+.agora-topo .barra { margin-bottom: 0; }
+.agora-aviso { margin-top: 10px !important; font-size: .88rem; font-weight: 700; color: var(--accent); }
+.agora-ex { display: flex; align-items: center; gap: 6px; margin-top: 10px; font-size: .88rem; font-weight: 700; color: var(--primary); text-decoration: none; min-height: 32px; }
+.agora-ex svg { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; }
+
+.plano-lista { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
+.ref-item {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.ref-linha {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; min-height: 64px; color: var(--fg); text-decoration: none;
+}
+.ref-linha .hora { flex: none; min-width: 64px; }
+.ref-linha .nome { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-weight: 700; font-size: 1.02rem; }
+.ref-linha .nome .tag-sit { font-family: inherit; }
+.ref-item { min-width: 0; }
+@media (max-width: 400px) { .ref-linha { gap: 10px; padding: 10px 8px 10px 10px; } .ref-linha .hora { min-width: 56px; } }
+.ref-linha .detalhes { display: block; font-size: .85rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ref-item .marcar { margin-right: 10px; flex: none; }
+.tag-sit {
+  flex: none; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  font-size: .72rem; font-weight: 700; padding: 3px 9px; border-radius: 99px;
+  background: var(--bg); color: var(--muted);
+}
+.tag-sit svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 3; }
+.s-feita .tag-sit { background: var(--primary); color: #fff; }
+.s-agora .tag-sit, .s-proxima .tag-sit { background: var(--accent-soft); color: var(--accent); }
+.s-atrasada .tag-sit { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.ref-item.s-agora, .ref-item.s-proxima { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.ref-item.s-feita .nome { color: var(--muted); }
+.ref-item.s-feita .hora { background: var(--bg); color: var(--muted); }
+.ref-item.s-depois { opacity: .85; }
+.ref-item:hover { border-color: var(--primary); }
+
+.ref-cabeca { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.ref-cabeca h2 { margin: 0; }
+.refeicao-detalhe .meta { align-items: center; }
+.refeicao-detalhe .meta .tag-sit { font-size: .78rem; }
+.refeicao-detalhe .acoes { margin: 14px 0 6px; }
+.refeicao-detalhe h3 { margin: 18px 0 4px; }
+.ref-nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 12px; }
+.ref-nav .btn { min-width: 0; }
+.ref-nav .seta-dir svg { transform: rotate(180deg); }
+@media (max-width: 380px) { .ref-item .marcar { padding: 0 10px; } .ref-item .marcar svg { display: none; } }
 .abas a span { white-space: nowrap; }
 @media (max-width: 360px) { .abas a { font-size: .64rem; letter-spacing: -.01em; } }
 

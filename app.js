@@ -674,47 +674,106 @@
     return h;
   }
 
+  function rotuloHora(r) { return r.hora || (r.id === "acordar" ? "Acordar" : "Manhã"); }
+
+  // Situação de cada refeição de hoje em relação ao horário atual:
+  // "feita", "agora" (horário atual), "proxima" (a seguinte, quando a atual já foi feita),
+  // "atrasada" (horário já passou e não foi marcada) ou "depois".
+  function situacoesHoje() {
+    var atual = refeicaoAtual(), feitas = feitasNoDia(hojeChave()), idxAtual = 0, out = {};
+    PLANO.refeicoes.forEach(function (r, i) { if (r.id === atual) idxAtual = i; });
+    var proximaMarcada = feitas.indexOf(atual) < 0;
+    PLANO.refeicoes.forEach(function (r, i) {
+      var s;
+      if (feitas.indexOf(r.id) >= 0) s = "feita";
+      else if (i < idxAtual) s = "atrasada";
+      else if (i === idxAtual) s = "agora";
+      else if (!proximaMarcada) { s = "proxima"; proximaMarcada = true; }
+      else s = "depois";
+      out[r.id] = s;
+    });
+    return out;
+  }
+
+  var TEXTO_SITUACAO = { feita: "Feita", agora: "Agora", proxima: "Próxima", atrasada: "Não marcada", depois: "Mais tarde" };
+
   function telaPlano() {
-    var atual = refeicaoAtual(), t = PLANO.nutrientes.total;
+    var atual = refPorId(refeicaoAtual()), t = PLANO.nutrientes.total, hoje = hojeChave();
+    var sit = situacoesHoje(), regsHoje = registros[hoje] || {}, n = feitasNoDia(hoje).length, seq = sequencia();
+    var atrasadas = PLANO.refeicoes.filter(function (r) { return sit[r.id] === "atrasada"; });
+    var ex = exerciciosDoDia(hoje), feitosEx = treinosFeitos(hoje);
     var h = '<h2 class="titulo-secao">Meu plano do dia</h2>' +
-      '<p class="descricao">Toque em cada refeição para ver as opções de troca. A refeição do horário atual já vem aberta.</p>' +
+      '<section class="agora-topo" aria-label="Agora">' +
+      '<p class="agora-hora"><b>' + horaAgora() + '</b> · hora ' + (atual.id === "acordar" ? 'de acordar' : 'do ' + esc(atual.nome.toLowerCase())) + '</p>' +
+      '<p class="agora-progresso">' + n + ' de ' + TOTAL_REF + ' refeições feitas hoje' +
+      (seq ? ' · ' + seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') : '') + '</p>' +
+      '<div class="barra" aria-hidden="true"><span style="width:' + Math.round(n / TOTAL_REF * 100) + '%"></span></div>' +
+      (atrasadas.length ? '<p class="agora-aviso">' + (atrasadas.length === 1 ? esc(atrasadas[0].nome) + ' ainda não foi marcada.' : atrasadas.length + ' refeições anteriores ainda não foram marcadas.') + '</p>' : '') +
+      (ex.length ? '<a class="agora-ex" href="#frequencia">' + ICON.peso + 'Hoje tem ' + esc(juntarNomes(ex.map(function (e) { return e.nome; }))) +
+        ' · ' + feitosEx.length + ' de ' + ex.length + ' feito' + (ex.length === 1 ? '' : 's') + ' →</a>' : '') +
+      '</section>' +
+      '<p class="descricao">Toque numa refeição para ver o que comer e as opções de troca.</p>' +
+      '<ul class="plano-lista">';
+    PLANO.refeicoes.forEach(function (r) {
+      var s = sit[r.id], reg = regsHoje[r.id];
+      var detalhe = s === "feita" ? (reg ? resumoRegistro(reg) : "Marcada") : r.kcal + " kcal";
+      h += '<li class="ref-item s-' + s + '">' +
+        '<a class="ref-linha" href="#refeicao/' + r.id + '">' +
+        '<span class="hora">' + rotuloHora(r) + '</span>' +
+        '<span class="flex1"><span class="nome">' + esc(r.nome) +
+        ' <span class="tag-sit">' + (s === "feita" ? ICON.check : '') + TEXTO_SITUACAO[s] + '</span></span>' +
+        '<span class="detalhes">' + esc(detalhe) + '</span></span>' +
+        '<span class="seta-linha" aria-hidden="true">›</span></a>' +
+        (s === "atrasada" || s === "agora" ? '<button class="btn mini marcar" data-registrar="' + r.id + '" data-hoje aria-label="Marcar ' + esc(r.nome) + '">' + ICON.camera + 'Marcar</button>' : '') +
+        '</li>';
+    });
+    h += '</ul>' +
       '<div class="resumo" aria-label="Total do dia">' +
       '<div><b>' + t.kcal + '</b><span>kcal</span></div>' +
       '<div><b>' + t.proteinas + '</b><span>proteínas</span></div>' +
       '<div><b>' + t.carboidratos + '</b><span>carboidratos</span></div>' +
       '<div><b>' + t.lipidios + '</b><span>gorduras</span></div></div>' +
-      statusHoje() + blocoAgenda() +
-      '<div class="plano-grade">';
-    PLANO.refeicoes.forEach(function (r) {
-      var eAgora = r.id === atual;
-      h += '<details class="refeicao' + (eAgora ? " agora" : "") + '"' + (eAgora ? " open" : "") + '>' +
-        '<summary><span class="hora">' + (r.hora || (r.id === "acordar" ? "Acordar" : "Manhã")) + '</span>' +
-        '<h3>' + esc(r.nome) + '</h3>' + (eAgora ? '<span class="tag-agora">Agora</span>' : '') +
-        '<span class="kcal">' + r.kcal + ' kcal</span>' + ICON.chevron + '</summary><div class="corpo">';
-      r.itens.forEach(function (it) {
-        h += '<div class="item"><div class="principal">' + esc(it.principal) + '</div>';
-        if (it.opcoes.length) {
-          h += '<ul>' + it.opcoes.map(function (o) { return '<li>' + esc(o) + '</li>'; }).join("") + '</ul>';
-        }
-        h += '</div>';
-      });
-      if (r.observacoes.length) {
-        h += '<div class="obs"><strong>Observações</strong><ul>' +
-          r.observacoes.map(function (o) { return '<li>' + esc(o) + '</li>'; }).join("") + '</ul>';
-        (r.receitas || []).forEach(function (id) {
-          var rec = porId(id);
-          if (rec) h += '<a class="link-receita" href="#receita/' + rec.id + '">Ver receita: ' + esc(rec.nome) + ' →</a>';
-        });
-        h += '</div>';
-      }
-      h += '</div></details>';
-    });
-    h += '</div><h3 class="subtitulo">Nutrientes por refeição</h3><div class="tabela-wrap"><table class="nutri">' +
+      blocoAgenda() +
+      '<h3 class="subtitulo">Nutrientes por refeição</h3><div class="tabela-wrap"><table class="nutri">' +
       '<thead><tr><th>Refeição</th><th>Prot.</th><th>Gord.</th><th>Carb.</th><th>Calorias</th></tr></thead><tbody>' +
       PLANO.nutrientes.linhas.map(function (l) { return '<tr>' + l.map(function (c) { return '<td>' + c + '</td>'; }).join("") + '</tr>'; }).join("") +
       '<tr><td><b>Total</b></td><td><b>' + t.proteinas + '</b></td><td><b>' + t.lipidios + '</b></td><td><b>' + t.carboidratos + '</b></td><td><b>' + t.kcal + ' kcal</b></td></tr>' +
       '</tbody></table></div>' +
       '<p class="rodape">Plano prescrito em ' + PLANO.prescritoEm + '. Siga sempre a orientação da sua nutricionista.</p>';
+    return h;
+  }
+
+  function telaRefeicao(id) {
+    var r = refPorId(id);
+    if (!r) return '<div class="vazio">Refeição não encontrada. <a href="#plano">Voltar</a></div>';
+    var s = situacoesHoje()[r.id], reg = (registros[hojeChave()] || {})[r.id];
+    var i = PLANO.refeicoes.indexOf(r), ant = PLANO.refeicoes[i - 1], prox = PLANO.refeicoes[i + 1];
+    var h = '<a class="btn voltar" href="#plano">' + ICON.back + 'Plano do dia</a>' +
+      '<article class="detalhe refeicao-detalhe s-' + s + '">' +
+      '<div class="ref-cabeca"><span class="hora">' + rotuloHora(r) + '</span><h2>' + esc(r.nome) + '</h2></div>' +
+      '<div class="meta"><span class="chip">' + r.kcal + ' kcal</span><span class="tag-sit">' + (s === "feita" ? ICON.check : '') + TEXTO_SITUACAO[s] + '</span></div>' +
+      (s === "feita" && reg ? '<p class="descricao">' + esc(resumoRegistro(reg)) + '</p>' : '') +
+      '<div class="acoes"><button class="btn' + (s === "feita" ? '' : ' primario') + '" data-registrar="' + r.id + '" data-hoje>' + ICON.camera +
+      (s === "feita" ? 'Ver ou mudar o registro' : 'Marcar o que comi') + '</button></div>' +
+      '<h3>O que comer</h3>';
+    r.itens.forEach(function (it) {
+      h += '<div class="item"><div class="principal">' + esc(it.principal) + '</div>';
+      if (it.opcoes.length) h += '<ul>' + it.opcoes.map(function (o) { return '<li>' + esc(o) + '</li>'; }).join("") + '</ul>';
+      h += '</div>';
+    });
+    if (r.observacoes.length || (r.receitas || []).length) {
+      h += '<div class="obs"><strong>Observações</strong>' + (r.observacoes.length ? '<ul>' +
+        r.observacoes.map(function (o) { return '<li>' + esc(o) + '</li>'; }).join("") + '</ul>' : '');
+      (r.receitas || []).forEach(function (rid) {
+        var rec = porId(rid);
+        if (rec) h += '<a class="link-receita" href="#receita/' + rec.id + '">Ver receita: ' + esc(rec.nome) + ' →</a>';
+      });
+      h += '</div>';
+    }
+    h += '</article><nav class="ref-nav" aria-label="Outras refeições">' +
+      (ant ? '<a class="btn" href="#refeicao/' + ant.id + '">' + ICON.back + esc(ant.nome) + '</a>' : '<span></span>') +
+      (prox ? '<a class="btn seta-dir" href="#refeicao/' + prox.id + '">' + esc(prox.nome) + ICON.back + '</a>' : '') +
+      '</nav>';
     return h;
   }
 
@@ -756,16 +815,6 @@
     if (l.length) return l.map(cartao).join("");
     if (filtro === "favoritas" && !favs.length) return '<p class="vazio">Você ainda não favoritou nenhuma receita. Toque no coração de uma receita para ela aparecer aqui.</p>';
     return '<p class="vazio">Nenhuma receita encontrada.</p>';
-  }
-
-  function statusHoje() {
-    var hoje = hojeChave(), n = feitasNoDia(hoje).length, seq = sequencia(), ex = exerciciosDoDia(hoje);
-    var feitosEx = treinosFeitos(hoje);
-    return '<a class="status-dia" href="#frequencia">' +
-      '<span><b>Hoje: ' + n + ' de ' + TOTAL_REF + ' refeições marcadas</b>' +
-      (ex.length ? '<span class="detalhes ex-hoje">' + ICON.peso + 'Hoje tem ' + juntarNomes(ex.map(function (e) { return e.nome; })) + (feitosEx.length ? ' (' + feitosEx.length + ' de ' + ex.length + ' feito' + (feitosEx.length === 1 ? '' : 's') + ')' : '') + '</span>' : '') +
-      '<span class="detalhes">' + (seq ? seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') + ' · ' : '') + 'Toque para marcar e ver o calendário</span></span>' +
-      '<span aria-hidden="true">→</span></a>';
   }
 
   // Lembra de salvar cópia: nunca salvou e já tem 7+ dias marcados, ou a última cópia tem 30+ dias.
@@ -1087,6 +1136,7 @@
     var partes = hash.split("/"), aba = partes[0];
     var html;
     if (aba === "receita") { html = telaReceita(partes[1]); aba = "receitas"; }
+    else if (aba === "refeicao") { html = telaRefeicao(partes[1]); aba = "plano"; }
     else if (aba === "receitas") html = telaReceitas();
     else if (aba === "favoritas") { filtro = "favoritas"; html = telaReceitas(); aba = "receitas"; }
     else if (aba === "frequencia") html = telaFrequencia();
@@ -1139,6 +1189,7 @@
       toast(add ? "Adicionada à lista de compras" : "Tirada da lista de compras");
       rerenderMantendoScroll();
     } else if (b.dataset.registrar) {
+      if (b.dataset.hoje !== undefined) diaSel = hojeChave(); // no plano, registra sempre o dia de hoje
       abrirRegistro(b.dataset.registrar);
     } else if (b.dataset.dia) {
       diaSel = b.dataset.dia; rerenderMantendoScroll();
@@ -1220,5 +1271,13 @@
     mesVisto = new Date(); mesVisto.setDate(1);
     rerenderMantendoScroll();
   });
+
+  // No plano, a refeição "Agora" e o relógio acompanham a hora enquanto o app fica aberto.
+  setInterval(function () {
+    if (document.hidden || (dlg && dlg.open)) return;
+    var aba = (location.hash.replace(/^#/, "") || "plano").split("/")[0];
+    // qualquer rota que não seja de outra aba cai no plano (ver render)
+    if (!/^(receita|receitas|favoritas|frequencia|compras|quero|despensa)$/.test(aba)) rerenderMantendoScroll();
+  }, 60000);
   render();
 })();
