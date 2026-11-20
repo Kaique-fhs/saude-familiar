@@ -330,7 +330,7 @@
     var hoje = hojeChave(), cumpridos = 0;
     var h = '<section class="calendario" aria-labelledby="titulo-cal">' +
       '<div class="cal-topo"><button class="btn-fav" id="mes-ant" aria-label="Mês anterior">' + ICON.back + '</button>' +
-      '<h3 id="titulo-cal">' + MESES[mes] + ' de ' + ano + '</h3>' +
+      '<h3 id="titulo-cal">' + MESES[mes].charAt(0).toUpperCase() + MESES[mes].slice(1) + ' de ' + ano + '</h3>' +
       '<button class="btn-fav seta-dir" id="mes-prox" aria-label="Próximo mês"' + (ano * 12 + mes >= new Date().getFullYear() * 12 + new Date().getMonth() ? ' disabled' : '') + '>' + ICON.back + '</button></div>' +
       '<div class="cal-grade">' + SEMANA.map(function (s) { return '<span class="cal-sem" aria-hidden="true">' + s.charAt(0).toUpperCase() + '</span>'; }).join("");
     for (var i = 0; i < primeiro.getDay(); i++) h += '<span></span>';

@@ -301,7 +301,7 @@ table.nutri th:first-child, table.nutri td:first-child { text-align: left; }
 .voltar-hoje { margin-top: 10px; }
 .calendario { margin-top: 16px; }
 .cal-topo { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.cal-topo h3 { font-size: 1.02rem; text-transform: capitalize; }
+.cal-topo h3 { font-size: 1.02rem; }
 .cal-topo .btn-fav svg { stroke: var(--fg); fill: none; }
 .cal-topo .seta-dir svg { transform: rotate(180deg); }
 .cal-topo button:disabled { opacity: .35; cursor: default; }
