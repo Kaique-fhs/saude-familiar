@@ -17,7 +17,7 @@
   var sel = ler("mp-sel", []);
   var checks = ler("mp-checks", {});
   var checksPlano = ler("mp-checks-plano", {});
-  var despensa = ler("mp-despensa", []);
+  var despensa = ler("mp-quero", []);
   var termoDesp = "";
   var filtro = "todas";
   var termo = "";
@@ -27,7 +27,7 @@
     gravar("mp-sel", sel);
     gravar("mp-checks", checks);
     gravar("mp-checks-plano", checksPlano);
-    gravar("mp-despensa", despensa);
+    gravar("mp-quero", despensa);
     atualizarContador();
   }
 
@@ -174,16 +174,19 @@
 
   // produtos obrigatórios de cada receita (sem básicos e sem itens "a gosto")
   var NECESSARIOS = {};
+  var OPCIONAIS = {};
   var TODOS_PRODUTOS = {};
   RECEITAS.forEach(function (r) {
-    var req = {};
+    var req = {}, opc = {};
     r.ingredientes.forEach(function (ing) {
       produtosDe(ing).forEach(function (p) {
         TODOS_PRODUTOS[p] = CATEGORIA[p] || "Mercearia";
-        if (BASICOS.indexOf(p) < 0 && !opcional(ing)) req[p] = true;
+        if (BASICOS.indexOf(p) >= 0) return;
+        if (opcional(ing)) opc[p] = true; else req[p] = true;
       });
     });
     NECESSARIOS[r.id] = Object.keys(req);
+    OPCIONAIS[r.id] = Object.keys(opc).filter(function (p) { return !req[p]; });
   });
 
   function produtosPorCategoria() {
@@ -197,11 +200,16 @@
     });
   }
 
-  function avaliarReceitas() {
+  // "Quero comer": ordena as receitas por quantos dos ingredientes escolhidos elas levam
+  function receitasCombinadas() {
     return RECEITAS.map(function (r) {
-      var falta = NECESSARIOS[r.id].filter(function (p) { return despensa.indexOf(p) < 0; });
-      return { r: r, falta: falta, total: NECESSARIOS[r.id].length };
-    }).sort(function (a, b) { return a.falta.length - b.falta.length || a.r.nome.localeCompare(b.r.nome, "pt-BR"); });
+      var tem = NECESSARIOS[r.id].concat(OPCIONAIS[r.id]);
+      var combina = despensa.filter(function (p) { return tem.indexOf(p) >= 0; });
+      return { r: r, combina: combina, cobertura: combina.length / Math.max(1, NECESSARIOS[r.id].length) };
+    }).filter(function (a) { return a.combina.length > 0; })
+      .sort(function (a, b) {
+        return b.combina.length - a.combina.length || b.cobertura - a.cobertura || a.r.nome.localeCompare(b.r.nome, "pt-BR");
+      });
   }
 
   function listaComoTexto(grupos) {
@@ -366,32 +374,26 @@
 
   function resultadoDespensa() {
     if (!despensa.length) {
-      return '<div class="vazio">Marque abaixo os ingredientes que você tem em casa e eu mostro as receitas que dá para fazer.</div>';
+      return '<div class="vazio">Escolha abaixo os ingredientes que você está com vontade de comer e eu mostro as receitas que mais combinam.</div>';
     }
-    var av = avaliarReceitas();
-    var pode = av.filter(function (a) { return a.falta.length === 0; });
-    var quase = av.filter(function (a) { return a.falta.length > 0 && a.falta.length <= 2; });
-    var h = '<div class="placar"><b>' + pode.length + '</b> receita(s) você já pode fazer · <b>' + quase.length + '</b> falta pouco</div>';
-    if (pode.length) {
-      h += '<h3 class="subtitulo">Pode fazer agora</h3><ul class="lista">' + pode.map(function (a) {
-        return '<li><a class="linha-receita" href="#receita/' + a.r.id + '"><span class="ok">' + ICON.check + '</span>' +
-          '<span><span class="nome">' + esc(a.r.nome) + '</span><span class="detalhes">Você tem tudo (' + a.total + ' ingredientes)</span></span></a></li>';
-      }).join("") + '</ul>';
+    var lista = receitasCombinadas();
+    if (!lista.length) {
+      return '<div class="vazio">Nenhuma receita do caderno leva esses ingredientes. Tente escolher outros.</div>';
     }
-    if (quase.length) {
-      h += '<h3 class="subtitulo">Falta pouco</h3><ul class="lista">' + quase.map(function (a) {
-        var naLista = sel.indexOf(a.r.id) >= 0;
-        return '<li><div class="linha-receita"><span class="falta">' + a.falta.length + '</span>' +
-          '<span class="flex1"><a class="nome" href="#receita/' + a.r.id + '">' + esc(a.r.nome) + '</a>' +
-          '<span class="detalhes">Falta: ' + a.falta.map(esc).join(", ") + '</span></span>' +
-          '<button class="btn mini' + (naLista ? " primario" : "") + '" data-sel="' + a.r.id + '" aria-pressed="' + naLista + '" aria-label="' + (naLista ? "Tirar da lista de compras" : "Adicionar à lista de compras") + ': ' + esc(a.r.nome) + '">' +
-          (naLista ? ICON.check + "Na lista" : ICON.plus + "Comprar") + '</button></div></li>';
-      }).join("") + '</ul>';
-    }
-    if (!pode.length && !quase.length) {
-      h += '<div class="vazio">Ainda falta bastante para qualquer receita. Marque mais ingredientes.</div>';
-    }
-    return h;
+    var n = despensa.length;
+    var h = '<div class="placar"><b>' + lista.length + '</b> receita(s) combinam com o que você quer comer</div>' +
+      '<ul class="lista resultado">';
+    lista.forEach(function (a) {
+      var naLista = sel.indexOf(a.r.id) >= 0;
+      var todos = a.combina.length === n;
+      h += '<li><div class="linha-receita"><span class="' + (todos ? "ok" : "falta") + '" aria-hidden="true">' + (todos ? ICON.check : a.combina.length) + '</span>' +
+        '<span class="flex1"><a class="nome" href="#receita/' + a.r.id + '">' + esc(a.r.nome) + '</a>' +
+        '<span class="detalhes">' + (n > 1 ? (todos ? "Leva tudo o que você escolheu: " : "Leva " + a.combina.length + " de " + n + ": ") : "Leva ") +
+        a.combina.map(esc).join(", ") + '</span></span>' +
+        '<button class="btn mini' + (naLista ? " primario" : "") + '" data-sel="' + a.r.id + '" aria-pressed="' + naLista + '" aria-label="' + (naLista ? "Tirar da lista de compras" : "Adicionar à lista de compras") + ': ' + esc(a.r.nome) + '">' +
+        (naLista ? ICON.check + "Na lista" : ICON.plus + "Comprar") + '</button></div></li>';
+    });
+    return h + '</ul>';
   }
 
   function chipsDespensa() {
@@ -407,13 +409,13 @@
   }
 
   function telaDespensa() {
-    return '<h2 class="titulo-secao">O que tenho em casa</h2>' +
-      '<p class="descricao">Marque os ingredientes que você tem. Sal, temperos e itens "a gosto" não contam. Fica salvo neste aparelho.</p>' +
+    return '<h2 class="titulo-secao">O que quero comer</h2>' +
+      '<p class="descricao">Escolha os ingredientes que você está com vontade de comer. As receitas que levam mais deles aparecem primeiro.</p>' +
       '<div id="resultado-despensa">' + resultadoDespensa() + '</div>' +
-      '<div class="cabecalho-despensa"><h3 class="subtitulo">Meus ingredientes (' + despensa.length + ')</h3>' +
+      '<div class="cabecalho-despensa"><h3 class="subtitulo">Ingredientes escolhidos (' + despensa.length + ')</h3>' +
       (despensa.length ? '<button class="btn mini" id="limpar-despensa">Desmarcar todos</button>' : '') + '</div>' +
       '<label for="busca-despensa" class="sr">Buscar ingrediente</label>' +
-      '<input id="busca-despensa" class="busca" type="search" placeholder="Buscar ingrediente (ex.: ovo)" value="' + esc(termoDesp) + '">' +
+      '<input id="busca-despensa" class="busca" type="search" placeholder="Buscar ingrediente (ex.: banana)" value="' + esc(termoDesp) + '">' +
       '<div id="chips-despensa">' + chipsDespensa() + '</div>';
   }
 
@@ -426,7 +428,7 @@
     else if (aba === "receitas") html = telaReceitas();
     else if (aba === "favoritas") html = telaFavoritas();
     else if (aba === "compras") html = telaCompras();
-    else if (aba === "despensa") html = telaDespensa();
+    else if (aba === "quero" || aba === "despensa") { html = telaDespensa(); aba = "quero"; }
     else { html = telaPlano(); aba = "plano"; }
     main.innerHTML = html;
     document.querySelectorAll(".abas a").forEach(function (a) {
