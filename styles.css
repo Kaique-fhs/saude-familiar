@@ -59,7 +59,7 @@ main { max-width: 760px; margin: 0 auto; padding: 16px; outline: none; }
 
 /* Resumo */
 .resumo {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
   background: var(--primary-soft); border-radius: var(--radius); padding: 12px; margin-bottom: 16px;
 }
 .resumo div { text-align: center; }
@@ -183,7 +183,7 @@ table.nutri th:first-child, table.nutri td:first-child { text-align: left; }
 /* Navegação inferior */
 .abas {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   background: var(--card); border-top: 1px solid var(--border);
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -245,3 +245,29 @@ table.nutri th:first-child, table.nutri td:first-child { text-align: left; }
 }
 .contador[hidden] { display: none; }
 .btn { white-space: nowrap; }
+
+/* Despensa */
+.placar { background: var(--primary-soft); color: var(--primary-strong); border-radius: var(--radius); padding: 12px 14px; font-weight: 600; }
+.placar b { font-family: Rubik, sans-serif; font-size: 1.15rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-toggle {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 6px 14px;
+  border-radius: 99px; border: 1px solid var(--border); background: var(--card); font-weight: 600;
+}
+.chip-toggle svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 3; }
+.chip-toggle[aria-pressed="true"] { background: var(--primary); border-color: var(--primary); color: #fff; }
+@media (prefers-color-scheme: dark) { .chip-toggle[aria-pressed="true"] { color: #062b20; } }
+.linha-receita { display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-height: 52px; color: var(--fg); text-decoration: none; }
+.linha-receita a.nome { color: var(--fg); text-decoration: none; display: block; }
+.linha-receita .ok, .linha-receita .falta {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: .85rem;
+}
+.linha-receita .ok { background: var(--primary); color: #fff; }
+.linha-receita .ok svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 3; }
+.linha-receita .falta { background: var(--accent-soft); color: var(--accent); }
+.flex1 { flex: 1; min-width: 0; }
+.btn.mini { min-height: 40px; padding: 0 12px; font-size: .9rem; }
+.cabecalho-despensa { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 20px 0 8px; }
+.cabecalho-despensa .subtitulo { margin: 0; }
+#chips-despensa .subtitulo { font-size: .95rem; color: var(--muted); }
+@media (max-width: 380px) { .abas a { font-size: .68rem; } }

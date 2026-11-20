@@ -17,6 +17,8 @@
   var sel = ler("mp-sel", []);
   var checks = ler("mp-checks", {});
   var checksPlano = ler("mp-checks-plano", {});
+  var despensa = ler("mp-despensa", []);
+  var termoDesp = "";
   var filtro = "todas";
   var termo = "";
 
@@ -25,6 +27,7 @@
     gravar("mp-sel", sel);
     gravar("mp-checks", checks);
     gravar("mp-checks-plano", checksPlano);
+    gravar("mp-despensa", despensa);
     atualizarContador();
   }
 
@@ -64,7 +67,7 @@
   // ---------- lista de compras a partir das receitas ----------
   // Cada regra liga o texto do ingrediente a um produto do mercado. A primeira que casar vence.
   var REGRAS = [
-    [/gergelim e linha/, ["Gergelim", "Linhaça"]],
+    [/gergelim e linha/, ["Gergelim", "Linhaça (farinha ou semente)"]],
     [/leite de castanha/, "Leite de castanha de caju com coco"],
     [/leite de amendoa/, "Leite de amêndoa"],
     [/farinha de amendoa/, "Farinha de amêndoas"],
@@ -163,6 +166,42 @@
     return ORDEM_CAT.filter(function (c) { return porCat[c]; }).map(function (c) {
       return { cat: c, itens: porCat[c].sort(function (a, b) { return a.nome.localeCompare(b.nome, "pt-BR"); }) };
     });
+  }
+
+  // ---------- despensa: o que tenho em casa -> o que posso fazer ----------
+  var BASICOS = ["Sal", "Temperos naturais"]; // sempre considerados disponíveis
+  function opcional(ing) { return /a gosto|opcional|para untar|para salpicar/.test(semAcento(ing)); }
+
+  // produtos obrigatórios de cada receita (sem básicos e sem itens "a gosto")
+  var NECESSARIOS = {};
+  var TODOS_PRODUTOS = {};
+  RECEITAS.forEach(function (r) {
+    var req = {};
+    r.ingredientes.forEach(function (ing) {
+      produtosDe(ing).forEach(function (p) {
+        TODOS_PRODUTOS[p] = CATEGORIA[p] || "Mercearia";
+        if (BASICOS.indexOf(p) < 0 && !opcional(ing)) req[p] = true;
+      });
+    });
+    NECESSARIOS[r.id] = Object.keys(req);
+  });
+
+  function produtosPorCategoria() {
+    var porCat = {};
+    Object.keys(TODOS_PRODUTOS).forEach(function (p) {
+      if (BASICOS.indexOf(p) >= 0) return;
+      (porCat[TODOS_PRODUTOS[p]] = porCat[TODOS_PRODUTOS[p]] || []).push(p);
+    });
+    return ORDEM_CAT.filter(function (c) { return porCat[c]; }).map(function (c) {
+      return { cat: c, itens: porCat[c].sort(function (a, b) { return a.localeCompare(b, "pt-BR"); }) };
+    });
+  }
+
+  function avaliarReceitas() {
+    return RECEITAS.map(function (r) {
+      var falta = NECESSARIOS[r.id].filter(function (p) { return despensa.indexOf(p) < 0; });
+      return { r: r, falta: falta, total: NECESSARIOS[r.id].length };
+    }).sort(function (a, b) { return a.falta.length - b.falta.length || a.r.nome.localeCompare(b.r.nome, "pt-BR"); });
   }
 
   function listaComoTexto(grupos) {
@@ -325,6 +364,59 @@
     return h;
   }
 
+  function resultadoDespensa() {
+    if (!despensa.length) {
+      return '<div class="vazio">Marque abaixo os ingredientes que você tem em casa e eu mostro as receitas que dá para fazer.</div>';
+    }
+    var av = avaliarReceitas();
+    var pode = av.filter(function (a) { return a.falta.length === 0; });
+    var quase = av.filter(function (a) { return a.falta.length > 0 && a.falta.length <= 2; });
+    var h = '<div class="placar"><b>' + pode.length + '</b> receita(s) você já pode fazer · <b>' + quase.length + '</b> falta pouco</div>';
+    if (pode.length) {
+      h += '<h3 class="subtitulo">Pode fazer agora</h3><ul class="lista">' + pode.map(function (a) {
+        return '<li><a class="linha-receita" href="#receita/' + a.r.id + '"><span class="ok">' + ICON.check + '</span>' +
+          '<span><span class="nome">' + esc(a.r.nome) + '</span><span class="detalhes">Você tem tudo (' + a.total + ' ingredientes)</span></span></a></li>';
+      }).join("") + '</ul>';
+    }
+    if (quase.length) {
+      h += '<h3 class="subtitulo">Falta pouco</h3><ul class="lista">' + quase.map(function (a) {
+        var naLista = sel.indexOf(a.r.id) >= 0;
+        return '<li><div class="linha-receita"><span class="falta">' + a.falta.length + '</span>' +
+          '<span class="flex1"><a class="nome" href="#receita/' + a.r.id + '">' + esc(a.r.nome) + '</a>' +
+          '<span class="detalhes">Falta: ' + a.falta.map(esc).join(", ") + '</span></span>' +
+          '<button class="btn mini' + (naLista ? " primario" : "") + '" data-sel="' + a.r.id + '" aria-pressed="' + naLista + '" aria-label="' + (naLista ? "Tirar da lista de compras" : "Adicionar à lista de compras") + ': ' + esc(a.r.nome) + '">' +
+          (naLista ? ICON.check + "Na lista" : ICON.plus + "Comprar") + '</button></div></li>';
+      }).join("") + '</ul>';
+    }
+    if (!pode.length && !quase.length) {
+      h += '<div class="vazio">Ainda falta bastante para qualquer receita. Marque mais ingredientes.</div>';
+    }
+    return h;
+  }
+
+  function chipsDespensa() {
+    var q = semAcento(termoDesp.trim());
+    return produtosPorCategoria().map(function (g) {
+      var itens = g.itens.filter(function (p) { return !q || semAcento(p).indexOf(q) >= 0; });
+      if (!itens.length) return "";
+      return '<h3 class="subtitulo">' + g.cat + '</h3><div class="chips">' + itens.map(function (p) {
+        var tem = despensa.indexOf(p) >= 0;
+        return '<button class="chip-toggle" data-desp="' + esc(p) + '" aria-pressed="' + tem + '">' + (tem ? ICON.check : "") + esc(p) + '</button>';
+      }).join("") + '</div>';
+    }).join("") || '<p class="vazio">Nenhum ingrediente encontrado.</p>';
+  }
+
+  function telaDespensa() {
+    return '<h2 class="titulo-secao">O que tenho em casa</h2>' +
+      '<p class="descricao">Marque os ingredientes que você tem. Sal, temperos e itens "a gosto" não contam. Fica salvo neste aparelho.</p>' +
+      '<div id="resultado-despensa">' + resultadoDespensa() + '</div>' +
+      '<div class="cabecalho-despensa"><h3 class="subtitulo">Meus ingredientes (' + despensa.length + ')</h3>' +
+      (despensa.length ? '<button class="btn mini" id="limpar-despensa">Desmarcar todos</button>' : '') + '</div>' +
+      '<label for="busca-despensa" class="sr">Buscar ingrediente</label>' +
+      '<input id="busca-despensa" class="busca" type="search" placeholder="Buscar ingrediente (ex.: ovo)" value="' + esc(termoDesp) + '">' +
+      '<div id="chips-despensa">' + chipsDespensa() + '</div>';
+  }
+
   // ---------- roteamento ----------
   function render() {
     var hash = location.hash.replace(/^#/, "") || "plano";
@@ -334,6 +426,7 @@
     else if (aba === "receitas") html = telaReceitas();
     else if (aba === "favoritas") html = telaFavoritas();
     else if (aba === "compras") html = telaCompras();
+    else if (aba === "despensa") html = telaDespensa();
     else { html = telaPlano(); aba = "plano"; }
     main.innerHTML = html;
     document.querySelectorAll(".abas a").forEach(function (a) {
@@ -368,6 +461,11 @@
       var add = alternar(sel, b.dataset.sel); salvarTudo();
       toast(add ? "Adicionada à lista de compras" : "Tirada da lista de compras");
       rerenderMantendoScroll();
+    } else if (b.dataset.desp) {
+      alternar(despensa, b.dataset.desp); salvarTudo();
+      rerenderMantendoScroll();
+    } else if (b.id === "limpar-despensa") {
+      despensa = []; salvarTudo(); rerenderMantendoScroll();
     } else if (b.dataset.filtro) {
       filtro = b.dataset.filtro; rerenderMantendoScroll();
     } else if (b.id === "limpar") {
@@ -394,6 +492,9 @@
     if (e.target.id === "busca") {
       termo = e.target.value;
       document.getElementById("grade").innerHTML = gradeHtml();
+    } else if (e.target.id === "busca-despensa") {
+      termoDesp = e.target.value;
+      document.getElementById("chips-despensa").innerHTML = chipsDespensa();
     }
   });
 
