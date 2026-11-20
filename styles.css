@@ -405,3 +405,24 @@ dialog#registro::backdrop { background: rgba(0,0,0,.55); }
 
 /* Elementos escondidos ficam escondidos, mesmo quando a classe define display */
 [hidden] { display: none !important; }
+
+/* Seções do dia: Refeições e Exercícios */
+.titulo-secao-dia {
+  display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; font-family: Rubik, sans-serif; font-size: 1rem;
+}
+.titulo-secao-dia svg { width: 20px; height: 20px; fill: none; stroke: var(--primary); stroke-width: 2; }
+.titulo-secao-dia .contagem { margin-left: auto; font-size: .8rem; font-weight: 700; color: var(--muted); }
+.exercicios { margin-top: 6px; }
+.sem-exercicio { margin: 0; padding: 12px 14px; background: var(--primary-soft); color: var(--primary-strong); border-radius: 12px; font-weight: 600; }
+
+/* Agenda de exercícios no Plano */
+.agenda { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px; }
+.agenda h3 { display: flex; align-items: center; gap: 8px; font-size: 1rem; margin-bottom: 8px; }
+.agenda h3 svg { width: 20px; height: 20px; fill: none; stroke: var(--primary); stroke-width: 2; }
+.agenda ul { list-style: none; margin: 0; padding: 0; }
+.agenda li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); }
+.agenda li:first-child { border-top: 0; }
+.agenda li.hoje { color: var(--primary-strong); font-weight: 700; }
+.ex-hoje { display: flex !important; align-items: center; gap: 6px; color: var(--accent) !important; font-weight: 700; }
+.ex-hoje svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+@media (min-width: 900px) { .agenda { max-width: 640px; } }

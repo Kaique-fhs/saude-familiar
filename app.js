@@ -21,6 +21,7 @@
   var termoDesp = "";
   var diario = ler("mp-diario", {});
   var ultimoBackup = ler("mp-ultimo-backup", null);
+  var treinos = ler("mp-treinos", {}); // { "2026-11-24": ["academia", "pilates"] }
   var registros = ler("mp-registros", {}); // { "2026-11-20": { almoco: { escolhas, receita, foto, hora } } }
   var diaSel = hojeChave(); // dia que está sendo marcado
   var mesVisto = new Date(); mesVisto.setDate(1);
@@ -35,6 +36,7 @@
     gravar("mp-quero", despensa);
     gravar("mp-diario", diario);
     gravar("mp-registros", registros);
+    gravar("mp-treinos", treinos);
     atualizarContador();
   }
 
@@ -83,6 +85,8 @@
     check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 6 9 17l-5-5"/></svg>',
     chevron: '<svg class="seta" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>',
     share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>',
+    prato: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12h18a9 9 0 0 1-18 0zM12 9V4M8 9l-1-3M16 9l1-3"/></svg>',
+    peso: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/></svg>',
     camera: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
     back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"/></svg>'
   };
@@ -310,7 +314,21 @@
   function dataDaChave(k) { var p = k.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
   function hojeChave() { return chaveData(new Date()); }
   function feitasNoDia(k) { return diario[k] || []; }
-  function diaCompleto(k) { return feitasNoDia(k).length >= TOTAL_REF; }
+  // Exercícios programados para o dia da semana daquela data.
+  var DIAS_LONGOS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+  function exerciciosDoDia(k) {
+    var ds = dataDaChave(k).getDay();
+    return (PLANO.exercicios || []).filter(function (e) { return e.dias.indexOf(ds) >= 0; });
+  }
+  function treinosFeitos(k) {
+    var prog = exerciciosDoDia(k).map(function (e) { return e.id; });
+    return (treinos[k] || []).filter(function (id) { return prog.indexOf(id) >= 0; });
+  }
+  function totalDoDia(k) { return TOTAL_REF + exerciciosDoDia(k).length; }
+  function feitosDoDia(k) { return feitasNoDia(k).length + treinosFeitos(k).length; }
+  // Dia cumprido = as 5 refeições + os exercícios programados para aquele dia.
+  function diaCompleto(k) { return feitosDoDia(k) >= totalDoDia(k); }
+  function juntarNomes(l) { return l.length <= 1 ? l.join("") : l.slice(0, -1).join(", ") + " e " + l[l.length - 1]; }
 
   function sequencia() {
     // dias seguidos cumpridos, contando de hoje (ou de ontem, se hoje ainda não fechou)
@@ -342,10 +360,12 @@
   function blocoDia() {
     var feitas = feitasNoDia(diaSel), seq = sequencia(), regsDia = registros[diaSel] || {};
     return '<section class="dia" aria-labelledby="titulo-dia">' +
-      '<div class="dia-topo"><h3 id="titulo-dia">' + rotuloDia(diaSel) + ': ' + feitas.length + ' de ' + TOTAL_REF + ' refeições</h3>' +
+      '<div class="dia-topo"><h3 id="titulo-dia">' + rotuloDia(diaSel) + ': ' + feitas.length + ' de ' + TOTAL_REF + ' refeições' +
+      (exerciciosDoDia(diaSel).length ? ' · ' + treinosFeitos(diaSel).length + ' de ' + exerciciosDoDia(diaSel).length + ' exercício' + (exerciciosDoDia(diaSel).length === 1 ? '' : 's') : '') + '</h3>' +
       (seq ? '<span class="sequencia">' + seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') + '</span>' : '') + '</div>' +
-      '<div class="barra" aria-hidden="true"><span style="width:' + Math.round(feitas.length / TOTAL_REF * 100) + '%"></span></div>' +
-      '<p class="dica-dia">Toque numa refeição para registrar o que comeu e tirar a foto do prato. Esqueceu um dia? Toque nele no calendário abaixo.</p>' +
+      '<div class="barra" aria-hidden="true"><span style="width:' + Math.round(feitosDoDia(diaSel) / totalDoDia(diaSel) * 100) + '%"></span></div>' +
+      '<p class="dica-dia">Registre cada refeição e cada exercício com uma foto. O dia só fica completo com as duas partes. Esqueceu um dia? Toque nele no calendário abaixo.</p>' +
+      '<h4 class="titulo-secao-dia">' + ICON.prato + 'Refeições <span class="contagem">' + feitas.length + ' de ' + TOTAL_REF + '</span></h4>' +
       '<ul class="lista refeicoes-dia">' +
       PLANO.refeicoes.map(function (r) {
         var ok = feitas.indexOf(r.id) >= 0, reg = regsDia[r.id];
@@ -357,8 +377,35 @@
           '<span class="flex1"><span class="nome">' + esc(r.nome) + '</span><span class="detalhes">' + esc(detalhe) + '</span></span>' +
           '<span class="seta-linha" aria-hidden="true">›</span></button></li>';
       }).join("") +
-      '</ul>' + (diaSel !== hojeChave() ? '<button class="btn mini voltar-hoje" id="voltar-hoje">Voltar para hoje</button>' : '') +
+      '</ul>' + blocoExercicios(diaSel) + (diaSel !== hojeChave() ? '<button class="btn mini voltar-hoje" id="voltar-hoje">Voltar para hoje</button>' : '') +
       '</section>';
+  }
+
+  function blocoExercicios(k) {
+    var ex = exerciciosDoDia(k), feitos = treinosFeitos(k), regsDia = registros[k] || {};
+    var titulo = '<h4 class="titulo-secao-dia">' + ICON.peso + 'Exercícios' +
+      (ex.length ? ' <span class="contagem">' + feitos.length + ' de ' + ex.length + '</span>' : '') + '</h4>';
+    if (!ex.length) return '<div class="exercicios">' + titulo + '<p class="sem-exercicio">Sem exercício programado ' + (k === hojeChave() ? 'hoje' : 'nesse dia') + '. Descanso!</p></div>';
+    return '<div class="exercicios">' + titulo + '<ul class="lista refeicoes-dia">' + ex.map(function (e) {
+      var ok = feitos.indexOf(e.id) >= 0, reg = regsDia[e.id];
+      var icone = reg && reg.foto
+        ? '<img class="mini-foto" data-foto="' + esc(reg.foto) + '" alt="">'
+        : '<span class="' + (ok ? 'ok' : 'pendente') + '" aria-hidden="true">' + (ok ? ICON.check : ICON.camera) + '</span>';
+      var detalhe = reg ? (reg.hora ? reg.hora + " · " : "") + (reg.foto ? "Treino registrado" : "sem foto") : ok ? "Marcado sem foto · toque para completar" : "Toque para registrar com foto";
+      return '<li><button class="linha-ref" data-registrar="' + e.id + '" aria-label="' + esc(e.nome) + ': ' + (ok ? "registrado" : "não registrado") + '. ' + esc(detalhe) + '">' + icone +
+        '<span class="flex1"><span class="nome">' + esc(e.nome) + '</span><span class="detalhes">' + esc(detalhe) + '</span></span>' +
+        '<span class="seta-linha" aria-hidden="true">›</span></button></li>';
+    }).join("") + '</ul></div>';
+  }
+
+  function blocoAgenda() {
+    var hojeDs = new Date().getDay(), linhas = [];
+    for (var ds = 1; ds <= 7; ds++) {
+      var d = ds % 7;
+      var ex = (PLANO.exercicios || []).filter(function (e) { return e.dias.indexOf(d) >= 0; }).map(function (e) { return e.nome; });
+      if (ex.length) linhas.push('<li' + (d === hojeDs ? ' class="hoje"' : '') + '><b>' + DIAS_LONGOS[d] + (d === hojeDs ? ' (hoje)' : '') + '</b><span>' + juntarNomes(ex) + '</span></li>');
+    }
+    return linhas.length ? '<section class="agenda" aria-labelledby="titulo-agenda"><h3 id="titulo-agenda">' + ICON.peso + 'Exercícios da semana</h3><ul>' + linhas.join("") + '</ul></section>' : '';
   }
 
   // ---------- fotos das refeições (IndexedDB, só neste aparelho) ----------
@@ -435,11 +482,15 @@
   // ---------- registro de uma refeição: o que comeu + foto ----------
   var FOTO_OPCIONAL = ["acordar"]; // "Ao acordar" é só água com limão
   var dlg = null, regAtual = null;
+  function exPorId(id) { var l = PLANO.exercicios || []; for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
+  // Onde fica marcado: refeições no diário, exercícios nos treinos.
+  function marcadosDe(id) { return exPorId(id) ? treinos : diario; }
   function refPorId(id) { for (var i = 0; i < PLANO.refeicoes.length; i++) if (PLANO.refeicoes[i].id === id) return PLANO.refeicoes[i]; return null; }
   function horaAgora() { var d = new Date(); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
 
   function abrirRegistro(refId) {
-    var r = refPorId(refId);
+    var ex = exPorId(refId);
+    var r = ex ? { id: ex.id, nome: ex.nome, itens: [] } : refPorId(refId);
     if (!r) return;
     var ant = (registros[diaSel] || {})[refId] || null;
     var escolhidas = ant ? ant.escolhas || [] : null;
@@ -449,7 +500,8 @@
     var h = '<form class="reg" novalidate>' +
       '<div class="reg-topo"><h2 id="reg-titulo">' + esc(r.nome) + '</h2><span class="chip">' + rotuloDia(diaSel) + '</span>' +
       '<button type="button" class="btn-fav" id="reg-fechar" aria-label="Fechar">✕</button></div>' +
-      '<p class="descricao">Marque o que você comeu' + (fotoObrig ? ' e tire uma foto do prato.' : '. A foto é opcional nesta refeição.') + '</p>';
+      '<p class="descricao">' + (ex ? 'Tire uma foto para registrar o treino (no aparelho, na aula, no espelho da academia...).'
+        : 'Marque o que você comeu' + (fotoObrig ? ' e tire uma foto do prato.' : '. A foto é opcional nesta refeição.')) + '</p>';
     r.itens.forEach(function (it, i) {
       var opcoes = [it.principal].concat(it.opcoes);
       if (opcoes.length === 1) {
@@ -464,17 +516,17 @@
       }
     });
     var recSel = ant ? ant.receita : null;
-    h += '<label class="reg-receita">Fez alguma receita do caderno? <span class="detalhes">(opcional)</span>' +
+    if (!ex) h += '<label class="reg-receita">Fez alguma receita do caderno? <span class="detalhes">(opcional)</span>' +
       '<select id="reg-receita"><option value="">Não</option>' + RECEITAS.map(function (x) {
         return '<option value="' + x.id + '"' + (x.id === recSel ? ' selected' : '') + '>' + esc(x.nome) + '</option>';
-      }).join("") + '</select></label>' +
-      '<div class="reg-foto"><img id="reg-previa" alt="Foto do prato"' + (regAtual.fotoAntiga ? ' data-foto="' + esc(regAtual.fotoAntiga) + '"' : ' hidden') + '>' +
-      '<p class="reg-sem-foto" id="reg-sem-foto"' + (regAtual.fotoAntiga ? ' hidden' : '') + '>' + ICON.camera + (fotoObrig ? 'Falta a foto do prato' : 'Sem foto') + '</p>' +
+      }).join("") + '</select></label>';
+    h += '<div class="reg-foto"><img id="reg-previa" alt="' + (ex ? 'Foto do treino' : 'Foto do prato') + '"' + (regAtual.fotoAntiga ? ' data-foto="' + esc(regAtual.fotoAntiga) + '"' : ' hidden') + '>' +
+      '<p class="reg-sem-foto" id="reg-sem-foto"' + (regAtual.fotoAntiga ? ' hidden' : '') + '>' + ICON.camera + (fotoObrig ? (ex ? 'Falta a foto do treino' : 'Falta a foto do prato') : 'Sem foto') + '</p>' +
       '<div class="linha-acoes"><button type="button" class="btn primario" id="reg-camera">' + ICON.camera + (regAtual.fotoAntiga ? 'Tirar outra foto' : 'Tirar foto') + '</button>' +
       '<button type="button" class="btn" id="reg-galeria">Escolher da galeria</button></div>' +
       '<input type="file" id="reg-arq-camera" accept="image/*" capture="environment" class="sr" tabindex="-1" aria-hidden="true">' +
       '<input type="file" id="reg-arq-galeria" accept="image/*" class="sr" tabindex="-1" aria-hidden="true"></div>' +
-      '<div class="reg-rodape">' + (ant || feitasNoDia(diaSel).indexOf(refId) >= 0 ? '<button type="button" class="btn" id="reg-apagar">Apagar registro</button>' : '') +
+      '<div class="reg-rodape">' + (ant || marcadosDe(refId)[diaSel] && marcadosDe(refId)[diaSel].indexOf(refId) >= 0 ? '<button type="button" class="btn" id="reg-apagar">Apagar registro</button>' : '') +
       '<button type="submit" class="btn primario" id="reg-salvar">Salvar registro</button></div></form>';
 
     if (!dlg) {
@@ -524,13 +576,15 @@
   }
 
   function salvarRegistro() {
-    var r = refPorId(regAtual.ref), form = dlg.querySelector("form"), escolhas = [];
+    var ex = exPorId(regAtual.ref);
+    var r = ex ? { itens: [] } : refPorId(regAtual.ref), form = dlg.querySelector("form"), escolhas = [];
     r.itens.forEach(function (it, i) {
       var opcoes = [it.principal].concat(it.opcoes);
       var marcado = form.querySelector('input[name="g' + i + '"]:checked');
       if (marcado) escolhas.push(opcoes[+marcado.value]);
     });
-    var receita = dlg.querySelector("#reg-receita").value || null;
+    var campoReceita = dlg.querySelector("#reg-receita");
+    var receita = campoReceita ? campoReceita.value || null : null;
     var dia = regAtual.dia, ref = regAtual.ref, fotoAntiga = regAtual.fotoAntiga, blob = regAtual.blob;
     var botao = dlg.querySelector("#reg-salvar");
     botao.disabled = true; botao.textContent = "Salvando...";
@@ -543,15 +597,16 @@
       var antes = (registros[dia] || {})[ref];
       registros[dia] = registros[dia] || {};
       registros[dia][ref] = { escolhas: escolhas, receita: receita, foto: fotoId || null, hora: (antes && antes.hora) || horaAgora() };
-      var l = (diario[dia] || []).slice();
+      var marcados = marcadosDe(ref);
+      var l = (marcados[dia] || []).slice();
       var novo = l.indexOf(ref) < 0;
       if (novo) l.push(ref);
-      diario[dia] = l;
+      marcados[dia] = l;
       salvarTudo();
       if (blob && fotoAntiga) apagarSeOrfa(fotoAntiga);
       fecharRegistro();
       rerenderMantendoScroll();
-      if (novo && l.length === TOTAL_REF) toast(rotuloDia(dia) + " cumprido! Parabéns");
+      if (novo && diaCompleto(dia)) toast(rotuloDia(dia) + " cumprido! Parabéns");
       else toast("Registro salvo");
     }).catch(function () {
       botao.disabled = false; botao.textContent = "Salvar registro";
@@ -562,16 +617,17 @@
   function apagarRegistro() {
     var dia = regAtual.dia, ref = regAtual.ref;
     var antesReg = (registros[dia] || {})[ref] || null;
-    var antesDia = (diario[dia] || []).slice();
+    var marcados = marcadosDe(ref);
+    var antesDia = (marcados[dia] || []).slice();
     if (registros[dia]) { delete registros[dia][ref]; if (!Object.keys(registros[dia]).length) delete registros[dia]; }
     var l = antesDia.filter(function (x) { return x !== ref; });
-    if (l.length) diario[dia] = l; else delete diario[dia];
+    if (l.length) marcados[dia] = l; else delete marcados[dia];
     salvarTudo();
     fecharRegistro();
     rerenderMantendoScroll();
     toast("Registro apagado", function () {
       if (antesReg) { registros[dia] = registros[dia] || {}; registros[dia][ref] = antesReg; }
-      diario[dia] = antesDia;
+      if (antesDia.length) marcadosDe(ref)[dia] = antesDia;
     });
     // a foto só é apagada de vez depois que o "Desfazer" some
     if (antesReg && antesReg.foto) setTimeout(function () { apagarSeOrfa(antesReg.foto); }, 7000);
@@ -605,15 +661,15 @@
       '<div class="cal-grade">' + SEMANA.map(function (s) { return '<span class="cal-sem" aria-hidden="true">' + s.charAt(0).toUpperCase() + '</span>'; }).join("");
     for (var i = 0; i < primeiro.getDay(); i++) h += '<span></span>';
     for (var dia = 1; dia <= dias; dia++) {
-      var k = chaveData(new Date(ano, mes, dia)), n = feitasNoDia(k).length, futuro = k > hoje;
-      if (n >= TOTAL_REF) cumpridos++;
-      var classe = n >= TOTAL_REF ? "completo" : (n ? "parcial" : "");
-      var desc = dia + " de " + MESES[mes] + ": " + (n >= TOTAL_REF ? "cumprido" : n ? n + " de " + TOTAL_REF + " refeições" : "nada marcado");
+      var k = chaveData(new Date(ano, mes, dia)), n = feitosDoDia(k), tot = totalDoDia(k), futuro = k > hoje;
+      if (n >= tot) cumpridos++;
+      var classe = n >= tot ? "completo" : (n ? "parcial" : "");
+      var desc = dia + " de " + MESES[mes] + ": " + (n >= tot ? "cumprido" : n ? n + " de " + tot + " itens (refeições e exercícios)" : "nada marcado");
       h += '<button class="cal-dia ' + classe + (k === hoje ? ' hoje' : '') + (k === diaSel ? ' sel' : '') + '" data-dia="' + k + '"' +
         (futuro ? ' disabled' : '') + ' aria-pressed="' + (k === diaSel) + '" aria-label="' + desc + '">' + dia +
-        (n && n < TOTAL_REF ? '<small>' + n + '/' + TOTAL_REF + '</small>' : '') + '</button>';
+        (n && n < tot ? '<small>' + n + '/' + tot + '</small>' : '') + '</button>';
     }
-    h += '</div><p class="cal-legenda"><span class="ponto completo"></span>Dia cumprido (5 de 5) <span class="ponto parcial"></span>Em parte' +
+    h += '</div><p class="cal-legenda"><span class="ponto completo"></span>Dia cumprido (refeições e exercícios) <span class="ponto parcial"></span>Em parte' +
       '<br><b>' + cumpridos + '</b> dia' + (cumpridos === 1 ? '' : 's') + ' cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + MESES[mes] + '.</p></section>';
     return h;
   }
@@ -627,7 +683,7 @@
       '<div><b>' + t.proteinas + '</b><span>proteínas</span></div>' +
       '<div><b>' + t.carboidratos + '</b><span>carboidratos</span></div>' +
       '<div><b>' + t.lipidios + '</b><span>gorduras</span></div></div>' +
-      statusHoje() +
+      statusHoje() + blocoAgenda() +
       '<div class="plano-grade">';
     PLANO.refeicoes.forEach(function (r) {
       var eAgora = r.id === atual;
@@ -703,9 +759,11 @@
   }
 
   function statusHoje() {
-    var n = feitasNoDia(hojeChave()).length, seq = sequencia();
+    var hoje = hojeChave(), n = feitasNoDia(hoje).length, seq = sequencia(), ex = exerciciosDoDia(hoje);
+    var feitosEx = treinosFeitos(hoje);
     return '<a class="status-dia" href="#frequencia">' +
       '<span><b>Hoje: ' + n + ' de ' + TOTAL_REF + ' refeições marcadas</b>' +
+      (ex.length ? '<span class="detalhes ex-hoje">' + ICON.peso + 'Hoje tem ' + juntarNomes(ex.map(function (e) { return e.nome; })) + (feitosEx.length ? ' (' + feitosEx.length + ' de ' + ex.length + ' feito' + (feitosEx.length === 1 ? '' : 's') + ')' : '') + '</span>' : '') +
       '<span class="detalhes">' + (seq ? seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') + ' · ' : '') + 'Toque para marcar e ver o calendário</span></span>' +
       '<span aria-hidden="true">→</span></a>';
   }
@@ -920,7 +978,7 @@
     if (copiaPronta && Date.now() - copiaPronta.feitaEm < 120000) { compartilharCopia(copiaPronta); return; }
     toast("Preparando a cópia...");
     fotosParaCopia().then(function (fotos) {
-      var dados = { app: "meu-prato", versao: 3, salvoEm: new Date().toISOString(), favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario, registros: registros, fotos: fotos };
+      var dados = { app: "meu-prato", versao: 3, salvoEm: new Date().toISOString(), favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario, registros: registros, treinos: treinos, fotos: fotos };
       var c = { texto: JSON.stringify(dados), nome: "meu-prato-backup-" + hojeChave() + ".json", feitaEm: Date.now(), arquivo: null };
       try { c.arquivo = new File([c.texto], c.nome, { type: "application/json" }); } catch (e) { c.arquivo = null; }
       if (podeCompartilhar(c.arquivo)) {
@@ -962,7 +1020,7 @@
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || typeof d.registros[k] !== "object") return;
             Object.keys(d.registros[k]).forEach(function (ref) {
               var x = d.registros[k][ref];
-              if (idsRef.indexOf(ref) < 0 || !x || typeof x !== "object") return;
+              if ((idsRef.indexOf(ref) < 0 && !exPorId(ref)) || !x || typeof x !== "object") return;
               var foto = typeof x.foto === "string" && typeof fotosCopia[x.foto] === "string" && /^data:image\//.test(fotosCopia[x.foto]) ? x.foto : null;
               novosReg[k] = novosReg[k] || {};
               novosReg[k][ref] = {
@@ -975,6 +1033,15 @@
           });
         }
         registros = novosReg;
+        var idsEx = (PLANO.exercicios || []).map(function (e) { return e.id; }), novosTreinos = {};
+        if (d.treinos && typeof d.treinos === "object") {
+          Object.keys(d.treinos).forEach(function (k) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !Array.isArray(d.treinos[k])) return;
+            var l = d.treinos[k].filter(function (id, i, arr) { return idsEx.indexOf(id) >= 0 && arr.indexOf(id) === i; });
+            if (l.length) novosTreinos[k] = l;
+          });
+        }
+        treinos = novosTreinos;
         var gravarFotos = Object.keys(fotosCopia).filter(function (id) { return fotoEmUso(id) && /^data:image\//.test(fotosCopia[id]); })
           .reduce(function (p, id) {
             return p.then(function () { return fetch(fotosCopia[id]).then(function (r) { return r.blob(); }).then(function (b) { return salvarFoto(id, b); }); });
@@ -1046,7 +1113,7 @@
     var ativo = document.activeElement, seletor = null;
     if (ativo && ativo !== document.body) {
       if (ativo.id) seletor = "#" + CSS.escape(ativo.id);
-      else ["fav", "sel", "filtro", "desp", "registrar", "dia"].some(function (k) {
+      else ["fav", "sel", "filtro", "desp", "registrar", "treino", "dia"].some(function (k) {
         if (ativo.dataset && ativo.dataset[k] !== undefined) {
           seletor = (ativo.tagName.toLowerCase()) + "[data-" + k + '="' + CSS.escape(ativo.dataset[k]) + '"]';
           return true;

@@ -160,6 +160,11 @@ window.PLANO = {
     ],
     total: { proteinas: "111.6g", lipidios: "39.3g", carboidratos: "134.1g", kcal: 1294, fibras: "21.0g" }
   },
+  // Exercícios obrigatórios. dias: 0 = domingo, 1 = segunda, 2 = terça ... 5 = sexta, 6 = sábado
+  exercicios: [
+    { id: "pilates", nome: "Pilates", dias: [1, 2] },
+    { id: "academia", nome: "Academia", dias: [2, 5] }
+  ],
   compras: [
     "Abacaxi", "Abobrinha italiana", "Acém", "Atum em óleo", "Aveia em flocos", "Banana maçã",
     "Banana da terra", "Batata inglesa", "Café arábica", "Chuchu", "Coco seco",
