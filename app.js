@@ -620,15 +620,38 @@
 
   function baixarBackup() {
     var dados = { app: "meu-prato", versao: 2, salvoEm: new Date().toISOString(), favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario };
-    var blob = new Blob([JSON.stringify(dados, null, 2)], { type: "application/json" });
-    var a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "meu-prato-backup-" + new Date().toISOString().slice(0, 10) + ".json";
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
-    ultimoBackup = hojeChave(); gravar("mp-ultimo-backup", ultimoBackup);
-    toast("Cópia salva");
-    if (location.hash === "#frequencia") rerenderMantendoScroll();
+    var texto = JSON.stringify(dados, null, 2);
+    var nome = "meu-prato-backup-" + hojeChave() + ".json";
+
+    function concluir(msg) {
+      ultimoBackup = hojeChave(); gravar("mp-ultimo-backup", ultimoBackup);
+      toast(msg);
+      if (location.hash === "#frequencia") rerenderMantendoScroll();
+    }
+    function baixar() {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([texto], { type: "application/json" }));
+      a.download = nome;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      concluir("Cópia salva em Downloads");
+    }
+
+    // No celular, usa o menu de compartilhar (Salvar em Arquivos, WhatsApp, e-mail...).
+    // O iPhone com o app instalado nem sempre deixa baixar arquivos direto.
+    var celular = window.matchMedia && matchMedia("(pointer: coarse)").matches;
+    var arquivo = null;
+    try { arquivo = new File([texto], nome, { type: "application/json" }); } catch (e) { arquivo = null; }
+    if (celular && arquivo && navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+      navigator.share({ files: [arquivo], title: "Cópia do Meu Prato" })
+        .then(function () { concluir("Cópia salva"); })
+        .catch(function (err) {
+          if (err && err.name === "AbortError") { toast("Cópia não salva"); return; }
+          baixar();
+        });
+      return;
+    }
+    baixar();
   }
 
   function restaurarBackup(arquivo) {

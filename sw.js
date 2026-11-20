@@ -1,12 +1,13 @@
 // Guarda o site no aparelho para abrir sem internet.
-// Ao publicar mudanças, aumente VERSAO (e o ?v= no index.html).
-var VERSAO = "meu-prato-v13";
+// Mudanças nos arquivos chegam sozinhas na abertura seguinte do app.
+// Aumentar VERSAO (e o ?v= no index.html) é opcional: faz a mudança valer já na próxima abertura.
+var VERSAO = "meu-prato-v14";
 var ARQUIVOS = [
   "./",
   "./index.html",
-  "./styles.css?v=13",
-  "./data.js?v=13",
-  "./app.js?v=13",
+  "./styles.css?v=14",
+  "./data.js?v=14",
+  "./app.js?v=14",
   "./logo.svg",
   "./icon-192.png",
   "./icon-512.png",
@@ -44,8 +45,23 @@ self.addEventListener("fetch", function (e) {
     return;
   }
 
-  // Arquivos do site e fontes: cache primeiro, rede como reserva.
-  if (url.origin === location.origin || /fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) {
+  // Arquivos do site: entrega a cópia guardada na hora e busca a versão nova por trás.
+  // Assim, se o data.js for editado sem trocar a versão, o app se atualiza na abertura seguinte.
+  if (url.origin === location.origin) {
+    var buscar = fetch(new Request(req.url, { cache: "no-cache", credentials: "same-origin" })).then(function (res) {
+      if (res.ok) {
+        var copia = res.clone();
+        return caches.open(VERSAO).then(function (c) { return c.put(req, copia); }).then(function () { return res; });
+      }
+      return res;
+    });
+    e.respondWith(caches.match(req).then(function (achou) { return achou || buscar; }));
+    e.waitUntil(buscar.catch(function () {}));
+    return;
+  }
+
+  // Fontes do Google: não mudam, então cache primeiro e rede como reserva.
+  if (/fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) {
     e.respondWith(
       caches.match(req).then(function (achou) {
         return achou || fetch(req).then(function (res) {
