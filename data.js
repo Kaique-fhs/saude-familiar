@@ -1,4 +1,4 @@
-// Conteúdo transcrito do plano alimentar (prescrito em 17/11/2026).
+// Conteúdo transcrito do plano alimentar (prescrito em 17/11/2026). Fonte: PDF entregue na consulta.
 window.PLANO = {
   prescritoEm: "17/11/2026",
   refeicoes: [
