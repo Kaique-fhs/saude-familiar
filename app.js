@@ -528,7 +528,8 @@
 
   function textoResultadoDia(k) {
     var regs = registros[k] || {}, feitas = feitasNoDia(k), ex = exerciciosDoDia(k), feitosEx = treinosFeitos(k);
-    var linhas = ["📋 Resultado do dia: " + rotuloDia(k).toLowerCase() + (k === hojeChave() ? "" : " (" + k.split("-").reverse().join("/") + ")"), ""];
+    var dataCompleta = k.split("-").reverse().join("/");
+    var linhas = ["📋 Resultado do dia: " + (k === hojeChave() ? "hoje, " : SEMANA[dataDaChave(k).getDay()] + ", ") + dataCompleta, ""];
     linhas.push("Refeições: " + feitas.length + " de " + TOTAL_REF);
     PLANO.refeicoes.forEach(function (r) {
       var ok = feitas.indexOf(r.id) >= 0, reg = regs[r.id];
