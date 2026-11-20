@@ -490,3 +490,4 @@ dialog#registro::backdrop { background: rgba(0,0,0,.55); }
 .cal-modos button[aria-pressed="true"] { background: var(--card); color: var(--fg); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
 .cal-dia.descanso { background: transparent; border-style: dashed; color: var(--muted); }
 .ponto.descanso { background: transparent; border: 1px dashed var(--muted); }
+.agora-ex { min-height: 44px; display: flex; align-items: center; }
