@@ -1,12 +1,12 @@
 // Guarda o site no aparelho para abrir sem internet.
 // Ao publicar mudanças, aumente VERSAO (e o ?v= no index.html).
-var VERSAO = "meu-prato-v7";
+var VERSAO = "meu-prato-v8";
 var ARQUIVOS = [
   "./",
   "./index.html",
-  "./styles.css?v=7",
-  "./data.js?v=7",
-  "./app.js?v=7",
+  "./styles.css?v=8",
+  "./data.js?v=8",
+  "./app.js?v=8",
   "./logo.svg",
   "./icon-192.png",
   "./icon-512.png",

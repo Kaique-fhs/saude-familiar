@@ -19,6 +19,9 @@
   var checksPlano = ler("mp-checks-plano", {});
   var despensa = ler("mp-quero", []);
   var termoDesp = "";
+  var diario = ler("mp-diario", {});
+  var diaSel = hojeChave(); // dia que está sendo marcado
+  var mesVisto = new Date(); mesVisto.setDate(1);
   var filtro = "todas";
   var termo = "";
 
@@ -28,6 +31,7 @@
     gravar("mp-checks", checks);
     gravar("mp-checks-plano", checksPlano);
     gravar("mp-quero", despensa);
+    gravar("mp-diario", diario);
     atualizarContador();
   }
 
@@ -275,15 +279,94 @@
     return "jantar";
   }
 
+  // ---------- acompanhamento: refeições cumpridas por dia (só neste aparelho) ----------
+  var NOMES_CURTOS = { acordar: "Ao acordar", cafe: "Café", almoco: "Almoço", lanche: "Lanche", jantar: "Jantar" };
+  var MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+  var SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+  var TOTAL_REF = PLANO.refeicoes.length;
+
+  function chaveData(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function dataDaChave(k) { var p = k.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  function hojeChave() { return chaveData(new Date()); }
+  function feitasNoDia(k) { return diario[k] || []; }
+  function diaCompleto(k) { return feitasNoDia(k).length >= TOTAL_REF; }
+
+  function sequencia() {
+    // dias seguidos cumpridos, contando de hoje (ou de ontem, se hoje ainda não fechou)
+    var d = new Date(), n = 0;
+    if (!diaCompleto(chaveData(d))) d.setDate(d.getDate() - 1);
+    while (diaCompleto(chaveData(d))) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+
+  function rotuloDia(k) {
+    if (k === hojeChave()) return "Hoje";
+    var d = dataDaChave(k), ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
+    if (k === chaveData(ontem)) return "Ontem";
+    return SEMANA[d.getDay()] + ", " + d.getDate() + "/" + String(d.getMonth() + 1).padStart(2, "0");
+  }
+
+  function blocoDia() {
+    var feitas = feitasNoDia(diaSel), seq = sequencia();
+    return '<section class="dia" aria-labelledby="titulo-dia">' +
+      '<div class="dia-topo"><h3 id="titulo-dia">' + rotuloDia(diaSel) + ': ' + feitas.length + ' de ' + TOTAL_REF + ' refeições</h3>' +
+      (seq ? '<span class="sequencia">' + seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') + '</span>' : '') + '</div>' +
+      '<div class="barra" aria-hidden="true"><span style="width:' + Math.round(feitas.length / TOTAL_REF * 100) + '%"></span></div>' +
+      '<p class="dica-dia">Toque nas refeições que você fez' + (diaSel === hojeChave() ? '' : ' nesse dia') + '. Para marcar outro dia, toque nele no calendário abaixo.</p>' +
+      '<div class="chips" role="group" aria-label="Refeições feitas">' +
+      PLANO.refeicoes.map(function (r) {
+        var ok = feitas.indexOf(r.id) >= 0;
+        return '<button class="chip-toggle" data-refdia="' + r.id + '" aria-pressed="' + ok + '">' + (ok ? ICON.check : '') + NOMES_CURTOS[r.id] + '</button>';
+      }).join("") +
+      '</div>' + (diaSel !== hojeChave() ? '<button class="btn mini voltar-hoje" id="voltar-hoje">Voltar para hoje</button>' : '') +
+      '</section>';
+  }
+
+  function blocoCalendario() {
+    var ano = mesVisto.getFullYear(), mes = mesVisto.getMonth();
+    var primeiro = new Date(ano, mes, 1), dias = new Date(ano, mes + 1, 0).getDate();
+    var hoje = hojeChave(), cumpridos = 0;
+    var h = '<section class="calendario" aria-labelledby="titulo-cal">' +
+      '<div class="cal-topo"><button class="btn-fav" id="mes-ant" aria-label="Mês anterior">' + ICON.back + '</button>' +
+      '<h3 id="titulo-cal">' + MESES[mes] + ' de ' + ano + '</h3>' +
+      '<button class="btn-fav seta-dir" id="mes-prox" aria-label="Próximo mês"' + (ano * 12 + mes >= new Date().getFullYear() * 12 + new Date().getMonth() ? ' disabled' : '') + '>' + ICON.back + '</button></div>' +
+      '<div class="cal-grade">' + SEMANA.map(function (s) { return '<span class="cal-sem" aria-hidden="true">' + s.charAt(0).toUpperCase() + '</span>'; }).join("");
+    for (var i = 0; i < primeiro.getDay(); i++) h += '<span></span>';
+    for (var dia = 1; dia <= dias; dia++) {
+      var k = chaveData(new Date(ano, mes, dia)), n = feitasNoDia(k).length, futuro = k > hoje;
+      if (n >= TOTAL_REF) cumpridos++;
+      var classe = n >= TOTAL_REF ? "completo" : (n ? "parcial" : "");
+      var desc = dia + " de " + MESES[mes] + ": " + (n >= TOTAL_REF ? "cumprido" : n ? n + " de " + TOTAL_REF + " refeições" : "nada marcado");
+      h += '<button class="cal-dia ' + classe + (k === hoje ? ' hoje' : '') + (k === diaSel ? ' sel' : '') + '" data-dia="' + k + '"' +
+        (futuro ? ' disabled' : '') + ' aria-pressed="' + (k === diaSel) + '" aria-label="' + desc + '">' + dia +
+        (n && n < TOTAL_REF ? '<small>' + n + '/' + TOTAL_REF + '</small>' : '') + '</button>';
+    }
+    h += '</div><p class="cal-legenda"><span class="ponto completo"></span>Dia cumprido (5 de 5) <span class="ponto parcial"></span>Em parte' +
+      '<br><b>' + cumpridos + '</b> dia' + (cumpridos === 1 ? '' : 's') + ' cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + MESES[mes] + '.</p></section>';
+    return h;
+  }
+
+  function alternarRefeicao(id) {
+    var l = (diario[diaSel] || []).slice();
+    var i = l.indexOf(id);
+    if (i >= 0) l.splice(i, 1); else l.push(id);
+    if (l.length) diario[diaSel] = l; else delete diario[diaSel];
+    salvarTudo();
+    if (l.length === TOTAL_REF && i < 0) toast(rotuloDia(diaSel) + " cumprido! Parabéns");
+  }
+
   function telaPlano() {
     var atual = refeicaoAtual(), t = PLANO.nutrientes.total;
     var h = '<h2 class="titulo-secao">Meu plano do dia</h2>' +
-      '<p class="descricao">Toque em cada refeição para ver as opções de troca. A refeição do horário atual já vem aberta.</p>' +
+      '<p class="descricao">Marque as refeições que você fez e acompanhe os dias cumpridos no calendário. Toque em cada refeição para ver as opções de troca.</p>' +
       '<div class="resumo" aria-label="Total do dia">' +
       '<div><b>' + t.kcal + '</b><span>kcal</span></div>' +
       '<div><b>' + t.proteinas + '</b><span>proteínas</span></div>' +
       '<div><b>' + t.carboidratos + '</b><span>carboidratos</span></div>' +
       '<div><b>' + t.lipidios + '</b><span>gorduras</span></div></div>' +
+      blocoDia() +
       '<div class="plano-grade">';
     PLANO.refeicoes.forEach(function (r) {
       var eAgora = r.id === atual;
@@ -309,7 +392,7 @@
       }
       h += '</div></details>';
     });
-    h += '</div><h3 class="subtitulo">Nutrientes por refeição</h3><div class="tabela-wrap"><table class="nutri">' +
+    h += '</div>' + blocoCalendario() + '<h3 class="subtitulo">Nutrientes por refeição</h3><div class="tabela-wrap"><table class="nutri">' +
       '<thead><tr><th>Refeição</th><th>Prot.</th><th>Gord.</th><th>Carb.</th><th>Calorias</th></tr></thead><tbody>' +
       PLANO.nutrientes.linhas.map(function (l) { return '<tr>' + l.map(function (c) { return '<td>' + c + '</td>'; }).join("") + '</tr>'; }).join("") +
       '<tr><td><b>Total</b></td><td><b>' + t.proteinas + '</b></td><td><b>' + t.lipidios + '</b></td><td><b>' + t.carboidratos + '</b></td><td><b>' + t.kcal + ' kcal</b></td></tr>' +
@@ -495,7 +578,7 @@
   }
 
   function baixarBackup() {
-    var dados = { app: "meu-prato", versao: 1, salvoEm: new Date().toISOString(), favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa };
+    var dados = { app: "meu-prato", versao: 2, salvoEm: new Date().toISOString(), favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario };
     var blob = new Blob([JSON.stringify(dados, null, 2)], { type: "application/json" });
     var a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -518,6 +601,15 @@
         checks = d.checks && typeof d.checks === "object" ? d.checks : {};
         checksPlano = d.checksPlano && typeof d.checksPlano === "object" ? d.checksPlano : {};
         despensa = Array.isArray(d.quero) ? d.quero.filter(function (p) { return TODOS_PRODUTOS[p]; }) : [];
+        var idsRef = PLANO.refeicoes.map(function (r) { return r.id; }), novoDiario = {};
+        if (d.diario && typeof d.diario === "object") {
+          Object.keys(d.diario).forEach(function (k) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !Array.isArray(d.diario[k])) return;
+            var l = d.diario[k].filter(function (id, i, arr) { return idsRef.indexOf(id) >= 0 && arr.indexOf(id) === i; });
+            if (l.length) novoDiario[k] = l;
+          });
+        }
+        diario = novoDiario;
         salvarTudo(); render(); toast("Cópia restaurada");
       } catch (e) { toast("Esse arquivo não é uma cópia do Meu Prato"); }
     };
@@ -554,7 +646,7 @@
     var ativo = document.activeElement, seletor = null;
     if (ativo && ativo !== document.body) {
       if (ativo.id) seletor = "#" + CSS.escape(ativo.id);
-      else ["fav", "sel", "filtro", "desp"].some(function (k) {
+      else ["fav", "sel", "filtro", "desp", "refdia", "dia"].some(function (k) {
         if (ativo.dataset && ativo.dataset[k] !== undefined) {
           seletor = (ativo.tagName.toLowerCase()) + "[data-" + k + '="' + CSS.escape(ativo.dataset[k]) + '"]';
           return true;
@@ -579,6 +671,16 @@
       var add = alternar(sel, b.dataset.sel); salvarTudo();
       toast(add ? "Adicionada à lista de compras" : "Tirada da lista de compras");
       rerenderMantendoScroll();
+    } else if (b.dataset.refdia) {
+      alternarRefeicao(b.dataset.refdia); rerenderMantendoScroll();
+    } else if (b.dataset.dia) {
+      diaSel = b.dataset.dia; rerenderMantendoScroll();
+      var bloco = document.querySelector(".dia");
+      if (bloco && bloco.getBoundingClientRect().top < 0) bloco.scrollIntoView({ block: "start" });
+    } else if (b.id === "voltar-hoje") {
+      diaSel = hojeChave(); mesVisto = new Date(); mesVisto.setDate(1); rerenderMantendoScroll();
+    } else if (b.id === "mes-ant" || b.id === "mes-prox") {
+      mesVisto = new Date(mesVisto.getFullYear(), mesVisto.getMonth() + (b.id === "mes-ant" ? -1 : 1), 1); rerenderMantendoScroll();
     } else if (b.dataset.desp) {
       alternar(despensa, b.dataset.desp); salvarTudo();
       atualizarQueroComer(b.dataset.desp);
@@ -627,5 +729,17 @@
   });
 
   window.addEventListener("hashchange", function () { render(); window.scrollTo(0, 0); });
+
+  // Se o app ficou aberto de um dia para o outro, "Hoje" passa para o dia novo.
+  var ultimoHoje = hojeChave();
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) return;
+    var agora = hojeChave();
+    if (agora === ultimoHoje) return;
+    if (diaSel === ultimoHoje) diaSel = agora;
+    ultimoHoje = agora;
+    mesVisto = new Date(); mesVisto.setDate(1);
+    rerenderMantendoScroll();
+  });
   render();
 })();
