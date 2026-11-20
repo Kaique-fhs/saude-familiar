@@ -243,3 +243,5 @@ table.nutri th:first-child, table.nutri td:first-child { text-align: left; }
   .toast { bottom: 24px; }
   .btn:hover, .btn-fav:hover, .filtros button:hover { border-color: var(--primary); }
 }
+.contador[hidden] { display: none; }
+.btn { white-space: nowrap; }

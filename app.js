@@ -238,8 +238,8 @@
       '<div class="meta"><span class="chip">' + TIPOS[r.tipo] + '</span><span class="chip">' + esc(r.rendimento) + '</span>' +
       (r.destaque ? '<span class="chip destaque">' + esc(r.destaque) + '</span>' : '') + '</div>' +
       '<div class="acoes"><a class="btn flex" href="#receita/' + r.id + '">Ver receita</a>' +
-      '<button class="btn flex' + (s ? " primario" : "") + '" data-sel="' + r.id + '" aria-pressed="' + s + '">' +
-      (s ? ICON.check + "Na lista" : ICON.plus + "Lista de compras") + '</button></div></article>';
+      '<button class="btn flex' + (s ? " primario" : "") + '" data-sel="' + r.id + '" aria-pressed="' + s + '" aria-label="' + (s ? "Tirar da lista de compras" : "Adicionar à lista de compras") + ': ' + esc(r.nome) + '">' +
+      (s ? ICON.check + "Na lista" : ICON.plus + "Adicionar") + '</button></div></article>';
   }
 
   function filtrar(lista) {
@@ -255,7 +255,7 @@
   function telaReceitas() {
     var botoes = [["todas", "Todas"], ["doce", "Doces"], ["salgado", "Salgadas"], ["pao", "Pães"], ["selecionadas", "Na lista (" + sel.length + ")"]];
     return '<h2 class="titulo-secao">Receitas</h2>' +
-      '<p class="descricao">' + RECEITAS.length + ' receitas do caderno. Toque em <b>Lista de compras</b> nas que você vai fazer e veja tudo o que comprar na aba Compras.</p>' +
+      '<p class="descricao">' + RECEITAS.length + ' receitas do caderno. Toque em <b>Adicionar</b> nas que você vai fazer e veja tudo o que comprar na aba Compras.</p>' +
       '<label for="busca" class="sr">Buscar receita ou ingrediente</label>' +
       '<input id="busca" class="busca" type="search" placeholder="Buscar receita ou ingrediente (ex.: banana)" value="' + esc(termo) + '">' +
       '<div class="filtros" role="group" aria-label="Filtrar receitas">' +
