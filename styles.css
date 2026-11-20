@@ -402,3 +402,6 @@ dialog#registro::backdrop { background: rgba(0,0,0,.55); }
 .reg-rodape { display: flex; gap: 8px; justify-content: space-between; position: sticky; bottom: 0; background: var(--bg); padding-top: 8px; }
 .reg-rodape .primario { flex: 1; }
 .reg-rodape .btn:disabled { opacity: .6; cursor: default; }
+
+/* Elementos escondidos ficam escondidos, mesmo quando a classe define display */
+[hidden] { display: none !important; }
