@@ -403,7 +403,9 @@
           '<span class="flex1"><span class="nome">' + esc(r.nome) + '</span><span class="detalhes">' + esc(detalhe) + '</span></span>' +
           '<span class="seta-linha" aria-hidden="true">›</span></button></li>';
       }).join("") +
-      '</ul>' + blocoExercicios(diaSel) + (diaSel !== hojeChave() ? '<button class="btn mini voltar-hoje" id="voltar-hoje">Voltar para hoje</button>' : '') +
+      '</ul>' + blocoExercicios(diaSel) +
+      '<button class="btn whats compartilhar-dia" id="compartilhar-dia">' + ICON.whats + 'Compartilhar resultado ' + (diaSel === hojeChave() ? 'de hoje' : 'do dia') + '</button>' +
+      (diaSel !== hojeChave() ? '<button class="btn mini voltar-hoje" id="voltar-hoje">Voltar para hoje</button>' : '') +
       '</section>';
   }
 
@@ -524,6 +526,38 @@
     return linhas.join("\n");
   }
 
+  function textoResultadoDia(k) {
+    var regs = registros[k] || {}, feitas = feitasNoDia(k), ex = exerciciosDoDia(k), feitosEx = treinosFeitos(k);
+    var linhas = ["📋 Resultado do dia: " + rotuloDia(k).toLowerCase() + (k === hojeChave() ? "" : " (" + k.split("-").reverse().join("/") + ")"), ""];
+    linhas.push("Refeições: " + feitas.length + " de " + TOTAL_REF);
+    PLANO.refeicoes.forEach(function (r) {
+      var ok = feitas.indexOf(r.id) >= 0, reg = regs[r.id];
+      var comidas = reg ? (reg.escolhas || []).map(nomeCurto).filter(function (n) { return !/^Salada de folhas|^Verduras cozidas|^Feijão/.test(n); }) : [];
+      linhas.push((ok ? "✅ " : "❌ ") + r.nome + (reg && reg.hora ? " (" + reg.hora + ")" : "") +
+        (comidas.length ? ": " + comidas.join(", ") : "") + (ok && reg && !reg.foto && r.id !== "acordar" ? " · sem foto" : ""));
+    });
+    if (ex.length) {
+      linhas.push("", "Exercícios: " + feitosEx.length + " de " + ex.length);
+      ex.forEach(function (e) {
+        var ok = feitosEx.indexOf(e.id) >= 0, reg = regs[e.id];
+        linhas.push((ok ? "✅ " : "❌ ") + e.nome + (reg && reg.hora ? " (" + reg.hora + ")" : ""));
+      });
+    }
+    linhas.push("", diaCompleto(k) ? "🎉 Dia completo!" : k === hojeChave() ? "⏳ Dia em andamento" : "Dia incompleto");
+    return linhas.join("\n");
+  }
+
+  function compartilharResultadoDia(k) {
+    var texto = textoResultadoDia(k);
+    if (navigator.share && window.matchMedia && matchMedia("(pointer: coarse)").matches) {
+      navigator.share({ text: texto }).catch(function (err) {
+        if (!err || err.name !== "AbortError") abrirWhatsSoTexto(texto);
+      });
+      return;
+    }
+    abrirWhatsSoTexto(texto);
+  }
+
   function abrirWhatsSoTexto(texto) {
     window.open("https://wa.me/?text=" + encodeURIComponent(texto), "_blank", "noopener");
   }
@@ -533,6 +567,7 @@
   function compartilharEntrega(dia, ref, blob) {
     var reg = (registros[dia] || {})[ref];
     if (!reg) return;
+    if (dia !== hojeChave()) { toast("De dias passados, só dá para compartilhar o resultado do dia."); return; }
     var texto = textoEntrega(dia, ref, reg), arquivo = null;
     if (blob) { try { arquivo = new File([blob], "meu-prato-" + dia + "-" + ref + ".jpg", { type: "image/jpeg" }); } catch (e) { arquivo = null; } }
     if (arquivo && navigator.canShare && navigator.canShare({ files: [arquivo] })) {
@@ -605,7 +640,7 @@
       '<p class="detalhes reg-regra">A foto precisa ser tirada agora, pela câmera.</p></div>' +
       '<div class="reg-rodape">' + (ant || marcadosDe(refId)[diaSel] && marcadosDe(refId)[diaSel].indexOf(refId) >= 0 ? '<button type="button" class="btn" id="reg-apagar">Apagar registro</button>' : '') +
       '<button type="submit" class="btn primario" id="reg-salvar">Salvar registro</button></div>' +
-      (ant ? '<button type="button" class="btn whats" id="reg-compartilhar">' + ICON.whats + 'Compartilhar no WhatsApp</button>' : '') +
+      (ant && !leitura ? '<button type="button" class="btn whats" id="reg-compartilhar">' + ICON.whats + 'Compartilhar no WhatsApp</button>' : '') +
       '</form>';
 
     if (!dlg) {
@@ -1336,6 +1371,8 @@
       diaSel = b.dataset.dia; rerenderMantendoScroll();
       var bloco = document.querySelector(".dia");
       if (bloco && bloco.getBoundingClientRect().top < 0) bloco.scrollIntoView({ block: "start" });
+    } else if (b.id === "compartilhar-dia") {
+      compartilharResultadoDia(diaSel);
     } else if (b.id === "voltar-hoje") {
       diaSel = hojeChave(); mesVisto = new Date(); mesVisto.setDate(1); rerenderMantendoScroll();
     } else if (b.id === "mes-ant" || b.id === "mes-prox") {
