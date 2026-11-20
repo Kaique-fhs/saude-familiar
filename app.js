@@ -21,6 +21,7 @@
   var termoDesp = "";
   var diario = ler("mp-diario", {});
   var ultimoBackup = ler("mp-ultimo-backup", null);
+  var registros = ler("mp-registros", {}); // { "2026-11-20": { almoco: { escolhas, receita, foto, hora } } }
   var diaSel = hojeChave(); // dia que está sendo marcado
   var mesVisto = new Date(); mesVisto.setDate(1);
   var filtro = "todas";
@@ -33,6 +34,7 @@
     gravar("mp-checks-plano", checksPlano);
     gravar("mp-quero", despensa);
     gravar("mp-diario", diario);
+    gravar("mp-registros", registros);
     atualizarContador();
   }
 
@@ -81,6 +83,7 @@
     check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M20 6 9 17l-5-5"/></svg>',
     chevron: '<svg class="seta" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>',
     share: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>',
+    camera: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
     back: '<svg viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 18l-6-6 6-6"/></svg>'
   };
 
@@ -324,20 +327,271 @@
     return SEMANA[d.getDay()] + ", " + d.getDate() + "/" + String(d.getMonth() + 1).padStart(2, "0");
   }
 
+  function nomeCurto(texto) { return texto.split(" - ")[0].split(" (")[0]; }
+  function resumoRegistro(reg) {
+    var partes = [];
+    if (reg.hora) partes.push(reg.hora);
+    var comidas = (reg.escolhas || []).map(nomeCurto).filter(function (n) { return !/^Salada de folhas|^Verduras cozidas|^Feijão/.test(n); });
+    if (comidas.length) partes.push(comidas.join(", "));
+    var rec = reg.receita && porId(reg.receita);
+    if (rec) partes.push("Receita: " + rec.nome);
+    if (!reg.foto) partes.push("sem foto");
+    return partes.join(" · ");
+  }
+
   function blocoDia() {
-    var feitas = feitasNoDia(diaSel), seq = sequencia();
+    var feitas = feitasNoDia(diaSel), seq = sequencia(), regsDia = registros[diaSel] || {};
     return '<section class="dia" aria-labelledby="titulo-dia">' +
       '<div class="dia-topo"><h3 id="titulo-dia">' + rotuloDia(diaSel) + ': ' + feitas.length + ' de ' + TOTAL_REF + ' refeições</h3>' +
       (seq ? '<span class="sequencia">' + seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') + '</span>' : '') + '</div>' +
       '<div class="barra" aria-hidden="true"><span style="width:' + Math.round(feitas.length / TOTAL_REF * 100) + '%"></span></div>' +
-      '<p class="dica-dia">Toque nas refeições que você fez' + (diaSel === hojeChave() ? '' : ' nesse dia') + '. Esqueceu um dia? Toque nele no calendário abaixo.</p>' +
-      '<div class="chips" role="group" aria-label="Refeições feitas">' +
+      '<p class="dica-dia">Toque numa refeição para registrar o que comeu e tirar a foto do prato. Esqueceu um dia? Toque nele no calendário abaixo.</p>' +
+      '<ul class="lista refeicoes-dia">' +
       PLANO.refeicoes.map(function (r) {
-        var ok = feitas.indexOf(r.id) >= 0;
-        return '<button class="chip-toggle" data-refdia="' + r.id + '" aria-pressed="' + ok + '">' + (ok ? ICON.check : '') + NOMES_CURTOS[r.id] + '</button>';
+        var ok = feitas.indexOf(r.id) >= 0, reg = regsDia[r.id];
+        var icone = reg && reg.foto
+          ? '<img class="mini-foto" data-foto="' + esc(reg.foto) + '" alt="">'
+          : '<span class="' + (ok ? 'ok' : 'pendente') + '" aria-hidden="true">' + (ok ? ICON.check : ICON.camera) + '</span>';
+        var detalhe = reg ? resumoRegistro(reg) : ok ? "Marcada sem foto · toque para completar" : (r.hora ? r.hora + " · " : "") + "Toque para registrar";
+        return '<li><button class="linha-ref" data-registrar="' + r.id + '" aria-label="' + esc(r.nome) + ': ' + (ok ? "registrada" : "não registrada") + '. ' + esc(detalhe) + '">' + icone +
+          '<span class="flex1"><span class="nome">' + esc(r.nome) + '</span><span class="detalhes">' + esc(detalhe) + '</span></span>' +
+          '<span class="seta-linha" aria-hidden="true">›</span></button></li>';
       }).join("") +
-      '</div>' + (diaSel !== hojeChave() ? '<button class="btn mini voltar-hoje" id="voltar-hoje">Voltar para hoje</button>' : '') +
+      '</ul>' + (diaSel !== hojeChave() ? '<button class="btn mini voltar-hoje" id="voltar-hoje">Voltar para hoje</button>' : '') +
       '</section>';
+  }
+
+  // ---------- fotos das refeições (IndexedDB, só neste aparelho) ----------
+  var banco = null;
+  function abrirBanco() {
+    if (!banco) {
+      banco = new Promise(function (ok, erro) {
+        if (!window.indexedDB) { erro(new Error("sem IndexedDB")); return; }
+        var r = indexedDB.open("meu-prato", 1);
+        r.onupgradeneeded = function () { r.result.createObjectStore("fotos"); };
+        r.onsuccess = function () { ok(r.result); };
+        r.onerror = function () { erro(r.error); };
+      });
+    }
+    return banco;
+  }
+  function noBanco(modo, fn) {
+    return abrirBanco().then(function (db) {
+      return new Promise(function (ok, erro) {
+        var tx = db.transaction("fotos", modo), req = fn(tx.objectStore("fotos"));
+        tx.oncomplete = function () { ok(req ? req.result : undefined); };
+        tx.onerror = tx.onabort = function () { erro(tx.error || new Error("transação")); };
+      });
+    });
+  }
+  function salvarFoto(id, blob) { return noBanco("readwrite", function (s) { return s.put(blob, id); }); }
+  function lerFoto(id) { return noBanco("readonly", function (s) { return s.get(id); }); }
+  function apagarFoto(id) { return noBanco("readwrite", function (s) { return s.delete(id); }); }
+  function chavesFotos() { return noBanco("readonly", function (s) { return s.getAllKeys(); }); }
+
+  var urlsFotos = {};
+  function urlFoto(id) {
+    if (urlsFotos[id]) return Promise.resolve(urlsFotos[id]);
+    return lerFoto(id).then(function (blob) {
+      if (!blob) return null;
+      urlsFotos[id] = URL.createObjectURL(blob);
+      return urlsFotos[id];
+    });
+  }
+  function preencherFotos(raiz) {
+    (raiz || document).querySelectorAll("img[data-foto]").forEach(function (img) {
+      urlFoto(img.dataset.foto).then(function (u) { if (u) img.src = u; else img.classList.add("sem-foto"); }).catch(function () {});
+    });
+  }
+  function fotoEmUso(id) {
+    return Object.keys(registros).some(function (k) {
+      return Object.keys(registros[k]).some(function (ref) { return registros[k][ref].foto === id; });
+    });
+  }
+  function apagarSeOrfa(id) {
+    if (id && !fotoEmUso(id)) {
+      apagarFoto(id).catch(function () {});
+      if (urlsFotos[id]) { URL.revokeObjectURL(urlsFotos[id]); delete urlsFotos[id]; }
+    }
+  }
+
+  // Reduz a foto para no máximo 1280 px e salva em JPEG (cerca de 100 a 200 KB).
+  function comprimirFoto(arquivo) {
+    return new Promise(function (ok, erro) {
+      var img = new Image(), u = URL.createObjectURL(arquivo);
+      img.onload = function () {
+        var max = 1280, w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, max / Math.max(w, h));
+        var c = document.createElement("canvas");
+        c.width = Math.round(w * k); c.height = Math.round(h * k);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(u);
+        c.toBlob(function (b) { if (b) ok(b); else erro(new Error("foto")); }, "image/jpeg", 0.72);
+      };
+      img.onerror = function () { URL.revokeObjectURL(u); erro(new Error("foto")); };
+      img.src = u;
+    });
+  }
+
+  // ---------- registro de uma refeição: o que comeu + foto ----------
+  var FOTO_OPCIONAL = ["acordar"]; // "Ao acordar" é só água com limão
+  var dlg = null, regAtual = null;
+  function refPorId(id) { for (var i = 0; i < PLANO.refeicoes.length; i++) if (PLANO.refeicoes[i].id === id) return PLANO.refeicoes[i]; return null; }
+  function horaAgora() { var d = new Date(); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
+
+  function abrirRegistro(refId) {
+    var r = refPorId(refId);
+    if (!r) return;
+    var ant = (registros[diaSel] || {})[refId] || null;
+    var escolhidas = ant ? ant.escolhas || [] : null;
+    regAtual = { ref: refId, dia: diaSel, blob: null, fotoAntiga: ant ? ant.foto : null, previa: null };
+    var fotoObrig = FOTO_OPCIONAL.indexOf(refId) < 0;
+
+    var h = '<form class="reg" novalidate>' +
+      '<div class="reg-topo"><h2 id="reg-titulo">' + esc(r.nome) + '</h2><span class="chip">' + rotuloDia(diaSel) + '</span>' +
+      '<button type="button" class="btn-fav" id="reg-fechar" aria-label="Fechar">✕</button></div>' +
+      '<p class="descricao">Marque o que você comeu' + (fotoObrig ? ' e tire uma foto do prato.' : '. A foto é opcional nesta refeição.') + '</p>';
+    r.itens.forEach(function (it, i) {
+      var opcoes = [it.principal].concat(it.opcoes);
+      if (opcoes.length === 1) {
+        var marcado = escolhidas ? escolhidas.indexOf(it.principal) >= 0 : true;
+        h += '<label class="reg-op reg-fixo"><input type="checkbox" name="g' + i + '" value="0"' + (marcado ? ' checked' : '') + '><span>' + esc(it.principal) + '</span></label>';
+      } else {
+        var sel0 = 0;
+        if (escolhidas) opcoes.forEach(function (o, j) { if (escolhidas.indexOf(o) >= 0) sel0 = j; });
+        h += '<fieldset class="reg-grupo"><legend>Escolha uma opção</legend>' + opcoes.map(function (o, j) {
+          return '<label class="reg-op"><input type="radio" name="g' + i + '" value="' + j + '"' + (j === sel0 ? ' checked' : '') + '><span>' + esc(o) + '</span></label>';
+        }).join("") + '</fieldset>';
+      }
+    });
+    var recSel = ant ? ant.receita : null;
+    h += '<label class="reg-receita">Fez alguma receita do caderno? <span class="detalhes">(opcional)</span>' +
+      '<select id="reg-receita"><option value="">Não</option>' + RECEITAS.map(function (x) {
+        return '<option value="' + x.id + '"' + (x.id === recSel ? ' selected' : '') + '>' + esc(x.nome) + '</option>';
+      }).join("") + '</select></label>' +
+      '<div class="reg-foto"><img id="reg-previa" alt="Foto do prato"' + (regAtual.fotoAntiga ? ' data-foto="' + esc(regAtual.fotoAntiga) + '"' : ' hidden') + '>' +
+      '<p class="reg-sem-foto" id="reg-sem-foto"' + (regAtual.fotoAntiga ? ' hidden' : '') + '>' + ICON.camera + (fotoObrig ? 'Falta a foto do prato' : 'Sem foto') + '</p>' +
+      '<div class="linha-acoes"><button type="button" class="btn primario" id="reg-camera">' + ICON.camera + (regAtual.fotoAntiga ? 'Tirar outra foto' : 'Tirar foto') + '</button>' +
+      '<button type="button" class="btn" id="reg-galeria">Escolher da galeria</button></div>' +
+      '<input type="file" id="reg-arq-camera" accept="image/*" capture="environment" class="sr" tabindex="-1" aria-hidden="true">' +
+      '<input type="file" id="reg-arq-galeria" accept="image/*" class="sr" tabindex="-1" aria-hidden="true"></div>' +
+      '<div class="reg-rodape">' + (ant || feitasNoDia(diaSel).indexOf(refId) >= 0 ? '<button type="button" class="btn" id="reg-apagar">Apagar registro</button>' : '') +
+      '<button type="submit" class="btn primario" id="reg-salvar">Salvar registro</button></div></form>';
+
+    if (!dlg) {
+      dlg = document.createElement("dialog");
+      dlg.id = "registro"; dlg.setAttribute("aria-labelledby", "reg-titulo");
+      document.body.appendChild(dlg);
+      ligarDialogo();
+    }
+    dlg.innerHTML = h;
+    preencherFotos(dlg);
+    atualizarBotaoSalvar();
+    dlg.showModal();
+    dlg.scrollTop = 0;
+  }
+
+  function atualizarBotaoSalvar() {
+    var precisa = FOTO_OPCIONAL.indexOf(regAtual.ref) < 0;
+    var tem = !!(regAtual.blob || regAtual.fotoAntiga);
+    var b = dlg.querySelector("#reg-salvar");
+    b.disabled = precisa && !tem;
+    b.textContent = precisa && !tem ? "Tire a foto para salvar" : "Salvar registro";
+  }
+
+  function fecharRegistro() {
+    if (regAtual && regAtual.previa) URL.revokeObjectURL(regAtual.previa);
+    regAtual = null;
+    if (dlg && dlg.open) dlg.close();
+  }
+
+  function receberFoto(arquivo) {
+    if (!arquivo) return;
+    var aviso = dlg.querySelector("#reg-sem-foto");
+    aviso.hidden = false; aviso.textContent = "Preparando a foto...";
+    comprimirFoto(arquivo).then(function (blob) {
+      if (!regAtual) return;
+      if (regAtual.previa) URL.revokeObjectURL(regAtual.previa);
+      regAtual.blob = blob;
+      regAtual.previa = URL.createObjectURL(blob);
+      var img = dlg.querySelector("#reg-previa");
+      img.src = regAtual.previa; img.hidden = false;
+      aviso.hidden = true;
+      dlg.querySelector("#reg-camera").lastChild.textContent = "Tirar outra foto";
+      atualizarBotaoSalvar();
+    }).catch(function () {
+      aviso.textContent = "Não consegui abrir essa foto. Tente de novo.";
+    });
+  }
+
+  function salvarRegistro() {
+    var r = refPorId(regAtual.ref), form = dlg.querySelector("form"), escolhas = [];
+    r.itens.forEach(function (it, i) {
+      var opcoes = [it.principal].concat(it.opcoes);
+      var marcado = form.querySelector('input[name="g' + i + '"]:checked');
+      if (marcado) escolhas.push(opcoes[+marcado.value]);
+    });
+    var receita = dlg.querySelector("#reg-receita").value || null;
+    var dia = regAtual.dia, ref = regAtual.ref, fotoAntiga = regAtual.fotoAntiga, blob = regAtual.blob;
+    var botao = dlg.querySelector("#reg-salvar");
+    botao.disabled = true; botao.textContent = "Salvando...";
+    var passo = Promise.resolve(fotoAntiga);
+    if (blob) {
+      var novoId = "f-" + dia + "-" + ref + "-" + Date.now();
+      passo = salvarFoto(novoId, blob).then(function () { return novoId; });
+    }
+    passo.then(function (fotoId) {
+      var antes = (registros[dia] || {})[ref];
+      registros[dia] = registros[dia] || {};
+      registros[dia][ref] = { escolhas: escolhas, receita: receita, foto: fotoId || null, hora: (antes && antes.hora) || horaAgora() };
+      var l = (diario[dia] || []).slice();
+      var novo = l.indexOf(ref) < 0;
+      if (novo) l.push(ref);
+      diario[dia] = l;
+      salvarTudo();
+      if (blob && fotoAntiga) apagarSeOrfa(fotoAntiga);
+      fecharRegistro();
+      rerenderMantendoScroll();
+      if (novo && l.length === TOTAL_REF) toast(rotuloDia(dia) + " cumprido! Parabéns");
+      else toast("Registro salvo");
+    }).catch(function () {
+      botao.disabled = false; botao.textContent = "Salvar registro";
+      toast("Não consegui guardar a foto. Veja se o celular tem espaço livre.");
+    });
+  }
+
+  function apagarRegistro() {
+    var dia = regAtual.dia, ref = regAtual.ref;
+    var antesReg = (registros[dia] || {})[ref] || null;
+    var antesDia = (diario[dia] || []).slice();
+    if (registros[dia]) { delete registros[dia][ref]; if (!Object.keys(registros[dia]).length) delete registros[dia]; }
+    var l = antesDia.filter(function (x) { return x !== ref; });
+    if (l.length) diario[dia] = l; else delete diario[dia];
+    salvarTudo();
+    fecharRegistro();
+    rerenderMantendoScroll();
+    toast("Registro apagado", function () {
+      if (antesReg) { registros[dia] = registros[dia] || {}; registros[dia][ref] = antesReg; }
+      diario[dia] = antesDia;
+    });
+    // a foto só é apagada de vez depois que o "Desfazer" some
+    if (antesReg && antesReg.foto) setTimeout(function () { apagarSeOrfa(antesReg.foto); }, 7000);
+  }
+
+  function ligarDialogo() {
+    dlg.addEventListener("click", function (e) {
+      if (e.target === dlg) { fecharRegistro(); return; } // toque fora do quadro
+      var b = e.target.closest("button");
+      if (!b) return;
+      if (b.id === "reg-fechar") fecharRegistro();
+      else if (b.id === "reg-camera") dlg.querySelector("#reg-arq-camera").click();
+      else if (b.id === "reg-galeria") dlg.querySelector("#reg-arq-galeria").click();
+      else if (b.id === "reg-apagar") apagarRegistro();
+    });
+    dlg.addEventListener("change", function (e) {
+      if (e.target.type === "file") { receberFoto(e.target.files && e.target.files[0]); e.target.value = ""; }
+    });
+    dlg.addEventListener("submit", function (e) { e.preventDefault(); if (!dlg.querySelector("#reg-salvar").disabled) salvarRegistro(); });
+    dlg.addEventListener("close", function () { if (regAtual) fecharRegistro(); });
   }
 
   function blocoCalendario() {
@@ -362,15 +616,6 @@
     h += '</div><p class="cal-legenda"><span class="ponto completo"></span>Dia cumprido (5 de 5) <span class="ponto parcial"></span>Em parte' +
       '<br><b>' + cumpridos + '</b> dia' + (cumpridos === 1 ? '' : 's') + ' cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + MESES[mes] + '.</p></section>';
     return h;
-  }
-
-  function alternarRefeicao(id) {
-    var l = (diario[diaSel] || []).slice();
-    var i = l.indexOf(id);
-    if (i >= 0) l.splice(i, 1); else l.push(id);
-    if (l.length) diario[diaSel] = l; else delete diario[diaSel];
-    salvarTudo();
-    if (l.length === TOTAL_REF && i < 0) toast(rotuloDia(diaSel) + " cumprido! Parabéns");
   }
 
   function telaPlano() {
@@ -618,40 +863,74 @@
       '<input class="sr" type="file" id="arquivo-backup" accept="application/json,.json" tabindex="-1" aria-hidden="true"></div></section>';
   }
 
-  function baixarBackup() {
-    var dados = { app: "meu-prato", versao: 2, salvoEm: new Date().toISOString(), favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario };
-    var texto = JSON.stringify(dados, null, 2);
-    var nome = "meu-prato-backup-" + hojeChave() + ".json";
+  function blobParaTexto(blob) {
+    return new Promise(function (ok, erro) {
+      var fr = new FileReader();
+      fr.onload = function () { ok(fr.result); };
+      fr.onerror = function () { erro(fr.error); };
+      fr.readAsDataURL(blob);
+    });
+  }
 
-    function concluir(msg) {
-      ultimoBackup = hojeChave(); gravar("mp-ultimo-backup", ultimoBackup);
-      toast(msg);
-      if (location.hash === "#frequencia") rerenderMantendoScroll();
-    }
-    function baixar() {
-      var a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([texto], { type: "application/json" }));
-      a.download = nome;
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
-      concluir("Cópia salva em Downloads");
-    }
+  // Junta as fotos usadas nos registros, em texto, para irem dentro da cópia.
+  function fotosParaCopia() {
+    var ids = [];
+    Object.keys(registros).forEach(function (k) {
+      Object.keys(registros[k]).forEach(function (ref) { var f = registros[k][ref].foto; if (f && ids.indexOf(f) < 0) ids.push(f); });
+    });
+    var fotos = {};
+    return ids.reduce(function (p, id) {
+      return p.then(function () {
+        return lerFoto(id).then(function (blob) { return blob ? blobParaTexto(blob).then(function (t) { fotos[id] = t; }) : null; });
+      });
+    }, Promise.resolve()).then(function () { return fotos; }).catch(function () { return fotos; });
+  }
 
-    // No celular, usa o menu de compartilhar (Salvar em Arquivos, WhatsApp, e-mail...).
-    // O iPhone com o app instalado nem sempre deixa baixar arquivos direto.
+  // A cópia é montada primeiro (lê as fotos, leva um instante). No celular, o menu de
+  // compartilhar só abre logo após um toque, então lá são dois toques: preparar e salvar.
+  var copiaPronta = null;
+  function podeCompartilhar(arquivo) {
     var celular = window.matchMedia && matchMedia("(pointer: coarse)").matches;
-    var arquivo = null;
-    try { arquivo = new File([texto], nome, { type: "application/json" }); } catch (e) { arquivo = null; }
-    if (celular && arquivo && navigator.canShare && navigator.canShare({ files: [arquivo] })) {
-      navigator.share({ files: [arquivo], title: "Cópia do Meu Prato" })
-        .then(function () { concluir("Cópia salva"); })
-        .catch(function (err) {
-          if (err && err.name === "AbortError") { toast("Cópia não salva"); return; }
-          baixar();
-        });
-      return;
-    }
-    baixar();
+    return celular && arquivo && navigator.canShare && navigator.canShare({ files: [arquivo] });
+  }
+  function concluirBackup(msg) {
+    copiaPronta = null;
+    ultimoBackup = hojeChave(); gravar("mp-ultimo-backup", ultimoBackup);
+    toast(msg);
+    if (location.hash === "#frequencia") rerenderMantendoScroll();
+  }
+  function baixarArquivo(c) {
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([c.texto], { type: "application/json" }));
+    a.download = c.nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    concluirBackup("Cópia salva em Downloads");
+  }
+  function compartilharCopia(c) {
+    navigator.share({ files: [c.arquivo], title: "Cópia do Meu Prato" })
+      .then(function () { concluirBackup("Cópia salva"); })
+      .catch(function (err) {
+        if (err && err.name === "AbortError") { toast("Cópia não salva"); return; }
+        baixarArquivo(c);
+      });
+  }
+
+  function baixarBackup() {
+    if (copiaPronta && Date.now() - copiaPronta.feitaEm < 120000) { compartilharCopia(copiaPronta); return; }
+    toast("Preparando a cópia...");
+    fotosParaCopia().then(function (fotos) {
+      var dados = { app: "meu-prato", versao: 3, salvoEm: new Date().toISOString(), favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario, registros: registros, fotos: fotos };
+      var c = { texto: JSON.stringify(dados), nome: "meu-prato-backup-" + hojeChave() + ".json", feitaEm: Date.now(), arquivo: null };
+      try { c.arquivo = new File([c.texto], c.nome, { type: "application/json" }); } catch (e) { c.arquivo = null; }
+      if (podeCompartilhar(c.arquivo)) {
+        copiaPronta = c;
+        main.querySelectorAll("#baixar-backup").forEach(function (b) { b.lastChild.textContent = "Cópia pronta: toque para salvar"; });
+        toast("Cópia pronta. Toque de novo em Salvar.");
+      } else {
+        baixarArquivo(c);
+      }
+    });
   }
 
   function restaurarBackup(arquivo) {
@@ -676,7 +955,33 @@
           });
         }
         diario = novoDiario;
-        salvarTudo(); render(); toast("Cópia restaurada");
+        // registros e fotos (cópias da versão 3 em diante)
+        var novosReg = {}, fotosCopia = d.fotos && typeof d.fotos === "object" ? d.fotos : {};
+        if (d.registros && typeof d.registros === "object") {
+          Object.keys(d.registros).forEach(function (k) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || typeof d.registros[k] !== "object") return;
+            Object.keys(d.registros[k]).forEach(function (ref) {
+              var x = d.registros[k][ref];
+              if (idsRef.indexOf(ref) < 0 || !x || typeof x !== "object") return;
+              var foto = typeof x.foto === "string" && typeof fotosCopia[x.foto] === "string" && /^data:image\//.test(fotosCopia[x.foto]) ? x.foto : null;
+              novosReg[k] = novosReg[k] || {};
+              novosReg[k][ref] = {
+                escolhas: Array.isArray(x.escolhas) ? x.escolhas.filter(function (t) { return typeof t === "string"; }) : [],
+                receita: ids.indexOf(x.receita) >= 0 ? x.receita : null,
+                foto: foto,
+                hora: typeof x.hora === "string" && /^\d{2}:\d{2}$/.test(x.hora) ? x.hora : ""
+              };
+            });
+          });
+        }
+        registros = novosReg;
+        var gravarFotos = Object.keys(fotosCopia).filter(function (id) { return fotoEmUso(id) && /^data:image\//.test(fotosCopia[id]); })
+          .reduce(function (p, id) {
+            return p.then(function () { return fetch(fotosCopia[id]).then(function (r) { return r.blob(); }).then(function (b) { return salvarFoto(id, b); }); });
+          }, Promise.resolve());
+        gravarFotos.then(function () { salvarTudo(); render(); toast("Cópia restaurada"); },
+          function () { salvarTudo(); render(); toast("Cópia restaurada, mas algumas fotos não couberam no celular"); });
+        return;
       } catch (e) { toast("Esse arquivo não é uma cópia do Meu Prato"); }
     };
     leitor.readAsText(arquivo);
@@ -722,6 +1027,7 @@
     else if (aba === "quero" || aba === "despensa") { html = telaDespensa(); aba = "quero"; }
     else { html = telaPlano(); aba = "plano"; }
     main.innerHTML = avisoInstalar() + html;
+    preencherFotos(main);
     document.querySelectorAll(".abas a").forEach(function (a) {
       if (a.dataset.aba === aba) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
@@ -740,7 +1046,7 @@
     var ativo = document.activeElement, seletor = null;
     if (ativo && ativo !== document.body) {
       if (ativo.id) seletor = "#" + CSS.escape(ativo.id);
-      else ["fav", "sel", "filtro", "desp", "refdia", "dia"].some(function (k) {
+      else ["fav", "sel", "filtro", "desp", "registrar", "dia"].some(function (k) {
         if (ativo.dataset && ativo.dataset[k] !== undefined) {
           seletor = (ativo.tagName.toLowerCase()) + "[data-" + k + '="' + CSS.escape(ativo.dataset[k]) + '"]';
           return true;
@@ -765,8 +1071,8 @@
       var add = alternar(sel, b.dataset.sel); salvarTudo();
       toast(add ? "Adicionada à lista de compras" : "Tirada da lista de compras");
       rerenderMantendoScroll();
-    } else if (b.dataset.refdia) {
-      alternarRefeicao(b.dataset.refdia); rerenderMantendoScroll();
+    } else if (b.dataset.registrar) {
+      abrirRegistro(b.dataset.registrar);
     } else if (b.dataset.dia) {
       diaSel = b.dataset.dia; rerenderMantendoScroll();
       var bloco = document.querySelector(".dia");
