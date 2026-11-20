@@ -1,12 +1,12 @@
 // Guarda o site no aparelho para abrir sem internet.
 // Ao publicar mudanças, aumente VERSAO (e o ?v= no index.html).
-var VERSAO = "meu-prato-v8";
+var VERSAO = "meu-prato-v9";
 var ARQUIVOS = [
   "./",
   "./index.html",
-  "./styles.css?v=8",
-  "./data.js?v=8",
-  "./app.js?v=8",
+  "./styles.css?v=9",
+  "./data.js?v=9",
+  "./app.js?v=9",
   "./logo.svg",
   "./icon-192.png",
   "./icon-512.png",
@@ -34,7 +34,8 @@ self.addEventListener("fetch", function (e) {
   // Página: tenta a rede (para pegar atualizações) e cai no cache sem internet.
   if (req.mode === "navigate") {
     e.respondWith(
-      fetch(req).then(function (res) {
+      // no-cache: confere com o servidor em vez de usar a cópia do cache HTTP (que o GitHub guarda por 10 min).
+      fetch(new Request(req.url, { cache: "no-cache", credentials: "same-origin" })).then(function (res) {
         var copia = res.clone();
         caches.open(VERSAO).then(function (c) { c.put("./index.html", copia); });
         return res;
