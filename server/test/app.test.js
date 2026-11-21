@@ -107,3 +107,34 @@ test('lerConfig aplica os padrões', () => {
   assert.equal(c.tetoEmailsDia, 300);
   assert.equal(c.s3.regiao, 'us-east-2');
 });
+
+test('TETO_EMAILS_DIA inválido lança config: TETO_EMAILS_DIA inválido', () => {
+  const base = { ORIGEM_SITE: 'https://x', SEGREDO_ORIGEM: 's' };
+  assert.throws(() => lerConfig({ ...base, TETO_EMAILS_DIA: 'abc' }), /config: TETO_EMAILS_DIA inválido/);
+  for (const nome of ['PORT', 'SMTP_PORT', 'TRUST_PROXY_SALTOS']) {
+    for (const ruim of ['abc', '0', '-1', '1.5']) {
+      assert.throws(() => lerConfig({ ...base, [nome]: ruim }), new RegExp(`config: ${nome} inválido`));
+    }
+  }
+  assert.equal(lerConfig(base).trustProxySaltos, 1);
+});
+
+test('TRUST_PROXY_SALTOS=2: request.ip é o 2º endereço a partir da direita do X-Forwarded-For', async () => {
+  const a = await criarApp({
+    config: configTeste({ trustProxySaltos: 2 }),
+    banco: {},
+    email: {},
+    captcha: {},
+    armazenamento: {},
+    limites: false,
+  });
+  a.get('/ip', async (req) => ({ ip: req.ip }));
+  const r = await a.inject({
+    method: 'GET',
+    url: '/ip',
+    remoteAddress: '127.0.0.1',
+    headers: cabecalhos({ 'x-forwarded-for': '9.9.9.9, 1.1.1.1, 2.2.2.2' }),
+  });
+  assert.equal(r.json().ip, '1.1.1.1');
+  await a.close();
+});

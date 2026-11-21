@@ -77,3 +77,15 @@ test('criarBancoPg registra listener de erro no Pool e um erro ocioso não derru
   assert.equal(chamadas.length, 1);
   await banco.fechar();
 });
+
+test('migrar com o papel saude_app já concedido ao dono (sem admin) não falha', async () => {
+  const banco = await criarBancoPglite();
+  await banco.consulta('create role saude_app nologin');
+  await banco.consulta('create role dono_teste login');
+  await banco.consulta('grant saude_app to dono_teste');
+  await banco.consulta('grant all on schema public to dono_teste');
+  await banco.consulta('set role dono_teste');
+  assert.deepEqual(await migrar(banco), ['001_contas.sql', '002_dados.sql']);
+  assert.deepEqual(await migrar(banco), []);
+  await banco.fechar();
+});
