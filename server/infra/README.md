@@ -20,7 +20,7 @@ Parametros SSM (SecureString) existentes nos dois ambientes: `DB_SENHA`, `SEGRED
 
 ## Provisionamento (Task 7, 2026-11-21)
 
-Via SSM `AWS-RunShellScript` na `IdMaquina`: baixa `provisionar.sh` do branch `feat/aws-infra` e roda com as saidas acima (`REF=feat/aws-infra`). Rodou com sucesso duas vezes (idempotente).
+Via SSM `AWS-RunShellScript` na `IdMaquina`: baixa `provisionar.sh` do branch `feat/aws-infra` (na epoca; o padrao do `REF` agora e `main`) e roda com as saidas acima (`REF=feat/aws-infra`). Rodou com sucesso duas vezes (idempotente).
 
 Conferido na maquina: `saude-api@teste`, `saude-api@producao`, `caddy` e `postgresql` ativos; swap de 2 GB; `curl --resolve <NomeOrigem>:443:127.0.0.1 https://<NomeOrigem>/saude` responde `{"ok":true}`; certificado Let's Encrypt emitido; Postgres so em `127.0.0.1:5432`; `/etc/saude/*.env` com modo 600 root; 3 familias de timers ativas (disco, backup, fotos por ambiente). De fora: as duas URLs do CloudFront em `/saude` respondem `{"ok":true}` e `http://<NomeOrigem>/qualquer` responde 404.
 

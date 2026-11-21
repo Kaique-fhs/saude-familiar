@@ -18,9 +18,9 @@ Em `/saude-familiar/<teste|producao>/`: `DB_SENHA`, `SEGREDO_ORIGEM`, `TURNSTILE
 ## Provisionar (na maquina, como root, via Session Manager)
 
 ```
-sudo REF=feat/aws-infra bash /opt/saude-familiar/server/infra/maquina/provisionar.sh <ip>.sslip.io <bucket-fotos> <bucket-backups> <arn-topico-alertas>
+sudo bash /opt/saude-familiar/server/infra/maquina/provisionar.sh <ip>.sslip.io <bucket-fotos> <bucket-backups> <arn-topico-alertas>
 ```
-Primeira vez: `sudo git clone --branch feat/aws-infra https://github.com/Kaique-fhs/saude-familiar /opt/saude-familiar` e rodar o script a partir dai (ele reaproveita o clone). Pode rodar de novo: cada passo confere o estado antes de agir. Para atualizar a API, rode de novo (faz `git fetch`, `npm ci` e reinicia os servicos).
+Primeira vez: `sudo git clone --branch main https://github.com/Kaique-fhs/saude-familiar /opt/saude-familiar` e rodar o script a partir dai (ele reaproveita o clone). Pode rodar de novo: cada passo confere o estado antes de agir. Para atualizar a API, rode de novo (faz `git fetch`, `npm ci` e reinicia os servicos).
 
 ## Operacao
 

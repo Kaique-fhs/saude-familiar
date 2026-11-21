@@ -3,13 +3,13 @@
 # Uso (root): provisionar.sh <nome-origem> <bucket-fotos> <bucket-backups> <topico-alertas>
 #   nome-origem:     <ip>.sslip.io (certificado Let's Encrypt pelo Caddy)
 #   topico-alertas:  ARN do topico SNS (alerta de disco)
-# Variavel opcional: REF (branch do repositorio; padrao feat/aws-infra).
+# Variavel opcional: REF (branch do repositorio; padrao main).
 # Pre-requisito: os parametros /saude-familiar/{teste,producao}/* ja existem no SSM
 # (ver server/infra/RUNBOOK.md) e a instancia tem o papel que os le.
 set -euo pipefail
 
 REPO_URL="https://github.com/Kaique-fhs/saude-familiar"
-REF="${REF:-feat/aws-infra}"
+REF="${REF:-main}"
 DESTINO="/opt/saude-familiar"
 NODE_VERSAO="v24.22.3"
 NODE_SHA256="6e51a2ada00f0011cc266f65d98922b403d7ad88f809ca2aa615a5fe1ce6e86c"
