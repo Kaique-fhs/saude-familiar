@@ -131,6 +131,20 @@ export async function criarAppTeste(opcoes = {}) {
     ...opcoes.deps,
   });
   emailsDosApps.set(app, caixa);
+  // app.close() também fecha o banco do teste (apaga o schema e encerra o pool). Sem isso, com Postgres
+  // real cada teste deixa um pool aberto e o max_connections=20 da máquina esgota ("remaining connection slots").
+  const fecharApp = app.close.bind(app);
+  let fechado = false;
+  app.close = async () => {
+    try {
+      await fecharApp();
+    } finally {
+      if (!fechado) {
+        fechado = true;
+        await bancoReal.fechar();
+      }
+    }
+  };
   return { app, banco, email: caixa, relogio };
 }
 
