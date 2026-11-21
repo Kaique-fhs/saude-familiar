@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { registrarContas } from './contas.js';
+import { registrarSincronia } from './sincronia.js';
 import { registrarLimites } from './protecao.js';
 
 function segredoConfere(recebido, esperado) {
@@ -83,6 +84,7 @@ export async function criarApp({
   app.get('/saude', { config: { rateLimit: false } }, async () => ({ ok: true }));
 
   registrarContas(app, { banco, email, captcha, limites });
+  registrarSincronia(app, { banco });
 
   return app;
 }
