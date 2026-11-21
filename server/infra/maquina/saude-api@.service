@@ -1,0 +1,21 @@
+[Unit]
+Description=Saude Familiar API (%i)
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+User=saude
+WorkingDirectory=/opt/saude-familiar/server
+EnvironmentFile=/etc/saude/%i.env
+ExecStartPre=/opt/node/bin/node src/tarefas.js migrar
+ExecStart=/opt/node/bin/node src/principal.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

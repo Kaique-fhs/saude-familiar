@@ -1,0 +1,23 @@
+{
+	# So o CloudFront alcanca a 443 (security group). Sem isto o Caddy descarta o
+	# X-Forwarded-For e a API veria o IP do CloudFront (TRUST_PROXY_SALTOS=2).
+	servers {
+		trusted_proxies static 0.0.0.0/0
+	}
+	auto_https disable_redirects
+}
+
+# Origem HTTPS com certificado Let's Encrypt para <ip>.sslip.io (NOME_ORIGEM vem do unit do Caddy).
+{$NOME_ORIGEM} {
+	handle_path /teste/* {
+		reverse_proxy 127.0.0.1:3001
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
+}
+
+# Porta 80: o Caddy atende o desafio ACME sozinho; todo o resto e 404.
+http:// {
+	respond 404
+}

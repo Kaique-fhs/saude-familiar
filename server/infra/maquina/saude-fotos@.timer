@@ -1,0 +1,10 @@
+[Unit]
+Description=Saude Familiar: apagar fotos pendentes, diario (%i)
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
