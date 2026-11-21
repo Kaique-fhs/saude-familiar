@@ -21,10 +21,12 @@ function montar(executar, abrirTransacao, fechar) {
 
 export function criarBancoPg(url) {
   const pool = new pg.Pool({ connectionString: url });
+  // Erro em client ocioso (queda de rede, reinício do banco) não pode derrubar o processo.
+  pool.on('error', (e) => console.error('erro no pool do banco:', e.message));
   const doCliente = (cliente) => ({
     consulta: (sql, params) => cliente.query(sql, params),
   });
-  return montar(
+  const banco = montar(
     (sql, params) => pool.query(sql, params),
     async (fn) => {
       const cliente = await pool.connect();
@@ -43,6 +45,8 @@ export function criarBancoPg(url) {
     },
     () => pool.end(),
   );
+  banco.pool = pool; // exposto para teste
+  return banco;
 }
 
 // Sem parâmetros o PGlite usa exec (aceita vários comandos, como o pg); devolve o último resultado.

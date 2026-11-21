@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { criarBancoPglite } from '../src/banco.js';
+import { criarBancoPg, criarBancoPglite } from '../src/banco.js';
 import { migrar } from '../src/migrar.js';
 import { novoBancoTeste } from './ajuda.js';
 
@@ -60,5 +60,20 @@ test('apagar usuário apaga sessões, tokens e itens (cascade)', async () => {
     const r = await banco.consulta(`select count(*)::int as n from ${t}`);
     assert.equal(r.rows[0].n, 0, t);
   }
+  await banco.fechar();
+});
+
+test('criarBancoPg registra listener de erro no Pool e um erro ocioso não derruba o processo', async () => {
+  const banco = criarBancoPg('postgres://usuario:senha@127.0.0.1:1/nada');
+  assert.ok(banco.pool.listenerCount('error') >= 1);
+  const original = console.error;
+  const chamadas = [];
+  console.error = (...a) => chamadas.push(a);
+  try {
+    banco.pool.emit('error', new Error('queda simulada'));
+  } finally {
+    console.error = original;
+  }
+  assert.equal(chamadas.length, 1);
   await banco.fechar();
 });
