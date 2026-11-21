@@ -48,3 +48,10 @@ Obs.: o primeiro resultado foi 44 de 47 (`remaining connection slots are reserve
 - Backup: `systemctl start saude-backup` gravou `2026-11-21.dump` e `contas_apagadas-2026-11-21.csv` em `teste/` e `producao/` do bucket de backups.
 - `DELETE /conta` 204; `list-object-versions --prefix teste/<id>/` no bucket de fotos: sem versões nem delete markers. `restaurar.sh teste 2026-11-21`: o dump tinha a conta (`COPY 1`), a restauração reaplicou `contas_apagadas` e removeu a conta (`usuarios|0`, `contas_apagadas|1`). Banco `saude_restauro_teste` apagado.
 - Origem barrada: de fora, `curl --connect-timeout 5 https://<NomeOrigem>/conta` expira (exit 28); de dentro, sem o cabeçalho, `/conta` 403 e `/saude` 200.
+
+## Correcoes da revisao final (pendentes de aplicar na stack)
+
+- Bucket de backups versionado (versoes antigas expiram em 30 dias): a maquina continua sem `DeleteObject`.
+- `AlarmeTravada` (`StatusCheckFailed_Instance`, reinicia e avisa). API com limite de reinicios, aviso por SNS (`saude-alerta@.service`) e dependencia de `postgresql@16-main.service`: entram no proximo provisionamento.
+- `test:pg` na maquina roda com `--test-concurrency=1` e o dono de teste tem `CONNECTION LIMIT 8` (nao esgota as 20 conexoes da producao). Ainda assim, evite rodar na maquina em horario de uso.
+- Decisao: maquina fica ligada (~US$ 11,50/mes nos creditos). Restaurar e refazer do zero: `RUNBOOK.md`.

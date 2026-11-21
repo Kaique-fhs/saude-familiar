@@ -28,6 +28,42 @@ Primeira vez: `sudo git clone --branch feat/aws-infra https://github.com/Kaique-
 - Rotacionar segredo: troque o parametro no SSM, rode `sudo server/infra/maquina/carregar-segredos.sh <ambiente>` e `sudo systemctl restart saude-api@<ambiente>`. Trocar `DB_SENHA` exige rodar o provisionamento de novo (reaplica a senha no Postgres).
 - Testes locais dos scripts: `bash server/infra/maquina/testar_maquina.sh`.
 
+## Deploy e atualizacao da stack (na maquina do Kaique, Git Bash)
+
+Atualizar o template (ou criar do zero) usa sempre o mesmo comando. Os segredos de origem saem do SSM direto para a linha de comando, sem eco e sem variavel exportada. `EMAIL_ALERTA` e o e-mail que recebe os alarmes (defina antes, fora do repositorio). Primeiro um change set, so para ler; execute-o depois do OK:
+
+```
+AWS="$LOCALAPPDATA/Programs/Amazon/AWSCLIV2/aws.exe"
+"$AWS" cloudformation deploy --profile saude-familiar --region us-east-2   --stack-name saude-familiar --template-file server/infra/saude-familiar.yaml   --capabilities CAPABILITY_IAM --no-execute-changeset   --parameter-overrides     EmailAlerta="$EMAIL_ALERTA"     SegredoOrigemTeste="$("$AWS" ssm get-parameter --profile saude-familiar --region us-east-2 --with-decryption --name /saude-familiar/teste/SEGREDO_ORIGEM --query Parameter.Value --output text)"     SegredoOrigemProducao="$("$AWS" ssm get-parameter --profile saude-familiar --region us-east-2 --with-decryption --name /saude-familiar/producao/SEGREDO_ORIGEM --query Parameter.Value --output text)"
+```
+Confira o change set (`aws cloudformation describe-change-set`): so deve haver o que o template mudou. Para aplicar, rode o mesmo comando sem `--no-execute-changeset`. Antes de qualquer deploy: `bash server/infra/validar.sh`.
+
+## Restaurar um backup
+
+Backups: `s3://<BucketBackups>/<ambiente>/<AAAA-MM-DD>.dump` (e `contas_apagadas-<data>.csv`), um por dia, 30 dias. O bucket e versionado; versoes antigas (ate 30 dias) ficam recuperaveis pelo console ou `list-object-versions` se um dump for sobrescrito. A maquina nao apaga nada nesse bucket. Rodar na maquina, como root (Session Manager):
+
+- **Conferir sem tocar no banco vivo** (nao mexe na API): `sudo server/infra/maquina/restaurar.sh <teste|producao> <AAAA-MM-DD>`. Restaura no banco novo `saude_restauro_<ambiente>`, reaplica as exclusoes de contas (`contas_apagadas`) e imprime contagens. Confira e apague a mao: `drop database saude_restauro_<ambiente>`.
+- **Trocar o banco vivo**: `sudo server/infra/maquina/restaurar.sh <ambiente> <data> saude_<ambiente> --substituir`. Para a API, restaura num banco temporario, reaplica as exclusoes, renomeia o vivo para `saude_<ambiente>_reserva_<data-hora>` e o temporario para `saude_<ambiente>`, e religa a API. A reserva **nao** e apagada (confira e remova com `drop database`); se algo falhar, o banco vivo fica intacto. Exclusoes de conta feitas depois do ultimo backup e antes da perda (ate 24 h) nao tem copia: reaplique a mao se souber quais sao.
+
+## Refazer tudo do zero (maquina perdida)
+
+1. Se a stack e a maquina ainda existem mas a instancia morreu: o alarme de recuperacao/reinicio cuida de falhas de hardware e travas. Se a instancia foi terminada, o volume ficou retido (ver abaixo): da para anexa-lo ou seguir os passos seguintes e restaurar do backup.
+2. Parametros no SSM (`/saude-familiar/<teste|producao>/`, SecureString) **antes** de tudo: `DB_SENHA` e `SEGREDO_ORIGEM` com `openssl rand -hex 32` direto no `put-parameter` (sem eco); `TURNSTILE_SECRET`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_REMETENTE` o Kaique grava. Se os parametros ainda existem, nao regrave: as distribuicoes e a maquina usam os mesmos valores.
+3. Stack: o comando de deploy acima (sem `--no-execute-changeset`, apos o OK). Se a stack antiga ainda existe com a maquina retida, remova a maquina e o volume antigos a mao antes, para nao pagar em dobro.
+4. Anote as saidas (`IpPublico`, `NomeOrigem`, `BucketFotos`, `BucketBackups`, `TopicoAlertas`) e provisione a maquina nova (secao "Provisionar"). O provisionamento cria os bancos vazios.
+5. Restaure cada ambiente: `restaurar.sh <ambiente> <data> saude_<ambiente> --substituir` (o banco vivo e o vazio criado no passo 4). Fotos ja estao no bucket de fotos (versionado), nao dependem da maquina.
+6. Confira: `curl https://<UrlProducao>/saude` e o teste de fumaca (`server/infra/fumaca.sh`, ambiente teste).
+
+## Decisao: maquina fica ligada
+
+Task 8, Step 5: o Kaique decidiu **manter a maquina ligada**, a cerca de US$ 11,50/mes, pagos com os creditos da conta. Nao ha rotina de desligar.
+
+## Alertas e reinicio
+
+- `saude-api@<ambiente>`: `Restart=always` com limite de 5 partidas em 300 s; ao estourar, a unidade fica `failed` e `saude-alerta@<unidade>.service` avisa no topico SNS (e-mail). Causa tipica: migracao quebrada; veja `journalctl -u saude-api@<ambiente> -n 100`. Depois de corrigir: `systemctl reset-failed saude-api@<ambiente>` e `systemctl start ...`.
+- A API depende de `postgresql@16-main.service` (o `postgresql.service` do Ubuntu e so o guarda-chuva).
+- CloudWatch: `AlarmeRecuperacao` (falha de sistema: recupera a instancia) e `AlarmeTravada` (`StatusCheckFailed_Instance` por 5 min, p.ex. travada por falta de memoria: reinicia e avisa no SNS).
+
 ## Custo e remocao (importante)
 
 - Apagar a stack `saude-familiar` **nao apaga a maquina nem o volume**: ficam **retidos** (protege os dados) e continuam cobrando. A remocao e **manual**, depois de confirmar que nao ha dado a guardar: terminar a instancia e apagar o volume EBS.

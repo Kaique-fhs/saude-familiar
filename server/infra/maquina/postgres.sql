@@ -23,6 +23,9 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'saude_dono_producao')
 SELECT format('ALTER ROLE saude_dono_teste PASSWORD %L', :'senha_teste') \gexec
 SELECT format('ALTER ROLE saude_dono_producao PASSWORD %L', :'senha_producao') \gexec
 
+-- O teste nunca esgota as 20 conexoes da producao (que usa ate 5): o test:pg roda aqui.
+ALTER ROLE saude_dono_teste CONNECTION LIMIT 8;
+
 GRANT saude_app TO saude_dono_teste;
 GRANT saude_app TO saude_dono_producao;
 

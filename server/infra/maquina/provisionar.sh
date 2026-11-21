@@ -138,7 +138,7 @@ instalar_units() {
   "$MAQ/carregar-segredos.sh" producao
 
   install -m 0644 "$MAQ"/saude-api@.service "$MAQ"/saude-fotos@.service "$MAQ"/saude-fotos@.timer \
-    "$MAQ"/saude-disco.service "$MAQ"/saude-disco.timer \
+    "$MAQ"/saude-disco.service "$MAQ"/saude-disco.timer "$MAQ"/saude-alerta@.service \
     "$MAQ"/saude-backup.service "$MAQ"/saude-backup.timer /etc/systemd/system/
 
   install -m 0644 "$MAQ/Caddyfile" /etc/caddy/Caddyfile

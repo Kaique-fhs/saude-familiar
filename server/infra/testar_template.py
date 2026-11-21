@@ -55,7 +55,7 @@ class Template(unittest.TestCase):
     def test_recursos_esperados(self):
         esperados = {"GrupoSeguranca", "PapelMaquina", "PerfilMaquina", "Maquina", "IpFixo",
                      "AssociacaoIp", "BucketFotos", "BucketBackups", "TopicoAlertas",
-                     "AssinaturaAlertas", "Orcamento", "AlarmeRecuperacao",
+                     "AssinaturaAlertas", "Orcamento", "AlarmeRecuperacao", "AlarmeTravada",
                      "CloudFrontTeste", "CloudFrontProducao"}
         self.assertEqual(set(R), esperados)
 
@@ -115,8 +115,15 @@ class Template(unittest.TestCase):
         self.assertEqual(sorted(cors["AllowedMethods"]), ["GET", "POST"])
         self.assertEqual(sorted(cors["AllowedOrigins"]),
                          ["http://localhost:*", "https://kaique-fhs.github.io"])
-        bk = props("BucketBackups")["LifecycleConfiguration"]["Rules"]
-        self.assertTrue(any(r.get("ExpirationInDays") == 30 for r in bk))
+        bk = props("BucketBackups")
+        # versionado: sem isso, PutObject da maquina sobrescreveria os dumps sem deixar copia
+        self.assertEqual(bk["VersioningConfiguration"]["Status"], "Enabled")
+        regras_bk = bk["LifecycleConfiguration"]["Rules"]
+        self.assertTrue(any(r.get("ExpirationInDays") == 30 for r in regras_bk))
+        self.assertTrue(any(r.get("NoncurrentVersionExpiration", {}).get("NoncurrentDays") == 30
+                            for r in regras_bk))
+        self.assertTrue(any(r.get("ExpiredObjectDeleteMarker") is True for r in regras_bk))
+        self.assertTrue(all(r["Status"] == "Enabled" for r in regras_bk))
 
     def test_papel(self):
         p = props("PapelMaquina")
@@ -167,6 +174,15 @@ class Template(unittest.TestCase):
         self.assertEqual(a["Threshold"], 1)
         self.assertEqual(a["ComparisonOperator"], "GreaterThanOrEqualToThreshold")
         self.assertIn({"Fn::Sub": "arn:aws:automate:${AWS::Region}:ec2:recover"}, a["AlarmActions"])
+        t = props("AlarmeTravada")
+        self.assertEqual(t["MetricName"], "StatusCheckFailed_Instance")
+        self.assertEqual(t["Namespace"], "AWS/EC2")
+        self.assertEqual(t["Threshold"], 1)
+        self.assertEqual(t["ComparisonOperator"], "GreaterThanOrEqualToThreshold")
+        self.assertEqual(t["Dimensions"], [{"Name": "InstanceId", "Value": {"Ref": "Maquina"}}])
+        self.assertIn({"Fn::Sub": "arn:aws:automate:${AWS::Region}:ec2:reboot"}, t["AlarmActions"])
+        self.assertIn({"Ref": "TopicoAlertas"}, t["AlarmActions"])
+        self.assertTrue(t["Period"] * t["EvaluationPeriods"] >= 300)
         b = props("Orcamento")["Budget"]
         self.assertEqual(b["BudgetType"], "COST")
         self.assertEqual(b["TimeUnit"], "MONTHLY")

@@ -1,8 +1,12 @@
 [Unit]
 Description=Saude Familiar API (%i)
-After=network-online.target postgresql.service
+After=network-online.target postgresql@16-main.service
 Wants=network-online.target
-Requires=postgresql.service
+Requires=postgresql@16-main.service
+# Laco de reinicio para: 5 partidas em 300 s levam a unidade a "failed" e avisam no SNS.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+OnFailure=saude-alerta@%n.service
 
 [Service]
 User=saude

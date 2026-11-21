@@ -221,11 +221,21 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      # Versionado: um PutObject da maquina nao destroi o dump anterior. O papel
+      # da maquina nao tem DeleteObject/DeleteObjectVersion nem lifecycle; so o
+      # lifecycle abaixo apaga (objeto atual e versoes antigas, 30 dias).
+      VersioningConfiguration:
+        Status: Enabled
       LifecycleConfiguration:
         Rules:
           - Id: expirar-backups-em-30-dias
             Status: Enabled
             ExpirationInDays: 30
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+          - Id: remover-marcadores-de-exclusao
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
 
   TopicoAlertas:
     Type: AWS::SNS::Topic
@@ -284,6 +294,25 @@ Resources:
       TreatMissingData: missing
       AlarmActions:
         - !Sub "arn:aws:automate:${AWS::Region}:ec2:recover"
+        - !Ref TopicoAlertas
+
+  AlarmeTravada:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Maquina travada (falha de verificacao da instancia, p.ex. falta de memoria); reinicia e avisa.
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_Instance
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref Maquina
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 5
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: missing
+      AlarmActions:
+        - !Sub "arn:aws:automate:${AWS::Region}:ec2:reboot"
         - !Ref TopicoAlertas
 
   CloudFrontTeste:

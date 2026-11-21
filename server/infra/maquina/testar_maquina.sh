@@ -93,6 +93,13 @@ RC=$?
 if [ "$RC" -ne 0 ] && [ ! -s "$TMP/etc2/teste.env" ]; then ok "falha do SSM nao deixa arquivo parcial"; else falha "falha do SSM nao deixa arquivo parcial"; fi
 verifica "arquivo gravado com install -m 0600" grep -qE "install .*-m 0?600" "$AQUI/carregar-segredos.sh"
 
+echo "== alerta-unidade.sh =="
+: > "$FAKE_AWS_LOG"
+MAQUINA_ENV="$TMP/maquina.env" AWS_BIN="$TMP/bin/aws" bash "$AQUI/alerta-unidade.sh" saude-api@producao.service
+verifica "alerta-unidade publica no topico de maquina.env" grep -q -- "--topic-arn arn:aws:sns:us-east-2:111:alertas" "$FAKE_AWS_LOG"
+verifica "alerta-unidade cita a unidade" grep -q "saude-api@producao.service" "$FAKE_AWS_LOG"
+verifica "alerta-unidade sem argumento falha" bash -c "! MAQUINA_ENV='$TMP/maquina.env' AWS_BIN='$TMP/bin/aws' bash '$AQUI/alerta-unidade.sh'"
+
 echo "== disco.sh =="
 disco() { # uso
   DISCO_USO="$1" ARQUIVO_ESTADO="$TMP/estado-disco" MAQUINA_ENV="$TMP/maquina.env" AWS_BIN="$TMP/bin/aws" \
@@ -129,9 +136,14 @@ verifica "postgres.sql: grant saude_app aos donos" grep -qi "grant saude_app" "$
 verifica "journald: SystemMaxUse=500M" grep -qx "SystemMaxUse=500M" "$AQUI/journald.conf"
 verifica "journald: MaxRetentionSec=30day" grep -qx "MaxRetentionSec=30day" "$AQUI/journald.conf"
 S="$AQUI/saude-api@.service"
-for k in "User=saude" "EnvironmentFile=/etc/saude/%i.env" "ExecStartPre=/opt/node/bin/node src/tarefas.js migrar" "ExecStart=/opt/node/bin/node src/principal.js" "Restart=always" "NoNewPrivileges=true" "ProtectSystem=strict" "PrivateTmp=true"; do
+for k in "User=saude" "EnvironmentFile=/etc/saude/%i.env" "ExecStartPre=/opt/node/bin/node src/tarefas.js migrar" "ExecStart=/opt/node/bin/node src/principal.js" "Restart=always" "StartLimitIntervalSec=300" "StartLimitBurst=5" "OnFailure=saude-alerta@%n.service" "After=network-online.target postgresql@16-main.service" "Requires=postgresql@16-main.service" "NoNewPrivileges=true" "ProtectSystem=strict" "PrivateTmp=true"; do
   verifica "saude-api@.service: $k" grep -qx "$k" "$S"
 done
+verifica "saude-api@.service: nao depende so do guarda-chuva postgresql.service" bash -c "! grep -qE '(After|Requires)=.*[ =]postgresql\.service' '$S'"
+verifica "alerta@.service: oneshot que chama alerta-unidade.sh com a unidade" grep -qx "ExecStart=/opt/saude-familiar/server/infra/maquina/alerta-unidade.sh %i" "$AQUI/saude-alerta@.service"
+verifica "provisionar.sh instala saude-alerta@.service" grep -q 'saude-alerta@.service' "$AQUI/provisionar.sh"
+verifica "postgres.sql: CONNECTION LIMIT no dono de teste (idempotente, no ALTER)" grep -qE "ALTER ROLE saude_dono_teste CONNECTION LIMIT [0-9]+" "$AQUI/postgres.sql"
+verifica "package.json: test:pg com --test-concurrency=1" grep -q '"test:pg": "node --test --test-concurrency=1 ' "$AQUI/../../package.json"
 verifica "fotos@.service: apagar-fotos" grep -q "tarefas.js apagar-fotos" "$AQUI/saude-fotos@.service"
 verifica "fotos@.service: EnvironmentFile do ambiente" grep -qx "EnvironmentFile=/etc/saude/%i.env" "$AQUI/saude-fotos@.service"
 verifica "fotos@.timer: diario" grep -qx "OnCalendar=daily" "$AQUI/saude-fotos@.timer"

@@ -1,0 +1,10 @@
+[Unit]
+Description=Saude Familiar: alerta de falha da unidade %i
+
+[Service]
+Type=oneshot
+ExecStart=/opt/saude-familiar/server/infra/maquina/alerta-unidade.sh %i
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
