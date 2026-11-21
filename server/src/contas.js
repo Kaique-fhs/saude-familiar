@@ -43,7 +43,7 @@ export async function exigirSessao(req, reply) {
   req.usuario = { id: linha.id, email: linha.email };
 }
 
-export function registrarContas(app, { banco, email, captcha, limites }) {
+export function registrarContas(app, { banco, email, captcha, armazenamento, limites }) {
   const { config } = app;
 
   // Cada rota sensível: limite por IP (config da rota) + captcha + limite por e-mail (preHandler).
@@ -214,4 +214,44 @@ export function registrarContas(app, { banco, email, captcha, limites }) {
     if (!ok) return reply.code(400).send({ erro: 'token' });
     return { ok: true };
   });
+
+  app.delete('/conta', { preHandler: exigirSessao }, async (req, reply) => {
+    const senha = typeof (req.body ?? {}).senha === 'string' ? req.body.senha : '';
+    const r = await banco.consulta('select senha_hash from usuarios where id = $1', [req.usuario.id]);
+    if (!r.rows[0] || !(await conferirSenha(senha, r.rows[0].senha_hash))) {
+      return reply.code(401).send({ erro: 'credenciais' });
+    }
+    const agora = app.relogio();
+    await banco.transacao(async (tx) => {
+      await tx.consulta('insert into contas_apagadas (user_id, apagada_em) values ($1, $2) on conflict (user_id) do nothing', [req.usuario.id, agora]);
+      await tx.consulta('delete from usuarios where id = $1', [req.usuario.id]);
+    });
+    // A conta já sumiu: se as fotos falharem, ficam pendentes e são tentadas de novo.
+    try {
+      await apagarFotosPendentes({ banco, armazenamento, ambiente: config.ambiente, relogio: app.relogio });
+    } catch (e) {
+      app.log.error({ err: e }, 'falha ao apagar fotos pendentes');
+    }
+    return reply.code(204).send();
+  });
+}
+
+// Apaga as fotos das contas já removidas e ainda pendentes. Falha de uma não
+// impede as outras; devolve quantas concluiu.
+export async function apagarFotosPendentes({ banco, armazenamento, ambiente, relogio }) {
+  const r = await banco.consulta('select user_id from contas_apagadas where fotos_apagadas_em is null');
+  let concluidas = 0;
+  for (const { user_id: userId } of r.rows) {
+    try {
+      await armazenamento.apagarPrefixo(`${ambiente}/${userId}/`);
+      await banco.consulta('update contas_apagadas set fotos_apagadas_em = $1 where user_id = $2', [
+        relogio(),
+        userId,
+      ]);
+      concluidas++;
+    } catch (e) {
+      console.error(`falha ao apagar fotos de ${userId}:`, e.message);
+    }
+  }
+  return concluidas;
 }

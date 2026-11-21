@@ -63,6 +63,7 @@ export function armazenamentoFalso() {
       return `https://falso/${chave}`;
     },
     async apagarPrefixo(prefixo) {
+      if (typeof prefixo !== 'string' || !prefixo.endsWith('/')) throw new Error('prefixo');
       chamadas.push({ tipo: 'apagar', prefixo });
     },
   };

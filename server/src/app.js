@@ -84,7 +84,7 @@ export async function criarApp({
   // Verificação de saúde fica fora do limite por IP.
   app.get('/saude', { config: { rateLimit: false } }, async () => ({ ok: true }));
 
-  registrarContas(app, { banco, email, captcha, limites });
+  registrarContas(app, { banco, email, captcha, armazenamento, limites });
   registrarSincronia(app, { banco });
   registrarFotos(app, { armazenamento });
 

@@ -43,6 +43,7 @@ export function criarArmazenamentoS3({ regiao, bucket, cliente = new S3Client({ 
     },
 
     async apagarPrefixo(prefixo) {
+      if (typeof prefixo !== 'string' || !prefixo.endsWith('/')) throw new Error('prefixo');
       let pendentes = [];
       let keyMarker;
       let versionIdMarker;

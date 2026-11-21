@@ -151,3 +151,13 @@ test('sem sessão → 401', async () => {
   assert.equal(e.statusCode, 401);
   assert.equal(l.statusCode, 401);
 });
+
+test('apagarPrefixo: prefixo vazio ou sem "/" final → lança "prefixo" e não chama o S3', async () => {
+  for (const prefixo of ['', 'teste/u1', undefined]) {
+    const cliente = clienteFalso({ paginas: [] });
+    const arm = criarArmazenamentoS3({ regiao: 'us-east-2', bucket: 'b', cliente });
+    await assert.rejects(arm.apagarPrefixo(prefixo), { message: 'prefixo' });
+    assert.equal(cliente.comandos.length, 0);
+  }
+  await assert.rejects(armazenamentoFalso().apagarPrefixo('teste/u1'), { message: 'prefixo' });
+});
