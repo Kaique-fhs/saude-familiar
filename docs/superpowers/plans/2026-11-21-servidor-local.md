@@ -58,7 +58,7 @@
   - `@fastify/cors` registrado **antes** da portaria, com `methods: ['GET','POST','DELETE']`.
   - Parser JSON que aceita corpo vazio como `{}` (o app chama `POST /conta/sair` sem corpo).
   - `server/test/ajuda.js`: `configTeste(extra?) -> Config` (ambiente `teste`, segredo `segredo-teste`) e `cabecalhos(extra?) -> object` com `x-saude-origem`.
-- Scripts no `package.json`: `"test": "node --test test/"`, `"start": "node src/principal.js"`; `"engines": {"node": ">=22"}`.
+- Scripts no `package.json`: `"test": "node --test"` (o Node 24 não aceita pasta como argumento), `"start": "node src/principal.js"`; `"engines": {"node": ">=22"}`.
 
 - [ ] **Step 1: Testes que falham** em `server/test/app.test.js`:
   - `GET /saude sem cabeçalho secreto responde 200 {ok:true}`
@@ -69,7 +69,7 @@
   - `GET /nao-existe com o cabeçalho → 404 {erro:"nao-encontrado"}`; `POST com JSON malformado → 400 {erro:"requisicao"}`
   - `preflight OPTIONS de DELETE vindo da origem do site → access-control-allow-methods inclui DELETE`
 - [ ] **Step 2:** `cd server && npm install && npm test` → FAIL (módulos não existem).
-- [ ] **Step 3: Implementar** `config.js` e `app.js`: Fastify com `trustProxy: true`, `@fastify/cors` com as origens da regra global, hook `onRequest` que confere `x-saude-origem` com `timingSafeEqual` (comprimentos diferentes = recusa) e libera só `GET /saude`. `.gitignore`: `node_modules/`, `.env`, `.pg*/`. `.env.example` com todas as variáveis, sem valores reais.
+- [ ] **Step 3: Implementar** `config.js` e `app.js`: Fastify com `trustProxy: 1`, `@fastify/cors` com as origens da regra global, hook `onRequest` que confere `x-saude-origem` com `timingSafeEqual` (comprimentos diferentes = recusa) e libera só `GET /saude`. `.gitignore`: `node_modules/`, `.env`, `.pg*/`. `.env.example` com todas as variáveis, sem valores reais.
 - [ ] **Step 4:** `npm test` → PASS.
 - [ ] **Step 5: Commit** `git add server/package.json server/package-lock.json server/.env.example server/.gitignore server/src/config.js server/src/app.js server/test/app.test.js server/test/ajuda.js` — "Servidor: esqueleto, configuração e cabeçalho secreto".
 
