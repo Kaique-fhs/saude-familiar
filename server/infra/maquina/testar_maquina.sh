@@ -196,12 +196,14 @@ if [ "$1 $2" = "ssm get-parameters-by-path" ]; then
   printf '%s\t%s\n' "$caminho/EMAIL_REMETENTE" "Saude <robo@example.com>"
 fi
 if [ "$1 $2" = "s3 ls" ]; then
+  if [ -n "${FAKE_S3_LS_FALHA:-}" ]; then echo "AccessDenied" >&2; exit 255; fi
   p="${3#s3://}"
   for f in "$FAKE_S3/$p"*; do [ -f "$f" ] && echo "2026-11-01 03:30:00 10 $(basename "$f")"; done
   exit 0
 fi
 if [ "$1 $2" = "s3 cp" ]; then
   src="$3"; dst="$4"
+  case "$src" in s3://*contas_apagadas-*) [ -n "${FAKE_S3_CP_LISTA_FALHA:-}" ] && exit 1;; esac
   case "$dst" in
     s3://*)
       chave="${dst#s3://}"
@@ -339,6 +341,17 @@ if [ "$MODO_SONDA" = 600 ]; then
 else
   verifica "restaurar: lista preservada criada sob umask 077 (FS sem modo POSIX: stat nao checado)" grep -qx "umask 077" "$AQUI/restaurar.sh"
 fi
+
+# Falha ao listar/baixar as listas do S3 aborta (nao confunde com lista vazia).
+for modo in FAKE_S3_LS_FALHA FAKE_S3_CP_LISTA_FALHA; do
+  rlimpa
+  ( export "$modo=1"; FAKE_BANCOS="saude_producao" restaurar producao 2026-11-01 saude_producao --substituir >/dev/null 2>&1 ); RC=$?
+  if [ "$RC" -ne 0 ]; then ok "restaurar: $modo aborta o --substituir"; else falha "restaurar: $modo aborta o --substituir"; fi
+  verifica "restaurar: $modo deixa o banco vivo intacto" bash -c "! grep -qE 'alter database|drop database[^;]*\"saude_producao\"|^pg_restore|create database' '$FAKE_PG_LOG'"
+  verifica "restaurar: $modo religa a API" grep -q "systemctl start saude-api@producao" "$FAKE_PG_LOG"
+done
+rlimpa; FAKE_S3_LS_FALHA=1 FAKE_BANCOS="saude_producao" restaurar producao 2026-11-01 >/dev/null 2>&1; RC=$?
+if [ "$RC" -ne 0 ]; then ok "restaurar: falha na listagem tambem aborta sem --substituir"; else falha "restaurar: falha na listagem tambem aborta sem --substituir"; fi
 
 rlimpa; FAKE_BANCO_VIVO_AUSENTE=1 FAKE_BANCOS="" restaurar producao 2026-11-01 >/dev/null 2>&1; RC=$?
 if [ "$RC" -eq 0 ]; then ok "restaurar: sem banco vivo segue com a lista do S3"; else falha "restaurar: sem banco vivo (rc=$RC)"; fi

@@ -113,14 +113,25 @@ fi
 
 # Listas guardadas fora do banco: uma por dia de backup; une todas as disponiveis.
 n=0
-nomes="$("$AWS_BIN" s3 ls "s3://$bucket/$ambiente/contas_apagadas-" --region "$REGIAO" | awk '{print $NF}' || true)"
+# "listagem falhou" (permissao, rede) e diferente de "lista vazia": o aws s3 ls sem
+# resultado sai com 1 e sem nenhuma mensagem; qualquer outra coisa aborta.
+if saida_ls="$("$AWS_BIN" s3 ls "s3://$bucket/$ambiente/contas_apagadas-" --region "$REGIAO" 2>"$tmp/ls.err")"; then
+  :
+else
+  rc_ls=$?
+  if [ "$rc_ls" -eq 1 ] && [ -z "$saida_ls" ] && [ ! -s "$tmp/ls.err" ]; then
+    saida_ls=""
+  else
+    echo "nao consegui listar as listas de contas apagadas no S3 (codigo $rc_ls); abortando para nao perder exclusoes" >&2
+    exit 1
+  fi
+fi
+nomes="$(printf '%s\n' "$saida_ls" | awk '{print $NF}')"
 while IFS= read -r nome; do
   [ -n "$nome" ] || continue
   n=$((n + 1))
-  if ! "$AWS_BIN" s3 cp "s3://$bucket/$ambiente/$nome" "$tmp/s3-$n.csv" --only-show-errors --region "$REGIAO"; then
-    echo "AVISO: nao consegui baixar $nome; seguindo sem ela" >&2
-    : > "$tmp/s3-$n.csv"
-  fi
+  "$AWS_BIN" s3 cp "s3://$bucket/$ambiente/$nome" "$tmp/s3-$n.csv" --only-show-errors --region "$REGIAO" \
+    || { echo "nao consegui baixar $nome; abortando para nao perder exclusoes" >&2; exit 1; }
 done <<< "$nomes"
 [ "$n" -gt 0 ] || echo "AVISO: nenhuma lista contas_apagadas-*.csv no S3; so valem as contas do dump e do banco vivo" >&2
 
