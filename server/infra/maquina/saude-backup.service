@@ -1,0 +1,12 @@
+[Unit]
+Description=Saude Familiar: backup diario do Postgres para o S3
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/saude-familiar/server/infra/maquina/backup.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true

@@ -136,6 +136,182 @@ verifica "fotos@.timer: diario" grep -qx "OnCalendar=daily" "$AQUI/saude-fotos@.
 verifica "disco.timer: de hora em hora" grep -qx "OnCalendar=hourly" "$AQUI/saude-disco.timer"
 verifica "disco.service chama disco.sh" grep -q "ExecStart=/opt/saude-familiar/server/infra/maquina/disco.sh" "$AQUI/saude-disco.service"
 
+
+echo "== backup.sh e restaurar.sh (fakes de aws, pg_dump, psql, pg_restore, runuser) =="
+FAKE_S3="$TMP/s3"; export FAKE_S3
+FAKE_PG_LOG="$TMP/pg.log"; export FAKE_PG_LOG
+cat > "$TMP/bin/runuser" <<'FAKE'
+#!/usr/bin/env bash
+# runuser -u <usuario> -- cmd...
+echo "runuser $*" >> "$FAKE_PG_LOG"
+shift 3
+exec "$@"
+FAKE
+cat > "$TMP/bin/pg_dump" <<'FAKE'
+#!/usr/bin/env bash
+echo "pg_dump $*" >> "$FAKE_PG_LOG"
+[ -n "${FAKE_PG_DUMP_FALHA:-}" ] && exit 1
+echo "DUMP-${*: -1}"
+FAKE
+cat > "$TMP/bin/pg_restore" <<'FAKE'
+#!/usr/bin/env bash
+echo "pg_restore $*" >> "$FAKE_PG_LOG"
+cat > /dev/null
+FAKE
+cat > "$TMP/bin/systemctl" <<'FAKE'
+#!/usr/bin/env bash
+echo "systemctl $*" >> "$FAKE_PG_LOG"
+FAKE
+cat > "$TMP/bin/psql" <<'FAKE'
+#!/usr/bin/env bash
+echo "psql $*" >> "$FAKE_PG_LOG"
+case "$*" in
+  *"to stdout with csv"*)
+    [ -n "${FAKE_BANCO_VIVO_AUSENTE:-}" ] && exit 2
+    cat "$FAKE_CONTAS_VIVO" 2>/dev/null; exit 0 ;;
+  *"from pg_database"*)
+    for b in ${FAKE_BANCOS:-}; do case "$*" in *"'$b'"*) echo 1;; esac; done; exit 0 ;;
+  *"count(*)"*) printf 'usuarios|3\nitens|7\ncontas_apagadas|2\n'; exit 0 ;;
+  *-c*) exit 0 ;;
+esac
+{ echo "STDIN-INICIO"; cat; echo "STDIN-FIM"; } >> "$FAKE_PG_LOG"
+FAKE
+chmod +x "$TMP/bin/"*
+# aws falso ampliado: s3 cp (local <-> "s3"), sns publish (so registra).
+cat > "$TMP/bin/aws" <<'FAKE'
+#!/usr/bin/env bash
+echo "$*" >> "$FAKE_AWS_LOG"
+if [ "$1 $2" = "ssm get-parameters-by-path" ]; then
+  [ -n "${FAKE_AWS_FALHA:-}" ] && exit 255
+  caminho=""
+  while [ $# -gt 0 ]; do [ "$1" = "--path" ] && caminho="$2"; shift; done
+  amb="$(basename "$caminho")"
+  printf '%s\t%s\n' "$caminho/DB_SENHA" "hexdb$amb"
+  printf '%s\t%s\n' "$caminho/SEGREDO_ORIGEM" "segredo-origem-$amb"
+  printf '%s\t%s\n' "$caminho/TURNSTILE_SECRET" "turnstile-$amb"
+  printf '%s\t%s\n' "$caminho/SMTP_USER" "robo@example.com"
+  printf '%s\t%s\n' "$caminho/SMTP_PASS" "abcd efgh ijkl mnop"
+  printf '%s\t%s\n' "$caminho/EMAIL_REMETENTE" "Saude <robo@example.com>"
+fi
+if [ "$1 $2" = "s3 cp" ]; then
+  src="$3"; dst="$4"
+  case "$dst" in
+    s3://*)
+      chave="${dst#s3://}"
+      if [ -n "${FAKE_S3_FALHA_CHAVE:-}" ]; then case "$chave" in *"$FAKE_S3_FALHA_CHAVE"*) exit 1;; esac; fi
+      mkdir -p "$FAKE_S3/$(dirname "$chave")"
+      echo "perm $(stat -c %a "$src") $chave" >> "$FAKE_AWS_LOG"
+      cp "$src" "$FAKE_S3/$chave" ;;
+    *)
+      chave="${src#s3://}"
+      [ -f "$FAKE_S3/$chave" ] || exit 1
+      cp "$FAKE_S3/$chave" "$dst" ;;
+  esac
+fi
+exit 0
+FAKE
+chmod +x "$TMP/bin/aws"
+printf 'S3_BUCKET_FOTOS=bucket-fotos-x\nS3_BUCKET_BACKUPS=bkt\nTOPICO_ALERTAS=arn:aws:sns:us-east-2:111:alertas\n' > "$TMP/maquina.env"
+
+backup() { PATH="$TMP/bin:$PATH" MAQUINA_ENV="$TMP/maquina.env" BACKUP_DATA=2026-11-21 DIR_TMP="$TMP/tmp-backup" \
+  bash "$AQUI/backup.sh"; }
+rm -rf "$FAKE_S3"; : > "$FAKE_AWS_LOG"; : > "$FAKE_PG_LOG"; mkdir -p "$TMP/tmp-backup"
+backup >/dev/null 2>&1; RC=$?
+if [ "$RC" -eq 0 ]; then ok "backup: sai com 0"; else falha "backup: sai com 0 (rc=$RC)"; fi
+verifica "backup: dump de producao em s3://bkt/producao/2026-11-21.dump" test -s "$FAKE_S3/bkt/producao/2026-11-21.dump"
+verifica "backup: dump de teste em s3://bkt/teste/2026-11-21.dump" test -s "$FAKE_S3/bkt/teste/2026-11-21.dump"
+verifica "backup: pg_dump -Fc do banco do ambiente" bash -c "grep -q 'pg_dump -Fc saude_producao' '$FAKE_PG_LOG' && grep -q 'pg_dump -Fc saude_teste' '$FAKE_PG_LOG'"
+verifica "backup: pg_dump roda como o usuario postgres (peer)" grep -q "runuser -u postgres -- pg_dump" "$FAKE_PG_LOG"
+verifica "backup: lista de contas_apagadas tambem vai ao S3" bash -c "test -f '$FAKE_S3/bkt/producao/contas_apagadas.csv' && test -f '$FAKE_S3/bkt/teste/contas_apagadas.csv'"
+verifica "backup: dump enviado com permissao 600" grep -q "^perm 600 bkt/producao/2026-11-21.dump" "$FAKE_AWS_LOG"
+verifica "backup: nenhum arquivo local sobra" bash -c "[ -z \"\$(ls -A '$TMP/tmp-backup')\" ]"
+verifica "backup: nunca apaga nada no S3 (sem rm/delete/mv/sync)" bash -c "! grep -qE 's3 (rm|mv|sync)|delete-object|s3api' '$FAKE_AWS_LOG'"
+verifica "backup: sem SNS quando tudo da certo" bash -c "! grep -q 'sns publish' '$FAKE_AWS_LOG'"
+verifica "backup: nada de senha/URL de banco nos argumentos" bash -c "! grep -qiE 'postgres://|password|hexdb' '$FAKE_AWS_LOG' '$FAKE_PG_LOG'"
+verifica "backup: AWS CLI na regiao us-east-2" grep -q -- "--region us-east-2" "$FAKE_AWS_LOG"
+
+rm -rf "$FAKE_S3"; : > "$FAKE_AWS_LOG"
+FAKE_S3_FALHA_CHAVE="teste/2026-11-21.dump" backup >/dev/null 2>&1; RC=$?
+if [ "$RC" -ne 0 ]; then ok "backup: falha no envio de teste sai com erro"; else falha "backup: falha no envio de teste sai com erro"; fi
+verifica "backup: falha em teste nao impede producao" test -s "$FAKE_S3/bkt/producao/2026-11-21.dump"
+verifica "backup: falha publica no SNS do maquina.env" grep -q -- "sns publish --topic-arn arn:aws:sns:us-east-2:111:alertas" "$FAKE_AWS_LOG"
+verifica "backup: alerta cita o ambiente que falhou" grep -q "ambiente teste" "$FAKE_AWS_LOG"
+verifica "backup: falha tambem nao deixa arquivo local" bash -c "[ -z \"\$(ls -A '$TMP/tmp-backup')\" ]"
+
+rm -rf "$FAKE_S3"; : > "$FAKE_AWS_LOG"
+FAKE_PG_DUMP_FALHA=1 backup >/dev/null 2>&1; RC=$?
+if [ "$RC" -ne 0 ]; then ok "backup: pg_dump falho sai com erro"; else falha "backup: pg_dump falho sai com erro"; fi
+verifica "backup: pg_dump falho nao envia dump vazio" bash -c "! ls '$FAKE_S3/bkt/producao/2026-11-21.dump' 2>/dev/null"
+verifica "backup: pg_dump falho publica no SNS" grep -q "sns publish" "$FAKE_AWS_LOG"
+
+# restaurar
+printf '11111111-1111-1111-1111-111111111111,2026-11-20 10:00:00+00,\n' > "$TMP/contas-vivo.csv"; export FAKE_CONTAS_VIVO="$TMP/contas-vivo.csv"
+mkdir -p "$FAKE_S3/bkt/producao"
+echo "DUMP-saude_producao" > "$FAKE_S3/bkt/producao/2026-11-01.dump"
+printf '22222222-2222-2222-2222-222222222222,2026-11-19 10:00:00+00,\n' > "$FAKE_S3/bkt/producao/contas_apagadas.csv"
+restaurar() { PATH="$TMP/bin:$PATH" MAQUINA_ENV="$TMP/maquina.env" bash "$AQUI/restaurar.sh" "$@"; }
+rlimpa() { : > "$FAKE_AWS_LOG"; : > "$FAKE_PG_LOG"; }
+
+rlimpa; SAIDA_R="$(FAKE_BANCOS="saude_producao" restaurar producao 2026-11-01 2>&1)"; RC=$?
+if [ "$RC" -eq 0 ]; then ok "restaurar: caminho feliz sai com 0"; else falha "restaurar: caminho feliz sai com 0 (rc=$RC)"; fi
+verifica "restaurar: cria saude_restauro_producao (padrao)" grep -q 'create database "saude_restauro_producao"' "$FAKE_PG_LOG"
+verifica "restaurar: pg_restore no banco de destino" grep -q "pg_restore .*-d saude_restauro_producao" "$FAKE_PG_LOG"
+verifica "restaurar: baixa s3://bkt/producao/2026-11-01.dump" grep -q "s3 cp s3://bkt/producao/2026-11-01.dump" "$FAKE_AWS_LOG"
+verifica "restaurar: nao toca no banco vivo (sem drop)" bash -c "! grep -qi 'drop database' '$FAKE_PG_LOG'"
+verifica "restaurar: exporta contas_apagadas do banco vivo ANTES de criar o destino" bash -c "
+  a=\$(grep -n 'to stdout with csv' '$FAKE_PG_LOG' | head -1 | cut -d: -f1)
+  b=\$(grep -n 'create database' '$FAKE_PG_LOG' | head -1 | cut -d: -f1)
+  [ -n \"\$a\" ] && [ -n \"\$b\" ] && [ \"\$a\" -lt \"\$b\" ]"
+verifica "restaurar: exporta do banco vivo saude_producao" grep -q "psql .*-d saude_producao .*to stdout with csv" "$FAKE_PG_LOG"
+verifica "restaurar: reinsere conta do banco vivo" grep -q "11111111-1111-1111-1111-111111111111" "$FAKE_PG_LOG"
+verifica "restaurar: reinsere conta da lista guardada no S3" grep -q "22222222-2222-2222-2222-222222222222" "$FAKE_PG_LOG"
+verifica "restaurar: reaplica a exclusao em usuarios" grep -q "delete from usuarios where id in (select user_id from contas_apagadas)" "$FAKE_PG_LOG"
+verifica "restaurar: reinsercao depois do pg_restore, exclusao depois da reinsercao" bash -c "
+  a=\$(grep -n '^pg_restore' '$FAKE_PG_LOG' | head -1 | cut -d: -f1)
+  b=\$(grep -n 'insert into contas_apagadas' '$FAKE_PG_LOG' | head -1 | cut -d: -f1)
+  c=\$(grep -n 'delete from usuarios' '$FAKE_PG_LOG' | head -1 | cut -d: -f1)
+  [ -n \"\$a\" ] && [ -n \"\$b\" ] && [ -n \"\$c\" ] && [ \"\$a\" -lt \"\$b\" ] && [ \"\$b\" -lt \"\$c\" ]"
+verifica "restaurar: imprime contagens de usuarios, itens e contas_apagadas" bash -c "echo '$SAIDA_R' | grep -q 'usuarios' && echo '$SAIDA_R' | grep -q 'itens' && echo '$SAIDA_R' | grep -q 'contas_apagadas'"
+
+rlimpa; FAKE_BANCOS="saude_producao" restaurar producao 2026-11-01 saude_producao >/dev/null 2>&1; RC=$?
+if [ "$RC" -ne 0 ]; then ok "restaurar: banco vivo como destino sem --substituir e recusado"; else falha "restaurar: banco vivo como destino sem --substituir e recusado"; fi
+verifica "restaurar: recusa nao cria nem restaura nada" bash -c "! grep -qE 'create database|^pg_restore|drop database' '$FAKE_PG_LOG'"
+rlimpa; FAKE_BANCOS="saude_producao saude_restauro_producao" restaurar producao 2026-11-01 >/dev/null 2>&1; RC=$?
+if [ "$RC" -ne 0 ]; then ok "restaurar: destino ja existente e recusado"; else falha "restaurar: destino ja existente e recusado"; fi
+rlimpa; FAKE_BANCOS="saude_producao" restaurar producao 2026-11-01 'x; drop' >/dev/null 2>&1; RC=$?
+if [ "$RC" -ne 0 ]; then ok "restaurar: nome de banco invalido e recusado"; else falha "restaurar: nome de banco invalido e recusado"; fi
+rlimpa; restaurar outro 2026-11-01 >/dev/null 2>&1; RC=$?
+if [ "$RC" -ne 0 ]; then ok "restaurar: ambiente invalido e recusado"; else falha "restaurar: ambiente invalido e recusado"; fi
+rlimpa; restaurar producao ontem >/dev/null 2>&1; RC=$?
+if [ "$RC" -ne 0 ]; then ok "restaurar: data invalida e recusada"; else falha "restaurar: data invalida e recusada"; fi
+rlimpa; FAKE_BANCOS="saude_producao" restaurar producao 2026-12-31 >/dev/null 2>&1; RC=$?
+if [ "$RC" -ne 0 ]; then ok "restaurar: dump inexistente aborta"; else falha "restaurar: dump inexistente aborta"; fi
+verifica "restaurar: dump inexistente nao cria banco" bash -c "! grep -q 'create database' '$FAKE_PG_LOG'"
+
+rlimpa; FAKE_BANCOS="saude_producao" restaurar producao 2026-11-01 saude_producao --substituir >/dev/null 2>&1; RC=$?
+if [ "$RC" -eq 0 ]; then ok "restaurar: --substituir sobre o banco vivo funciona"; else falha "restaurar: --substituir sobre o banco vivo funciona (rc=$RC)"; fi
+verifica "restaurar: --substituir exporta contas ANTES do drop" bash -c "
+  a=\$(grep -n 'to stdout with csv' '$FAKE_PG_LOG' | head -1 | cut -d: -f1)
+  b=\$(grep -n 'drop database' '$FAKE_PG_LOG' | head -1 | cut -d: -f1)
+  [ -n \"\$a\" ] && [ -n \"\$b\" ] && [ \"\$a\" -lt \"\$b\" ]"
+verifica "restaurar: --substituir para e religa a API" bash -c "grep -q 'systemctl stop saude-api@producao' '$FAKE_PG_LOG' && grep -q 'systemctl start saude-api@producao' '$FAKE_PG_LOG'"
+
+rlimpa; FAKE_BANCO_VIVO_AUSENTE=1 FAKE_BANCOS="" restaurar producao 2026-11-01 >/dev/null 2>&1; RC=$?
+if [ "$RC" -eq 0 ]; then ok "restaurar: sem banco vivo segue com a lista do S3"; else falha "restaurar: sem banco vivo (rc=$RC)"; fi
+verifica "restaurar: sem banco vivo ainda reaplica a lista do S3" grep -q "22222222-2222-2222-2222-222222222222" "$FAKE_PG_LOG"
+rm -f "$FAKE_S3/bkt/producao/contas_apagadas.csv"
+rlimpa; FAKE_BANCOS="saude_producao" restaurar producao 2026-11-01 >/dev/null 2>&1; RC=$?
+if [ "$RC" -eq 0 ]; then ok "restaurar: lista do S3 ausente nao impede (so avisa)"; else falha "restaurar: lista do S3 ausente (rc=$RC)"; fi
+
+echo "== backup: unit e timer =="
+B="$AQUI/saude-backup.service"; BT="$AQUI/saude-backup.timer"
+for k in "Type=oneshot" "ExecStart=/opt/saude-familiar/server/infra/maquina/backup.sh" "NoNewPrivileges=true" "ProtectSystem=strict" "PrivateTmp=true" "Wants=network-online.target" "After=network-online.target postgresql.service"; do
+  verifica "saude-backup.service: $k" grep -qx "$k" "$B"
+done
+verifica "saude-backup.timer: 03:30 UTC" grep -qxF "OnCalendar=*-*-* 03:30:00 UTC" "$BT"
+verifica "saude-backup.timer: Persistent=true" grep -qx "Persistent=true" "$BT"
+verifica "provisionar.sh instala e habilita o timer do backup" bash -c "grep -q 'saude-backup.service' '$AQUI/provisionar.sh' && grep -q 'enable --now saude-backup.timer' '$AQUI/provisionar.sh'"
+verifica "backup.sh e restaurar.sh: bash -n" bash -c "bash -n '$AQUI/backup.sh' && bash -n '$AQUI/restaurar.sh'"
 echo "== provisionar.sh =="
 P="$AQUI/provisionar.sh"
 verifica "bash -n" bash -n "$P"
