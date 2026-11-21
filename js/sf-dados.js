@@ -121,6 +121,6 @@
   }
 
   raiz.SF = raiz.SF || {};
-  raiz.SF.dados = { NOMES: NOMES, estadoVazio: estadoVazio, paraItens: paraItens, diferencas: diferencas, aplicar: aplicar };
+  raiz.SF.dados = { NOMES: NOMES, chaveValida: chaveValida, estadoVazio: estadoVazio, paraItens: paraItens, diferencas: diferencas, aplicar: aplicar };
   if (typeof module !== "undefined") module.exports = raiz.SF.dados;
 })(typeof window !== "undefined" ? window : globalThis);
