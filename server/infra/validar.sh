@@ -20,6 +20,9 @@ uvx --with pyyaml python -I testar_template.py
 echo "== cfn-lint =="
 uvx cfn-lint "$TEMPLATE"
 
+echo "== shellcheck do fumaca.sh =="
+uvx --from shellcheck-py shellcheck.exe fumaca.sh
+
 echo "== cfn-guard =="
 if command -v cfn-guard >/dev/null 2>&1; then
   if [ -f regras.guard ]; then
