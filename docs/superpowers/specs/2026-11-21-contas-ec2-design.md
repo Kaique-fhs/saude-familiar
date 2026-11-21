@@ -1,10 +1,10 @@
-# Meu Prato com contas (AWS EC2 + Postgres) — design
+# Saúde Familiar com contas (AWS EC2 + Postgres) — design
 
-Data: 2026-11-21 · Projeto: `plano-alimentar` (Meu Prato) · Status: aprovado pelo Kaique em 2026-11-21
+Data: 2026-11-21 · Projeto: `saude-familiar` (app Saúde Familiar; antes `plano-alimentar` / Meu Prato) · Status: aprovado pelo Kaique em 2026-11-21; atualizado em 2026-11-21 com ADR-002 (login próprio), ADR-003 (região us-east-2) e o nome novo
 
 ## 1. Intenção
 
-Hoje o Meu Prato é o app de uma pessoa só: o plano alimentar da Rejane está escrito no `data.js`
+Hoje o Saúde Familiar (antes Meu Prato) é o app de uma pessoa só: o plano alimentar da Rejane está escrito no `data.js`
 e tudo o que ela marca (diário, checks, treinos, registros com foto) fica só no aparelho dela.
 
 O Kaique quer que **outras pessoas criem conta** e usem o mesmo app, **cada uma com o próprio
@@ -50,9 +50,11 @@ hoje, inclusive funcionar sem internet.
 ## 5. Restrições
 
 - **Site** continua estático, sem build, no GitHub Pages pela branch `main`
-  (`https://kaique-fhs.github.io/plano-alimentar/`).
-- **Servidor** numa EC2 na região mais barata, **us-east-1** (decisão do Kaique: latência
-  maior não prejudica, porque o app grava primeiro no aparelho).
+  (`https://kaique-fhs.github.io/saude-familiar/`; o endereço antigo `/plano-alimentar/` redireciona).
+- **Só site por enquanto** (decisão do Kaique): sem convite para instalar o app; o service worker
+  continua, para o site abrir sem internet.
+- **Servidor** numa EC2 na região do projeto AWS, **us-east-2** (ADR-003: o projeto não permite outra
+  região; mesmo preço da us-east-1). Latência maior não prejudica: o app grava primeiro no aparelho.
 - Sem domínio próprio: HTTPS vem do **CloudFront** (`https://<id>.cloudfront.net`) na frente da EC2.
 - Sem domínio, os serviços de e-mail profissionais (SES, Resend) não entregam para qualquer
   pessoa. E-mail sai por **Gmail SMTP** com uma conta criada só para o app e senha de app
@@ -61,8 +63,9 @@ hoje, inclusive funcionar sem internet.
   fixo) + centavos de S3. Nada além disso sem o Kaique concordar.
 - Dados de saúde (LGPD): a pessoa precisa conseguir **apagar a própria conta e todos os dados**,
   inclusive fotos.
-- Contas externas (AWS, Gmail do app) são criadas pelo Kaique; a sessão recebe acesso por um
-  usuário IAM com permissões limitadas, nunca a conta raiz.
+- Contas externas (AWS, Gmail do app) são criadas pelo Kaique. A sessão acessa a AWS pela linha de
+  comando com `aws login` no perfil `saude-familiar` (credencial temporária, sem chave guardada)
+  e pelo MCP da AWS; projeto AWS na nova experiência, com as regras do `CLAUDE.md`.
 
 ## 6. Abordagens consideradas
 
@@ -93,10 +96,9 @@ hoje, inclusive funcionar sem internet.
 Pelo Kaique: cadastro aberto; plano por pessoa, opcional, cadastrado pela própria pessoa; o plano
 atual é da **Rejane** e vai para a conta dela; metas de exercício em que **cada meta escolhe**
 entre dias fixos ou vezes por semana, com **duração opcional**; guarda no aparelho e sincroniza;
-EC2 com Postgres; CloudFront; região mais barata.
+EC2 com Postgres; CloudFront; região do projeto (us-east-2); **login próprio, sem biblioteca** (ADR-002).
 
-Propostas da sessão aceitas pelo Kaique (sem objeção): Node.js no servidor; biblioteca pronta de
-login (Better Auth); fotos no S3; backup diário do banco para o S3; e-mail por Gmail até haver
+Propostas da sessão aceitas pelo Kaique (sem objeção): Node.js no servidor; fotos no S3; backup diário do banco para o S3; e-mail por Gmail até haver
 domínio.
 
 ## 8. Como funciona — app
@@ -211,9 +213,9 @@ Celular / navegador  ──HTTPS──>  GitHub Pages  (site estático, como hoj
         └──HTTPS──>  CloudFront (https://<id>.cloudfront.net, cache desligado)
                          │  HTTPS + cabeçalho secreto (security group só com a lista de IPs do CloudFront)
                          v
-                     EC2 us-east-1 (máquina pequena, Linux, IP fixo)
+                     EC2 us-east-2 (máquina pequena, Linux, IP fixo)
                        ├─ API Node.js (serviço do sistema, reinicia sozinho)
-                       │    ├─ login (Better Auth)  ── e-mail ──> Gmail SMTP
+                       │    ├─ login próprio (node:crypto) ── e-mail ──> Gmail SMTP
                        │    ├─ sincronização, plano, metas, conta
                        │    └─ URLs assinadas ──> S3 (fotos, privado)
                        └─ Postgres (só escuta na própria máquina)
@@ -222,13 +224,16 @@ Celular / navegador  ──HTTPS──>  GitHub Pages  (site estático, como hoj
 
 ### 9.2 Regras do servidor
 
-- **API Node.js** com Better Auth para cadastro, confirmação de e-mail, sessão, troca de senha.
-  Toda rota de dados exige sessão e filtra pelo id do usuário da sessão; além disso, o Postgres
+- **API Node.js com login próprio** (ADR-002), só com `node:crypto`: senha com `scrypt` e sal por
+  usuário; sessão por token aleatório de 32 bytes no cabeçalho `Authorization`, banco guarda só o
+  hash SHA-256; sessão expira após 60 dias sem uso e sair apaga a sessão; tokens de confirmação
+  (24 h) e de troca de senha (1 h) de uso único, guardados como hash; comparação em tempo
+  constante; cadastro e "esqueci minha senha" respondem igual exista ou não o e-mail; trocar a
+  senha encerra todas as sessões. Toda rota de dados exige sessão e filtra pelo id do usuário da sessão; além disso, o Postgres
   usa RLS por usuário como segunda trava. *(Decisão da sessão.)*
 - **CORS** liberado só para `https://kaique-fhs.github.io` (e `http://localhost` no teste).
-- **Sessão** entre domínios diferentes (GitHub Pages × CloudFront): o construtor escolhe entre
-  token no cabeçalho `Authorization` (guardado no aparelho) ou cookie `SameSite=None; Secure`,
-  sabendo que Safari/iPhone bloqueia cookie de terceiros — token no cabeçalho é o caminho seguro.
+- **Sessão** entre domínios diferentes (GitHub Pages × CloudFront): token no cabeçalho
+  `Authorization`, guardado no aparelho (sem cookie, que o Safari bloqueia entre domínios).
 - **CloudFront**: cache desligado para a API, repassa cabeçalhos `Authorization` e de CORS.
 - **Trecho CloudFront → EC2 também em HTTPS.** *(Decisão da sessão: passam senha, token e dados de
   saúde.)* Sem domínio, a EC2 usa um nome grátis baseado no IP fixo (ex.: `1-2-3-4.sslip.io`)
@@ -246,7 +251,7 @@ Celular / navegador  ──HTTPS──>  GitHub Pages  (site estático, como hoj
 - **S3**: um bucket privado para fotos (caminho `<ambiente>/<user_id>/<foto_id>.jpg`) e um para
   backups, com bloqueio de acesso público. A EC2 acessa o S3 por papel IAM da máquina, sem chave
   guardada em arquivo.
-- **Segredos** (senha do banco, senha de app do Gmail, segredo do Better Auth) ficam num arquivo
+- **Segredos** (senha do banco, senha de app do Gmail, segredo do cabeçalho do CloudFront, chave do Turnstile) ficam num arquivo
   de ambiente na EC2, fora do repositório; o repositório só tem um exemplo sem valores.
 - **Backup**: `pg_dump` diário dos dois bancos para o S3, guardando 30 dias; teste de restauração
   antes do lançamento 1.
@@ -262,8 +267,8 @@ Celular / navegador  ──HTTPS──>  GitHub Pages  (site estático, como hoj
 
 ### 9.3 Configuração externa (feita com o Kaique)
 
-1. Kaique cria a conta AWS (com cartão) e um usuário IAM com permissões limitadas para a sessão;
-   a sessão orienta o passo a passo.
+1. Feito em 21/11/2026: conta AWS criada (projeto na nova experiência, região us-east-2), AWS CLI
+   e Agent Toolkit configurados, perfil `saude-familiar`.
 2. Kaique cria a conta Gmail do app e a senha de app.
 3. A sessão cria EC2, IP fixo, security group, papel IAM, buckets S3, CloudFront, orçamento de
    alerta; instala Postgres, a API e o backup; registra cada passo num roteiro em `server/` para

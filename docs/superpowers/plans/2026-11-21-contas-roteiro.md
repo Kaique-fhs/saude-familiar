@@ -1,4 +1,4 @@
-# Contas no Meu Prato — sequência de planos
+# Contas no Saúde Familiar — sequência de planos
 
 Spec: `docs/superpowers/specs/2026-11-21-contas-ec2-design.md` · ADR: `docs/ams/adr/ADR-001-usar-servidor-proprio-na-aws-para-contas-com-app-local-primeiro.md`
 

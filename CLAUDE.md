@@ -58,6 +58,8 @@ Where this guidance conflicts with the project's own instructions, the project's
 
 ### Help level
 
+- **help_level do Kaique: HIGH** (escolhido em 21/11/2026). Não perguntar de novo.
+
 - help_level (required): LOW, MEDIUM, or HIGH. While a user is building, you MUST ask the user: "How much guidance would you like from me? Low (I only flag security risks), medium (I ask a couple of clarifying questions if something seems off), or high (I explain what I'm doing, suggest alternatives, and flag best practices)."
 
 You CAN update this rule file to save a user's help_level.
