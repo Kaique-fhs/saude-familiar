@@ -89,8 +89,8 @@ psql_ -d postgres -c "create database \"$destino\" owner \"$dono\""
 {
   echo "create temp table _ca (like contas_apagadas);"
   echo "copy _ca from stdin with csv;"
-  sed -e '$a\' "$tmp/vivo.csv"
-  sed -e '$a\' "$tmp/s3.csv"
+  awk 1 "$tmp/vivo.csv"
+  awk 1 "$tmp/s3.csv"
   echo '\.'
   echo "insert into contas_apagadas select distinct on (user_id) * from _ca order by user_id, apagada_em on conflict (user_id) do nothing;"
   echo "delete from usuarios where id in (select user_id from contas_apagadas);"
