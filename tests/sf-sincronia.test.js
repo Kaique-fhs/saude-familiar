@@ -222,13 +222,62 @@ test("registro com foto só sobe depois da foto confirmada", async () => {
   assert.equal(fila(h).length, 0);
 });
 
-test("registro cuja foto segue pendente é pulado, sem travar os demais", async () => {
+test("erro de foto que não é rede mantém a foto pendente e não para a fila (status erro)", async () => {
   const h = montar({ foto: () => { throw new ErroApi(500, "foto-envio"); } });
   h.mudar(Object.assign(comFoto(), { favs: ["a"] }));
   await h.sinc.sincronizar();
-  // a foto falhou: nada sobe nesta rodada, mas nada se perde
-  assert.equal(fila(h).length, 2);
+  assert.deepEqual(h.reg.envios.map((m) => m.map((x) => x.chave)), [["a"]]);
+  assert.deepEqual(fila(h).map((m) => m.tipo), ["registro"]);
+  assert.deepEqual(h.local.ler("u1", "fotos-pendentes", []), [ID_FOTO]);
   assert.equal(h.sinc.status(), "erro");
+  assert.ok(h.sinc.esperaMs() > 0);
+});
+
+test("403 da API que não é do S3 (ex.: origem) não manda o registro para rejeitados", async () => {
+  const h = montar({ foto: () => { throw new ErroApi(403, "origem"); } });
+  h.mudar(comFoto());
+  await h.sinc.sincronizar();
+  assert.deepEqual(h.sinc.rejeitados(), []);
+  assert.equal(fila(h).length, 1);
+  assert.deepEqual(h.local.ler("u1", "fotos-pendentes", []), [ID_FOTO]);
+  assert.equal(h.sinc.status(), "erro");
+});
+
+test("lista mutada no lugar entre dois registrar: a mudança não se perde", () => {
+  const h = montar();
+  const est = com({ favs: ["a"] });
+  h.sinc.registrar(VAZIO, est);
+  est.favs.push("b"); // o app muta a lista no lugar
+  h.sinc.registrar(est, est);
+  assert.deepEqual(fila(h).map((m) => m.chave).sort(), ["a", "b"]);
+});
+
+test("duas instâncias sobre o mesmo armazenamento não apagam a fila uma da outra", () => {
+  const local = localFalso();
+  const h1 = montar({ local });
+  const h2 = montar({ local });
+  h1.mudar(com({ favs: ["a"] }));
+  h2.mudar(com({ favs: ["b"] }));
+  assert.deepEqual(fila(h1).map((m) => m.chave).sort(), ["a", "b"]);
+  assert.equal(h1.sinc.pendentes(), 2);
+});
+
+test("armazenamento cheio: status erro, aviso local e a mudança é recalculada no próximo registrar", () => {
+  const local = localFalso();
+  const gravar = local.gravar;
+  let cheio = true;
+  local.gravar = (u, n, v) => (cheio ? false : gravar(u, n, v));
+  const h = montar({ local });
+  h.sinc.registrar(VAZIO, com({ favs: ["a"] }));
+  assert.equal(h.sinc.status(), "erro");
+  assert.ok(h.sinc.avisos().length >= 1);
+  cheio = false;
+  h.sinc.registrar(VAZIO, com({ favs: ["a", "b"] }));
+  assert.deepEqual(fila(h).map((m) => m.chave).sort(), ["a", "b"]);
+});
+
+test("criar exige deps.estado", () => {
+  assert.throws(() => Sincronia.criar({ api: {}, local: localFalso(), fotos: {}, userId: "u1" }), /estado/);
 });
 
 test("foto enviada fica gravada: nova instância e novo registro não reenviam a foto", async () => {
