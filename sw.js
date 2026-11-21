@@ -1,13 +1,15 @@
 // Guarda o site no aparelho para abrir sem internet.
 // Mudanças nos arquivos chegam sozinhas na abertura seguinte do app.
 // Aumentar VERSAO (e o ?v= no index.html) é opcional: faz a mudança valer já na próxima abertura.
-var VERSAO = "meu-prato-v28";
+var VERSAO = "meu-prato-v29";
 var ARQUIVOS = [
   "./",
   "./index.html",
-  "./styles.css?v=28",
-  "./data.js?v=28",
-  "./app.js?v=28",
+  "./styles.css?v=29",
+  "./config.js?v=29",
+  "./data.js?v=29",
+  "./js/sf-api.js?v=29",
+  "./app.js?v=29",
   "./logo.svg",
   "./icon-192.png",
   "./icon-512.png",
@@ -63,6 +65,9 @@ self.addEventListener("fetch", function (e) {
     e.waitUntil(buscar.catch(function () {}));
     return;
   }
+
+  // Outra origem (a API, as fotos assinadas): passa direto, sem cache. Só as fontes do Google são guardadas.
+  if (url.origin !== location.origin && !/fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) return;
 
   // Fontes do Google: não mudam, então cache primeiro e rede como reserva.
   if (/fonts\.(googleapis|gstatic)\.com$/.test(url.hostname)) {
