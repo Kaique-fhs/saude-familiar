@@ -1,5 +1,6 @@
 # ADR-001 - Usar servidor proprio na AWS para contas com app local primeiro
 
+**Emendada por:** ADR-002, ADR-003
 **Status:** Aceito
 **Data:** 21/11/2026
 
