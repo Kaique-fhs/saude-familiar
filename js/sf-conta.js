@@ -43,6 +43,23 @@
       " que ainda não foi enviada. Se sair agora, ela continua guardada neste aparelho e sobe quando você entrar de novo.";
   }
 
+  // Confirmação do Sair quando ainda há itens na fila (fila + fotos pendentes).
+  function textoConfirmarSair(n) {
+    if (!n) return "";
+    var um = n === 1;
+    return "Há " + n + (um ? " item ainda não enviado. Ele fica guardado" : " itens ainda não enviados. Eles ficam guardados") +
+      " neste aparelho e sobe" + (um ? "" : "m") + " quando você entrar de novo. Toque de novo em Sair para confirmar.";
+  }
+
+  // Texto do indicador do cabeçalho para cada status de SF.sincronia.
+  var STATUS = {
+    ok: "Tudo salvo na conta", conflito: "Tudo salvo na conta",
+    pendente: "Salvo no aparelho, enviando…", enviando: "Salvo no aparelho, enviando…",
+    offline: "Sem internet, envio pendente", erro: "Não consegui enviar, vou tentar de novo"
+  };
+  var MSG_CONFLITO = "Esta refeição já foi registrada em outro aparelho";
+  function textoStatus(s) { return STATUS[s] || STATUS.pendente; }
+
   var TIPOS = {
     fav: "Receita favorita", sel: "Receita escolhida", check: "Item da lista de compras",
     checkplano: "Item do plano", quero: "Quero comer", feito: "Refeição feita",
@@ -56,6 +73,7 @@
   function confirmacaoApagarOk(t) { return String(t || "").trim().toUpperCase() === "APAGAR"; }
 
   var MSG_LIMPEZA = "Sua conta foi apagada, mas não deu para apagar as fotos guardadas neste aparelho. Feche as outras abas do app e tente de novo.";
+  var MSG_FOTOS_FICAM = "As fotos continuam guardadas neste aparelho.";
   var MSG_LIMPEZA_SAIR = "Você saiu, mas não deu para apagar as fotos guardadas neste aparelho. Feche as outras abas do app e tente de novo.";
 
   // Roda aoApagar sem deixar a falha dele virar erro da API: devolve true se a limpeza local falhou.
@@ -140,13 +158,21 @@
 
     function aoApagar(userId) { return o.aoApagar ? o.aoApagar(userId) : undefined; }
 
-    function esconder() { rz.hidden = true; rz.textContent = ""; }
+    // Tira o widget do Turnstile antes de trocar de tela (senão ele avisa no console que perdeu o elemento).
+    function soltarCaptcha() {
+      if (turnstileId === null) return;
+      try { if (janela.turnstile) janela.turnstile.remove(turnstileId); } catch (e) { /* ignora */ }
+      turnstileId = null;
+    }
+
+    function esconder() { soltarCaptcha(); rz.hidden = true; rz.textContent = ""; }
 
     // Esqueleto de uma tela: título, mensagem de erro anunciada, corpo.
     function tela(titulo, sub) {
       var erro = el("p", { "class": "conta-erro", role: "alert", "aria-live": "assertive" });
       var h = el("h2", { texto: titulo, tabindex: "-1" });
       var caixa = el("div", { "class": "conta-caixa" }, [h]);
+      soltarCaptcha();
       if (sub) caixa.appendChild(el("p", { "class": "conta-sub", texto: sub }));
       caixa.appendChild(erro);
       rz.textContent = "";
@@ -164,6 +190,11 @@
       var b = el("button", { type: "button", "class": "conta-link", texto: texto });
       b.addEventListener("click", aoClicar);
       return b;
+    }
+    // "Voltar ao app": só quando o app embaixo da tela pode ser usado (modo antigo ou conta).
+    function linksComVoltar(links) {
+      if (o.podeVoltar && o.podeVoltar()) links.push(link("Voltar ao app", function () { esconder(); if (o.aoVoltar) o.aoVoltar(); }));
+      return el("div", { "class": "conta-links" }, links);
     }
     function dizerErro(t, codigo) { t.erro.textContent = mensagemErro(codigo); }
     function ocupado(b, sim, texto) { b.disabled = sim; b.textContent = sim ? "Aguarde..." : texto; }
@@ -206,7 +237,7 @@
           foco(senha.input);
         });
       });
-      t.caixa.appendChild(el("div", { "class": "conta-links" }, [
+      t.caixa.appendChild(linksComVoltar([
         link("Esqueci minha senha", mostrarEsqueci),
         link("Criar conta", mostrarCadastro)
       ]));
@@ -231,7 +262,7 @@
           dizerErro(t, codigoDe(e));
         });
       });
-      t.caixa.appendChild(el("div", { "class": "conta-links" }, [link("Já tenho conta", function () { mostrarEntrar(); })]));
+      t.caixa.appendChild(linksComVoltar([link("Já tenho conta", function () { mostrarEntrar(); })]));
       desenharCaptcha(caixaCaptcha);
       foco(email.input);
     }
@@ -260,7 +291,7 @@
           dizerErro(t, codigoDe(e));
         });
       });
-      t.caixa.appendChild(el("div", { "class": "conta-links" }, [link("Voltar para entrar", function () { mostrarEntrar(); })]));
+      t.caixa.appendChild(linksComVoltar([link("Voltar para entrar", function () { mostrarEntrar(); })]));
       desenharCaptcha(caixaCaptcha);
       foco(email.input);
     }
@@ -303,7 +334,7 @@
         });
       });
       var seguir = botao("Continuar sem apagar", "");
-      seguir.addEventListener("click", function () { mostrarEntrar(); });
+      seguir.addEventListener("click", function () { mostrarEntrar(MSG_FOTOS_FICAM); });
       t.caixa.appendChild(tentar);
       t.caixa.appendChild(seguir);
       foco(tentar);
@@ -315,18 +346,32 @@
       var t = tela("Conta", null);
       t.caixa.appendChild(el("p", { "class": "conta-email", texto: s.usuario.email }));
 
-      var fila = local.ler(s.usuario.id, "fila", []);
-      var aviso = textoSair(Array.isArray(fila) ? fila.length : 0);
-      if (aviso) t.caixa.appendChild(el("p", { "class": "conta-aviso", texto: aviso }));
+      function pendentes() {
+        if (o.pendentes) return o.pendentes(s.usuario.id);
+        var fila = local.ler(s.usuario.id, "fila", []);
+        return Array.isArray(fila) ? fila.length : 0;
+      }
+      var aviso = el("p", { "class": "conta-aviso", texto: textoSair(pendentes()) });
+      aviso.hidden = !aviso.textContent;
+      t.caixa.appendChild(aviso);
 
       var sair = botao("Sair", "flex");
+      var confirmouSair = false;
       sair.addEventListener("click", function () {
+        var n = pendentes();
+        if (n > 0 && !confirmouSair) {
+          confirmouSair = true;
+          aviso.textContent = textoConfirmarSair(n);
+          aviso.hidden = false;
+          sair.textContent = "Sair mesmo assim";
+          return;
+        }
         ocupado(sair, true, "Sair");
-        sairDaConta({ api: api, local: local, userId: s.usuario.id, pendentes: Array.isArray(fila) ? fila.length : 0, aoApagar: aoApagar }).then(function (r) {
-          esconder();
-          if (o.aoSair) o.aoSair();
+        function saiu() { esconder(); if (o.aoSair) o.aoSair(); }
+        sairDaConta({ api: api, local: local, userId: s.usuario.id, pendentes: n, aoApagar: aoApagar }).then(function (r) {
+          saiu();
           if (r.limpezaFalhou) mostrarLimpeza(s.usuario.id, MSG_LIMPEZA_SAIR);
-        });
+        }, saiu); // erro do armazenamento não pode deixar a tela presa em "Aguarde..."
       });
       t.caixa.appendChild(sair);
 
@@ -400,10 +445,10 @@
 
     return {
       iniciar: iniciar,
-      mostrar: function (nome) {
+      mostrar: function (nome, aviso) {
         if (nome === "conta") mostrarConta();
         else if (nome === "cadastro") mostrarCadastro();
-        else mostrarEntrar();
+        else mostrarEntrar(aviso);
       },
       esconder: esconder
     };
@@ -413,7 +458,8 @@
   raiz.SF.conta = {
     modoInicial: modoInicial, lerHash: lerHash, mensagemErro: mensagemErro,
     validarEmail: validarEmail, validarSenha: validarSenha, textoSair: textoSair, apagarConta: apagarConta, sairDaConta: sairDaConta,
-    rotuloRejeitado: rotuloRejeitado, confirmacaoApagarOk: confirmacaoApagarOk, montar: montar
+    rotuloRejeitado: rotuloRejeitado, confirmacaoApagarOk: confirmacaoApagarOk, montar: montar,
+    textoConfirmarSair: textoConfirmarSair, textoStatus: textoStatus, MSG_CONFLITO: MSG_CONFLITO
   };
   if (typeof module !== "undefined") module.exports = raiz.SF.conta;
 })(typeof window !== "undefined" ? window : globalThis);

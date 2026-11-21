@@ -108,3 +108,20 @@ test("sairDaConta com aoApagar rejeitando: sessão encerrada e aviso de limpeza"
   const g = falsos();
   assert.deepEqual(await conta.sairDaConta({ api: g.api, local: g.local, userId: "u1", pendentes: 1, aoApagar: g.aoApagar }), { limpezaFalhou: false });
 });
+
+test("textoConfirmarSair pede confirmação dizendo quantos itens não foram enviados", () => {
+  assert.equal(conta.textoConfirmarSair(0), "");
+  assert.match(conta.textoConfirmarSair(1), /^Há 1 item ainda não enviado\./);
+  assert.match(conta.textoConfirmarSair(3), /^Há 3 itens ainda não enviados\./);
+  assert.match(conta.textoConfirmarSair(3), /Toque de novo em Sair para confirmar\.$/);
+});
+
+test("textoStatus traduz o status da sincronização para o cabeçalho", () => {
+  assert.equal(conta.textoStatus("ok"), "Tudo salvo na conta");
+  assert.equal(conta.textoStatus("pendente"), "Salvo no aparelho, enviando…");
+  assert.equal(conta.textoStatus("enviando"), "Salvo no aparelho, enviando…");
+  assert.equal(conta.textoStatus("offline"), "Sem internet, envio pendente");
+  assert.equal(conta.textoStatus("erro"), "Não consegui enviar, vou tentar de novo");
+  assert.equal(conta.textoStatus("conflito"), "Tudo salvo na conta");
+  assert.equal(conta.MSG_CONFLITO, "Esta refeição já foi registrada em outro aparelho");
+});

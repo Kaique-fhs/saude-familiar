@@ -513,3 +513,16 @@ dialog#registro::backdrop { background: rgba(0,0,0,.55); }
 .btn.perigo { background: var(--heart); border-color: var(--heart); color: #fff; }
 .conta-caixa .acoes { margin-top: 0; }
 .conta-caixa > .btn + .btn, .conta-caixa > .conta-bloco + .btn { margin-top: 12px; }
+
+/* Conta: indicador e botão no cabeçalho; faixa do modo antigo (só com a API configurada) */
+.topo-conta { margin-left: auto; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.topo-conta[hidden], .faixa-conta[hidden] { display: none; }
+.sf-status { margin: 0; font-size: .78rem; line-height: 1.25; color: var(--muted); text-align: right; max-width: 13em; }
+.sf-status[data-status="offline"], .sf-status[data-status="erro"] { color: var(--accent); font-weight: 700; }
+.btn-conta { flex: none; min-height: 40px; }
+.faixa-conta {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  width: calc(100% - 32px); max-width: 728px; margin: 12px auto 0; padding: 10px 12px;
+  background: var(--accent-soft); border-radius: var(--radius);
+}
+.faixa-conta p { margin: 0; font-weight: 700; color: var(--fg); }

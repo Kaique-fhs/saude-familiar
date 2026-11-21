@@ -425,3 +425,115 @@ test("remoto: item mais novo que a mudança na fila tira a mudança da fila e é
   assert.deepEqual(h.estado().favs, ["b"]);
   assert.equal(fila(h).length, 0);
 });
+
+// ---------- integração: SF.local + SF.dados + SF.fotos reais, dois aparelhos da mesma conta ----------
+const Local = require("../js/sf-local.js");
+const Fotos = require("../js/sf-fotos.js");
+
+function storageMemoria() {
+  const m = new Map();
+  return {
+    get length() { return m.size; },
+    key: (i) => [...m.keys()][i] ?? null,
+    getItem: (k) => (m.has(k) ? m.get(k) : null),
+    setItem: (k, v) => { m.set(k, String(v)); },
+    removeItem: (k) => { m.delete(k); }
+  };
+}
+
+// Servidor em memória: fica a mudança mais nova de cada tipo|chave; /sync devolve por número de sequência.
+function servidorFalso() {
+  const itens = new Map();
+  const fotos = new Map();
+  let seq = 0;
+  return {
+    fotos,
+    api: {
+      enviarMudancas: async (mudancas) => {
+        const conflitos = [];
+        mudancas.forEach((m) => {
+          const k = m.tipo + "|" + m.chave;
+          const atual = itens.get(k);
+          if (atual && new Date(atual.em) > new Date(m.em)) { conflitos.push(atual); return; }
+          itens.set(k, Object.assign({}, m, { seq: ++seq }));
+        });
+        return { conflitos };
+      },
+      baixar: async (depois, limite) => {
+        const lista = [...itens.values()].filter((i) => i.seq > depois).sort((a, b) => a.seq - b.seq);
+        const pagina = lista.slice(0, limite);
+        const cursor = pagina.length ? pagina[pagina.length - 1].seq : depois;
+        return { itens: pagina.map(({ seq: _s, ...i }) => i), cursor, mais: lista.length > limite };
+      },
+      urlEnvioFoto: async (id) => ({ url: "http://s3/up/" + id, campos: { key: id } }),
+      urlFoto: async (id) => ({ url: "http://s3/ler/" + id })
+    },
+    fetch: async (url, init) => {
+      if (url.startsWith("http://s3/up/")) {
+        fotos.set(url.slice("http://s3/up/".length), init.body.get("file"));
+        return { ok: true, status: 204 };
+      }
+      const id = url.slice("http://s3/ler/".length);
+      if (!fotos.has(id)) return { ok: false, status: 404 };
+      return { ok: true, status: 200, blob: async () => fotos.get(id) };
+    }
+  };
+}
+
+// Um aparelho: lê e grava o estado como o app (SF.local no prefixo do usuário, nomes de SF.dados.NOMES).
+function aparelho(srv, relogio) {
+  const local = Local.criar({ storage: storageMemoria() });
+  const banco = new Map();
+  const bancoFotos = { ler: async (id) => banco.get(id), gravar: async (id, b) => { banco.set(id, b); } };
+  const fotos = Fotos.criar({ api: srv.api, fetch: srv.fetch, banco: bancoFotos, ErroApi });
+  function lerEstado() {
+    const e = Dados.estadoVazio();
+    Object.keys(Dados.NOMES).forEach((n) => { e[Dados.NOMES[n]] = local.ler("u1", n, e[Dados.NOMES[n]]); });
+    return e;
+  }
+  function gravarEstado(e) { Object.keys(Dados.NOMES).forEach((n) => local.gravar("u1", n, e[Dados.NOMES[n]])); }
+  const sinc = Sincronia.criar({
+    api: srv.api, local, fotos, userId: "u1", ErroApi,
+    agora: relogio, estado: lerEstado, aoMudarEstado: gravarEstado, timeoutMs: 1000
+  });
+  return {
+    local, banco, fotos, sinc, lerEstado,
+    salvar: (muda) => { const antes = lerEstado(); const depois = Dados.aplicar(antes, []); muda(depois); gravarEstado(depois); sinc.registrar(antes, depois); }
+  };
+}
+
+test("integração: favorita + diário + registro com foto sobem e o outro aparelho chega ao mesmo estado com a foto", async () => {
+  const srv = servidorFalso();
+  let t = Date.parse(T0);
+  const relogio = () => new Date(t += 1000).toISOString();
+  const a = aparelho(srv, relogio);
+  const b = aparelho(srv, relogio);
+
+  a.banco.set(ID_FOTO, new Blob(["jpg"], { type: "image/jpeg" }));
+  a.salvar((e) => {
+    e.favs.push("bolo-banana");
+    e.diario["2026-11-21"] = ["cafe", "jantar"];
+    e.registros["2026-11-21"] = { jantar: REG_FOTO };
+  });
+  assert.equal(a.sinc.pendentes(), 5); // fav + 2 feitos + registro + 1 foto
+  await a.sinc.sincronizar();
+  assert.equal(a.sinc.status(), "ok");
+  assert.equal(a.sinc.pendentes(), 0);
+  assert.ok(srv.fotos.has(ID_FOTO));
+
+  await b.sinc.sincronizar();
+  assert.deepEqual(b.lerEstado(), a.lerEstado());
+  assert.equal(b.sinc.pendentes(), 0);
+  // a foto chega sob demanda (o app chama garantir ao desenhar o registro)
+  const blob = await b.fotos.garantir(ID_FOTO);
+  assert.equal(await blob.text(), "jpg");
+  assert.ok(b.banco.has(ID_FOTO));
+
+  // e a volta: o aparelho B desmarca a favorita, o A recebe
+  b.salvar((e) => { e.favs = []; });
+  await b.sinc.sincronizar();
+  await a.sinc.sincronizar();
+  assert.deepEqual(a.lerEstado(), b.lerEstado());
+  assert.deepEqual(a.lerEstado().favs, []);
+  assert.equal(a.sinc.pendentes(), 0);
+});

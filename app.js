@@ -5,12 +5,26 @@
   var RECEITAS = window.RECEITAS;
   var main = document.getElementById("conteudo");
 
-  // ---------- armazenamento local (só neste aparelho) ----------
+  // ---------- conta e sincronização (só com SF_CONFIG.apiUrl preenchido) ----------
+  // Sem apiUrl nada disto é montado: o app fica como sempre foi, tudo só no aparelho (chaves mp-*).
+  var CONFIG = window.SF_CONFIG || {};
+  var SF = window.SF || {};
+  var armazem = null, apiSF = null, contaUI = null, sincronia = null, sincroniaLigada = null, fotosSF = null;
+  var modo = "antigo"; // "antigo": mp-* sem prefixo | "conta": sf:<id>:* | "entrar": só a tela de conta
+  var userId = null;
+  if (CONFIG.apiUrl && SF.api && SF.local && SF.dados && SF.fotos && SF.sincronia && SF.conta) {
+    try { armazem = SF.local.criar({ storage: window.localStorage }); } catch (e) { armazem = null; }
+  }
+  if (armazem) iniciarConta();
+
+  // ---------- armazenamento local (no modo conta, no prefixo do usuário) ----------
   function ler(chave, padrao) {
+    if (userId) return armazem.ler(userId, chave, padrao);
     try { var v = localStorage.getItem(chave); return v ? JSON.parse(v) : padrao; }
     catch (e) { return padrao; }
   }
   function gravar(chave, valor) {
+    if (userId) return armazem.gravar(userId, chave, valor);
     try { localStorage.setItem(chave, JSON.stringify(valor)); return true; } catch (e) { return false; }
   }
   var favs = ler("mp-favs", []);
@@ -41,6 +55,7 @@
     checksPlano = ler("mp-checks-plano", {}); despensa = ler("mp-quero", []); diario = ler("mp-diario", {});
     ultimoBackup = ler("mp-ultimo-backup", null); treinos = ler("mp-treinos", {}); registros = ler("mp-registros", {});
     backupsMes = ler("mp-backups-mes", {});
+    if (sincronia) ultimoEstado = copiaEstado();
   } // { "2026-11-20": { almoco: { escolhas, receita, foto, hora } } }
   var diaSel = hojeChave(); // dia que está sendo marcado
   var mesVisto = new Date(); mesVisto.setDate(1);
@@ -48,6 +63,11 @@
   var termo = "";
 
   function salvarTudo() {
+    if (!gravarDados()) avisarFalhaGravacao();
+    atualizarContador();
+    registrarMudancas();
+  }
+  function gravarDados() {
     var ok = true;
     ok = gravar("mp-favs", favs) && ok;
     ok = gravar("mp-sel", sel) && ok;
@@ -57,8 +77,7 @@
     ok = gravar("mp-diario", diario) && ok;
     ok = gravar("mp-registros", registros) && ok;
     ok = gravar("mp-treinos", treinos) && ok;
-    if (!ok) avisarFalhaGravacao();
-    atualizarContador();
+    return ok;
   }
   var ultimoAvisoFalha = 0;
   function avisarFalhaGravacao() {
@@ -458,18 +477,41 @@
   }
 
   // ---------- fotos das refeições (IndexedDB, só neste aparelho) ----------
-  var banco = null;
+  // Modo antigo: banco "meu-prato" de sempre. Modo conta: um banco por usuário (saude-familiar-<id>).
+  var banco = null, bancoAberto = null, nomeBancoAberto = null, bancoTravado = false;
+  function nomeBancoAtual() { return userId ? SF.fotos.nomeBanco(userId) : "meu-prato"; }
   function abrirBanco() {
+    if (bancoTravado) return Promise.reject(new Error("banco sendo apagado"));
     if (!banco) {
+      var nome = nomeBancoAtual();
       banco = new Promise(function (ok, erro) {
         if (!window.indexedDB) { erro(new Error("sem IndexedDB")); return; }
-        var r = indexedDB.open("meu-prato", 1);
+        var r = indexedDB.open(nome, 1);
         r.onupgradeneeded = function () { r.result.createObjectStore("fotos"); };
-        r.onsuccess = function () { ok(r.result); };
+        r.onsuccess = function () {
+          var db = r.result;
+          // a conta mudou (ou o banco está sendo apagado) enquanto abria: não fica com a conexão
+          if (bancoTravado || nome !== nomeBancoAtual()) { db.close(); erro(new Error("conta trocada")); return; }
+          bancoAberto = db; nomeBancoAberto = nome;
+          // outra aba quer apagar o banco: solta a conexão para não travar o deleteDatabase
+          db.onversionchange = function () { db.close(); if (bancoAberto === db) { bancoAberto = null; nomeBancoAberto = null; banco = null; } };
+          ok(db);
+        };
         r.onerror = function () { erro(r.error); };
       });
     }
     return banco;
+  }
+  function fecharBanco() {
+    try { if (bancoAberto) bancoAberto.close(); } catch (e) { /* já fechado */ }
+    bancoAberto = null; nomeBancoAberto = null; banco = null;
+  }
+  // Troca de conta: fecha o banco e solta as imagens da conta anterior.
+  function trocarBanco() {
+    fecharBanco();
+    bancoTravado = false;
+    Object.keys(urlsFotos).forEach(function (id) { URL.revokeObjectURL(urlsFotos[id]); });
+    urlsFotos = {};
   }
   function noBanco(modo, fn) {
     return abrirBanco().then(function (db) {
@@ -486,9 +528,11 @@
   function chavesFotos() { return noBanco("readonly", function (s) { return s.getAllKeys(); }); }
 
   var urlsFotos = {};
+  // No modo conta a foto que não está no aparelho é baixada da conta (sob demanda).
+  function obterFoto(id) { return fotosSF ? fotosSF.garantir(id) : lerFoto(id); }
   function urlFoto(id) {
     if (urlsFotos[id]) return Promise.resolve(urlsFotos[id]);
-    return lerFoto(id).then(function (blob) {
+    return obterFoto(id).then(function (blob) {
       if (!blob) return null;
       urlsFotos[id] = URL.createObjectURL(blob);
       return urlsFotos[id];
@@ -626,7 +670,7 @@
     regAtual = { ref: refId, dia: diaSel, blob: null, fotoAntiga: ant ? ant.foto : null, previa: null, blobSalvo: null };
     if (ant && ant.foto) {
       var esperando = regAtual;
-      lerFoto(ant.foto).then(function (b) { if (regAtual === esperando) regAtual.blobSalvo = b || null; }).catch(function () {});
+      obterFoto(ant.foto).then(function (b) { if (regAtual === esperando) regAtual.blobSalvo = b || null; }).catch(function () {});
     }
     var fotoObrig = FOTO_OPCIONAL.indexOf(refId) < 0;
 
@@ -1229,7 +1273,7 @@
     // cada foto separada: se uma falhar, as outras continuam
     return ids.reduce(function (p, id) {
       return p.then(function () {
-        return lerFoto(id).then(function (blob) {
+        return obterFoto(id).then(function (blob) {
           if (!blob) { faltando++; return null; }
           return blobParaTexto(blob).then(function (t) { fotos[id] = t; });
         }).catch(function () { faltando++; });
@@ -1378,6 +1422,7 @@
 
   // ---------- roteamento ----------
   function render() {
+    if (modo === "entrar") return; // só a tela de conta: nada do app por baixo
     var hash = location.hash.replace(/^#/, "") || "plano";
     var partes = hash.split("/"), aba = partes[0];
     var html;
@@ -1503,7 +1548,11 @@
     }
   });
 
-  window.addEventListener("hashchange", function () { render(); window.scrollTo(0, 0); });
+  window.addEventListener("hashchange", function () {
+    // link de confirmar e-mail ou de nova senha aberto com o app já aberto nesta aba
+    if (armazem && SF.conta.lerHash(location.hash).acao) { contaUI.iniciar(); return; }
+    render(); window.scrollTo(0, 0);
+  });
 
   // Se o app ficou aberto de um dia para o outro, "Hoje" passa para o dia novo.
   var ultimoHoje = hojeChave();
@@ -1521,10 +1570,16 @@
     if (document.hidden) return;
     if (!(dlg && dlg.open)) { recarregarEstado(); }
     if (!checarVirada() && !(dlg && dlg.open)) rerenderMantendoScroll();
+    rodarSync();
   });
   // outra janela do app gravou algo: relê para não apagar o que ela fez
   window.addEventListener("storage", function (e) {
-    if (e.key && e.key.indexOf("mp-") !== 0) return;
+    if (armazem && e.key === "sf:sessao") { sessaoMudouEmOutraAba(); return; }
+    // modo conta: só as chaves da conta (sf:<id>:); modo antigo: só mp-*; tela de entrar: nada
+    var prefixo = modo === "conta" ? "sf:" + userId + ":" : modo === "antigo" ? "mp-" : null;
+    if (!prefixo || (e.key && e.key.indexOf(prefixo) !== 0)) return;
+    // fila e cursor da outra aba só mudam o indicador
+    if (modo === "conta" && e.key && e.key.indexOf(prefixo + "mp-") !== 0) { if (sincronia) mostrarStatus(sincronia.status(), true); return; }
     recarregarEstado();
     if (!(dlg && dlg.open)) rerenderMantendoScroll();
   });
@@ -1538,5 +1593,213 @@
     // qualquer rota que não seja de outra aba cai no plano (ver render)
     if (!/^(receita|receitas|favoritas|frequencia|compras|quero|despensa)$/.test(aba)) rerenderMantendoScroll();
   }, 60000);
+
+  // ---------- conta: telas, sincronização e indicador ----------
+  // Tudo aqui só roda com armazem (apiUrl preenchido).
+  var ultimoEstado = null; // cópia do estado como foi gravado ou lido por último (o "antes" da fila)
+  var timerSync = null, timerRetry = null;
+  var statusEl = null, caixaContaEl = null, faixaEl = null;
+  var MSG_SESSAO = "Sua sessão terminou. Entre de novo: o que você marcou continua guardado neste aparelho.";
+
+  function estadoApp() {
+    return { favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, despensa: despensa, diario: diario, treinos: treinos, registros: registros };
+  }
+  function copiaEstado() { return SF.dados.aplicar(estadoApp(), []); }
+  function buscar(u, i) { return window.fetch(u, i); }
+
+  function iniciarConta() {
+    apiSF = SF.api.criar({ config: CONFIG, fetch: buscar, sessao: function () { var s = armazem.sessao(); return s && s.token; } });
+    contaUI = SF.conta.montar({
+      raiz: document.getElementById("conta"), api: apiSF, local: armazem, config: CONFIG,
+      aoEntrar: aoEntrar, aoSair: aoSair, aoApagar: apagarFotosDaConta,
+      pendentes: function (id) {
+        if (sincronia && id === userId) return sincronia.pendentes();
+        var f = armazem.ler(id, "fila", []);
+        return Array.isArray(f) ? f.length : 0;
+      },
+      podeVoltar: function () { return modo !== "entrar"; },
+      aoVoltar: function () {}
+    });
+    modo = "entrar"; // até decidir, a tela que iniciar() desenhar não oferece "Voltar ao app"
+    var inicio = contaUI.iniciar();
+    var s = armazem.sessao();
+    if (s && s.usuario && s.usuario.id) { modo = "conta"; userId = s.usuario.id; return; }
+    if (s) armazem.apagarSessao(); // sessão sem usuário: não serve
+    modo = armazem.temDadosAntigos() ? "antigo" : "entrar";
+    if (modo === "entrar" && (inicio === "conta" || inicio === "antigo")) contaUI.mostrar("entrar");
+  }
+
+  function ligarConta() {
+    var topo = document.querySelector(".topo");
+    caixaContaEl = document.createElement("div");
+    caixaContaEl.className = "topo-conta";
+    statusEl = document.createElement("p");
+    statusEl.className = "sf-status";
+    statusEl.setAttribute("role", "status");
+    statusEl.setAttribute("aria-live", "polite");
+    var botao = document.createElement("button");
+    botao.type = "button";
+    botao.className = "btn btn-conta";
+    botao.textContent = "Conta";
+    botao.addEventListener("click", function () { contaUI.mostrar("conta"); });
+    caixaContaEl.appendChild(statusEl);
+    caixaContaEl.appendChild(botao);
+    topo.appendChild(caixaContaEl);
+
+    faixaEl = document.createElement("div");
+    faixaEl.className = "faixa-conta";
+    var texto = document.createElement("p");
+    texto.textContent = "Crie sua conta para guardar seus dados";
+    var criar = document.createElement("button");
+    criar.type = "button";
+    criar.className = "btn primario";
+    criar.textContent = "Criar conta";
+    criar.addEventListener("click", function () { contaUI.mostrar("cadastro"); });
+    faixaEl.appendChild(texto);
+    faixaEl.appendChild(criar);
+    main.parentNode.insertBefore(faixaEl, main);
+
+    window.addEventListener("online", rodarSync);
+    setInterval(function () { if (sincronia && sincronia.pendentes() > 0) rodarSync(); }, 60000);
+    if (modo === "conta") comecarSincronia();
+    atualizarCabecalhoConta();
+  }
+
+  function atualizarCabecalhoConta() {
+    if (!faixaEl) return;
+    faixaEl.hidden = modo !== "antigo";
+    caixaContaEl.hidden = modo !== "conta";
+    if (modo === "conta" && sincronia) mostrarStatus(sincronia.status(), true);
+  }
+
+  // semAviso: só atualiza o texto (o aviso de conflito aparece uma vez, quando o status muda para ele)
+  function mostrarStatus(s, semAviso) {
+    if (!statusEl) return;
+    statusEl.textContent = SF.conta.textoStatus(s);
+    statusEl.setAttribute("data-status", s);
+    if (s === "conflito" && !semAviso) toast(SF.conta.MSG_CONFLITO);
+  }
+
+  function comecarSincronia() {
+    if (sincronia) { rodarSync(); return; }
+    var ligada = { sim: true };
+    // Depois de sair (sessão apagada) ou trocar de conta, a sincronia antiga não grava mais nada.
+    var localSinc = {
+      ler: function (u, n, padrao) { return armazem.ler(u, n, padrao); },
+      gravar: function (u, n, v) { return ligada.sim && !!armazem.sessao() && armazem.gravar(u, n, v); }
+    };
+    fotosSF = SF.fotos.criar({ api: apiSF, fetch: buscar, banco: { ler: lerFoto, gravar: salvarFoto } });
+    sincroniaLigada = ligada;
+    sincronia = SF.sincronia.criar({
+      api: apiSF, local: localSinc, fotos: fotosSF, userId: userId, estado: estadoApp,
+      aoMudarEstado: function (novo) { if (ligada.sim) aplicarEstadoRemoto(novo); },
+      aoMudarStatus: function (s) { if (ligada.sim) mostrarStatus(s); },
+      aoSessaoVencida: function () { if (ligada.sim) sessaoVencida(); }
+    });
+    ultimoEstado = copiaEstado();
+    rodarSync();
+  }
+
+  function pararSincronia() {
+    if (sincroniaLigada) sincroniaLigada.sim = false;
+    sincronia = null; sincroniaLigada = null; fotosSF = null; ultimoEstado = null;
+    clearTimeout(timerSync); clearTimeout(timerRetry);
+    timerSync = null; timerRetry = null;
+  }
+
+  // Chamado por salvarTudo: põe na fila o que mudou e agenda o envio (2 s, uma vez para várias gravações).
+  function registrarMudancas() {
+    if (!sincronia || modo !== "conta") return;
+    var depois = copiaEstado();
+    sincronia.registrar(ultimoEstado || depois, depois);
+    ultimoEstado = depois;
+    if (!timerSync) timerSync = setTimeout(function () { timerSync = null; rodarSync(); }, 2000);
+  }
+
+  function rodarSync() {
+    if (modo !== "conta" || !sincronia) return;
+    var s = sincronia;
+    s.sincronizar().then(function () {
+      if (s !== sincronia) return;
+      var st = s.status();
+      if (st === "offline" || st === "erro") {
+        clearTimeout(timerRetry);
+        timerRetry = setTimeout(function () { timerRetry = null; rodarSync(); }, Math.max(s.esperaMs(), 2000));
+      }
+    }).catch(function () {});
+  }
+
+  // O que veio do servidor: grava na hora (síncrono) e redesenha mantendo a rolagem.
+  function aplicarEstadoRemoto(novo) {
+    favs = novo.favs; sel = novo.sel; checks = novo.checks; checksPlano = novo.checksPlano;
+    despensa = novo.despensa; diario = novo.diario; treinos = novo.treinos; registros = novo.registros;
+    if (!gravarDados()) avisarFalhaGravacao();
+    ultimoEstado = copiaEstado();
+    atualizarContador();
+    if (modo === "conta" && !(dlg && dlg.open)) rerenderMantendoScroll();
+  }
+
+  function aoEntrar(s) {
+    var id = s && s.usuario && s.usuario.id;
+    if (!id) return;
+    if (id !== userId) {
+      // outra conta (ou vindo do modo antigo): começa do que está guardado para ela; os mp-* ficam intactos
+      pararSincronia();
+      userId = id;
+      trocarBanco();
+      recarregarEstado();
+    }
+    modo = "conta";
+    comecarSincronia();
+    atualizarCabecalhoConta();
+    render();
+    window.scrollTo(0, 0);
+  }
+
+  // Sessão vencida (401): mostra Entrar mantendo dados e fila; com o mesmo usuário continua de onde parou.
+  function sessaoVencida() {
+    armazem.apagarSessao();
+    modo = "entrar";
+    clearTimeout(timerSync); clearTimeout(timerRetry);
+    timerSync = null; timerRetry = null;
+    if (dlg && dlg.open) fecharRegistro();
+    atualizarCabecalhoConta();
+    contaUI.mostrar("entrar", MSG_SESSAO);
+  }
+
+  // Depois de sair ou apagar a conta (sf-conta já limpou o que tinha de limpar).
+  function aoSair() {
+    pararSincronia();
+    userId = null;
+    trocarBanco();
+    recarregarEstado();
+    if (dlg && dlg.open) fecharRegistro();
+    if (armazem.temDadosAntigos()) { modo = "antigo"; render(); }
+    else { modo = "entrar"; contaUI.mostrar("entrar"); }
+    atualizarCabecalhoConta();
+  }
+
+  // Apaga o IndexedDB de fotos da conta: fecha a conexão aberta antes do deleteDatabase.
+  function apagarFotosDaConta(id) {
+    var nome = SF.fotos.nomeBanco(id);
+    if (id === userId) { pararSincronia(); bancoTravado = true; }
+    return SF.fotos.apagarBancoFotos({
+      indexedDB: window.indexedDB, nome: nome,
+      fecharConexao: function () { if (nomeBancoAberto === nome) fecharBanco(); }
+    });
+  }
+
+  // Outra aba entrou, saiu ou perdeu a sessão.
+  function sessaoMudouEmOutraAba() {
+    var s = armazem.sessao();
+    var id = s && s.usuario && s.usuario.id;
+    if (id) {
+      if (id !== userId || modo !== "conta") { contaUI.esconder(); aoEntrar(s); }
+      return;
+    }
+    if (modo === "conta") aoSair();
+  }
+
+  if (armazem) ligarConta();
   render();
 })();
