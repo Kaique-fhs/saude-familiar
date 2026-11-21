@@ -209,6 +209,10 @@ export function registrarContas(app, { banco, email, captcha, armazenamento, lim
       await tx.consulta('select id from usuarios where id = $1 for update', [userId]);
       await tx.consulta('update usuarios set senha_hash = $1 where id = $2', [hash, userId]);
       await tx.consulta('delete from sessoes where user_id = $1', [userId]);
+      await tx.consulta(
+        "update tokens set usado_em = $1 where user_id = $2 and tipo = 'senha' and usado_em is null",
+        [agora, userId],
+      );
       return true;
     });
     if (!ok) return reply.code(400).send({ erro: 'token' });
@@ -228,7 +232,7 @@ export function registrarContas(app, { banco, email, captcha, armazenamento, lim
     });
     // A conta já sumiu: se as fotos falharem, ficam pendentes e são tentadas de novo.
     try {
-      await apagarFotosPendentes({ banco, armazenamento, ambiente: config.ambiente, relogio: app.relogio });
+      await apagarFotosPendentes({ banco, armazenamento, ambiente: config.ambiente, relogio: app.relogio, log: app.log });
     } catch (e) {
       app.log.error({ err: e }, 'falha ao apagar fotos pendentes');
     }
@@ -238,7 +242,7 @@ export function registrarContas(app, { banco, email, captcha, armazenamento, lim
 
 // Apaga as fotos das contas já removidas e ainda pendentes. Falha de uma não
 // impede as outras; devolve quantas concluiu.
-export async function apagarFotosPendentes({ banco, armazenamento, ambiente, relogio }) {
+export async function apagarFotosPendentes({ banco, armazenamento, ambiente, relogio, log = { error() {} } }) {
   const r = await banco.consulta('select user_id from contas_apagadas where fotos_apagadas_em is null');
   let concluidas = 0;
   for (const { user_id: userId } of r.rows) {
@@ -250,7 +254,7 @@ export async function apagarFotosPendentes({ banco, armazenamento, ambiente, rel
       ]);
       concluidas++;
     } catch (e) {
-      console.error(`falha ao apagar fotos de ${userId}:`, e.message);
+      log.error({ err: e, userId }, 'falha ao apagar fotos da conta');
     }
   }
   return concluidas;

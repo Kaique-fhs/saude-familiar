@@ -291,3 +291,19 @@ test('entrar não ganha corrida com nova-senha: sessão criada após a troca de 
   assert.equal(n.rows[0].n, 0);
   await app.close();
 });
+
+test('nova-senha invalida os outros tokens de senha pendentes (t1 não troca depois de t2)', async () => {
+  const { app, email } = await criarAppTeste();
+  await contaLogada(app, 'a@b.com');
+  await post(app, '/conta/esqueci', { email: 'a@b.com' });
+  const t1 = tokenDoEmail(email, '#nova-senha=');
+  await post(app, '/conta/esqueci', { email: 'a@b.com' });
+  const t2 = tokenDoEmail(email, '#nova-senha=');
+  assert.notEqual(t1, t2);
+  assert.equal((await post(app, '/conta/nova-senha', { token: t2, senha: 'senha-nova-456' })).statusCode, 200);
+  const r = await post(app, '/conta/nova-senha', { token: t1, senha: 'outra-senha-789' });
+  assert.equal(r.statusCode, 400);
+  assert.deepEqual(r.json(), { erro: 'token' });
+  assert.equal((await post(app, '/conta/entrar', { email: 'a@b.com', senha: 'senha-nova-456' })).statusCode, 200);
+  await app.close();
+});

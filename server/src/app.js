@@ -24,12 +24,13 @@ export async function criarApp({
   armazenamento,
   relogio = () => new Date(),
   limites = true,
+  logger = false,
 }) {
   // Só 1 salto de proxy (o CloudFront) é confiável; nunca true (aceitaria X-Forwarded-For forjado).
   // Com trustProxy numérico o Fastify 5.12 não confia em ninguém (request.ip seria sempre o
   // endereço do CloudFront), por isso a função: confia no 1º salto (o par TCP) e request.ip
   // passa a ser o ÚLTIMO endereço do X-Forwarded-For, o que o CloudFront acrescentou.
-  const app = Fastify({ trustProxy: (_endereco, salto) => salto < 1 });
+  const app = Fastify({ logger, trustProxy: (_endereco, salto) => salto < 1 });
   app.decorate('config', config);
   app.decorate('relogio', relogio);
   app.decorate('banco', banco);

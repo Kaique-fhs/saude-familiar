@@ -21,14 +21,15 @@ const app = await criarApp({
   captcha: criarCaptchaTurnstile(config.turnstileSegredo),
   armazenamento,
   relogio,
+  logger: true,
 });
 
 // Fotos de contas apagadas que ficaram pendentes; falha aqui não derruba o servidor.
 try {
-  const n = await apagarFotosPendentes({ banco, armazenamento, ambiente: config.ambiente, relogio });
-  if (n) console.log(`fotos apagadas de ${n} conta(s) pendente(s)`);
+  const n = await apagarFotosPendentes({ banco, armazenamento, ambiente: config.ambiente, relogio, log: app.log });
+  if (n) app.log.info(`fotos apagadas de ${n} conta(s) pendente(s)`);
 } catch (e) {
-  console.error('falha ao apagar fotos pendentes na partida:', e.message);
+  app.log.error({ err: e }, 'falha ao apagar fotos pendentes na partida');
 }
 
 await app.listen({ host: '0.0.0.0', port: config.porta });
