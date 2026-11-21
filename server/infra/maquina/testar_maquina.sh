@@ -58,6 +58,8 @@ PROD="$TMP/etc/producao.env"; TESTE="$TMP/etc/teste.env"
 mapfile -t VARS < <(grep -oE "env\.[A-Z_0-9]+|'[A-Z][A-Z_0-9]+'" "$CONFIG_JS" | sed -E "s/^env\.//; s/'//g" | sort -u)
 if [ "${#VARS[@]}" -ge 12 ]; then ok "config.js: ${#VARS[@]} variaveis encontradas"; else falha "config.js: poucas variaveis (${#VARS[@]})"; fi
 for v in "${VARS[@]}"; do
+  # CAMINHO_SITE tem padrao /saude-familiar/ (certo para o GitHub Pages); nao vai no .env
+  [ "$v" = CAMINHO_SITE ] && continue
   verifica "producao.env define $v" grep -q "^$v=." "$PROD"
   verifica "teste.env define $v" grep -q "^$v=." "$TESTE"
 done
