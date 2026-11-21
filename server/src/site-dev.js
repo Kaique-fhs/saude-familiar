@@ -1,5 +1,5 @@
 import { readFile, stat } from 'node:fs/promises';
-import { extname, resolve, sep } from 'node:path';
+import { extname, relative, resolve, sep } from 'node:path';
 
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
@@ -34,11 +34,15 @@ export function criarManipuladorSite({ raiz, configDev }) {
       res.writeHead(200, { 'content-type': TIPOS['.js'], 'cache-control': 'no-store' });
       return res.end(`window.SF_CONFIG = ${JSON.stringify(configDev)};\n`);
     }
-    const partes = caminho.split(/[\/]+/).filter(Boolean);
+    if (caminho.includes(String.fromCharCode(92))) return naoEncontrado(res); // barra invertida
+    const partes = caminho.split('/').filter(Boolean);
     if (partes.some((p) => p === '..' || p.startsWith('.') || p.includes(':'))) return naoEncontrado(res);
-    if (partes.length && PROIBIDAS.has(partes[0].toLowerCase())) return naoEncontrado(res);
     let alvo = resolve(base, ...partes);
     if (alvo !== base && !alvo.startsWith(base + sep)) return naoEncontrado(res);
+    // Confere de novo sobre o caminho já resolvido (qualquer separador do sistema).
+    const relativos = relative(base, alvo).split(/[/\\]+/).filter(Boolean);
+    if (relativos.some((p) => p.startsWith('.'))) return naoEncontrado(res);
+    if (relativos.length && PROIBIDAS.has(relativos[0].toLowerCase())) return naoEncontrado(res);
     try {
       if ((await stat(alvo)).isDirectory()) alvo = resolve(alvo, 'index.html');
       const bytes = await readFile(alvo);

@@ -64,7 +64,7 @@ test('serve arquivos do site com o tipo certo; / abre o index.html', async () =>
 
 test('../, pastas proibidas e dotfiles dão 404', async () => {
   const { base, fim } = await subir();
-  for (const c of ['/../fora-sf.txt', '/%2e%2e/fora-sf.txt', '/..%2Ffora-sf.txt', '/a/../../fora-sf.txt', '/..%5Cfora-sf.txt']) {
+  for (const c of ['/../fora-sf.txt', '/%2e%2e/fora-sf.txt', '/..%2Ffora-sf.txt', '/a/../../fora-sf.txt', '/..%5Cfora-sf.txt', '/server%5Cx.txt', '/a%5C..%5Cserver%5Cx.txt', '/.git%5CHEAD', '/%2e%2e%5Cfora-sf.txt']) {
     assert.equal(await cru(base, c), 404, c);
   }
   for (const c of ['/server/x.txt', '/SERVER/x.txt', '/.git/x.txt', '/.superpowers/x.txt', '/node_modules/x.txt', '/.env', '/server']) {
