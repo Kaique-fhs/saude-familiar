@@ -5,12 +5,15 @@ import { lerConfig } from './config.js';
 import { criarBancoPglite } from './banco.js';
 import { migrar } from './migrar.js';
 import { criarApp } from './app.js';
+import http from 'node:http';
+import { criarManipuladorSite } from './site-dev.js';
 import { criarArmazenamentoDev, registrarRotasDev } from './armazenamento-dev.js';
 
 const aqui = (relativo) => fileURLToPath(new URL(relativo, import.meta.url));
 
 const porta = Number(process.env.PORT ?? 3000);
-const baseUrl = `http://localhost:${porta}`;
+const baseUrl = `http://127.0.0.1:${porta}`;
+const portaSite = Number(process.env.PORT_SITE ?? 5500);
 const config = lerConfig({
   AMBIENTE: 'teste',
   SEGREDO_ORIGEM: 'dev',
@@ -55,4 +58,11 @@ app.get('/config.js', async (req, reply) =>
 );
 
 await app.listen({ host: '127.0.0.1', port: porta });
-console.log(`Servidor de desenvolvimento em ${baseUrl} (site esperado em ${config.origemSite})`);
+
+// O site (raiz do repositório) é servido aqui mesmo, com /config.js de desenvolvimento.
+const site = http.createServer(criarManipuladorSite({ raiz: aqui('../../'), configDev }));
+await new Promise((ok, falha) => {
+  site.once('error', falha);
+  site.listen(portaSite, '127.0.0.1', ok);
+});
+console.log(`API em ${baseUrl}\nSite em http://localhost:${portaSite} (abra este endereço)`);

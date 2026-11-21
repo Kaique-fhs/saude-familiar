@@ -42,16 +42,18 @@ npm install
 npm run dev
 ```
 
-Sobe em `http://127.0.0.1:3000` (`PORT` muda a porta) com `AMBIENTE=teste`,
-`SEGREDO_ORIGEM="dev"`, `ORIGEM_SITE="http://localhost:5500"` e `CAMINHO_SITE="/"`
-(sirva o site em `http://localhost:5500`, na raiz).
+Sobe a API em `http://127.0.0.1:3000` (`PORT` muda a porta) e **também serve o site**
+(raiz do repositório) em `http://localhost:5500` (`PORT_SITE` muda a porta): abra esse endereço.
+Nada fora da raiz do repositório é servido; `server/`, `.git`, `.superpowers`, `node_modules` e dotfiles dão 404.
+A API roda com `AMBIENTE=teste`, `SEGREDO_ORIGEM="dev"`, `ORIGEM_SITE="http://localhost:5500"`
+e `CAMINHO_SITE="/"` (o site abre na raiz, sem `/saude-familiar/`).
 
 - Banco: PGlite persistido em `server/.pg-dev/` (apague a pasta para zerar).
 - E-mail: não envia; imprime a mensagem, com o link `#confirmar=` / `#nova-senha=`, no console.
 - Captcha: aceita qualquer token. Limites de uso desligados.
 - Fotos: gravadas em `server/.fotos-dev/`; `POST /dev-fotos` e `GET /dev-fotos/<chave>` fazem o papel do S3.
-- `GET /config.js` devolve o `window.SF_CONFIG` de desenvolvimento
-  (`apiUrl` `http://localhost:3000`, chave de teste do Turnstile, `cabecalhoOrigemDev: "dev"`).
+- `GET /config.js` (no site, e também na API) devolve o `window.SF_CONFIG` de desenvolvimento
+  (`apiUrl` `http://127.0.0.1:3000`, chave de teste do Turnstile, `cabecalhoOrigemDev: "dev"`).
 - `/dev-fotos` e `/config.js` ficam isentos do `x-saude-origem` (opção `rotasLivres` de `criarApp`, usada só aqui).
 
 `CAMINHO_SITE` (padrão `/saude-familiar/`) é o caminho do site nos links enviados por e-mail.
