@@ -55,7 +55,8 @@
     checksPlano = ler("mp-checks-plano", {}); despensa = ler("mp-quero", []); diario = ler("mp-diario", {});
     ultimoBackup = ler("mp-ultimo-backup", null); treinos = ler("mp-treinos", {}); registros = ler("mp-registros", {});
     backupsMes = ler("mp-backups-mes", {});
-    if (sincronia) ultimoEstado = copiaEstado();
+    // modo conta: o que foi relido vira a referência da fila (senão a próxima gravação reenviaria o que outra aba mandou)
+    if (sincronia) { ultimoEstado = copiaEstado(); sincronia.rebase(ultimoEstado); }
   } // { "2026-11-20": { almoco: { escolhas, receita, foto, hora } } }
   var diaSel = hojeChave(); // dia que está sendo marcado
   var mesVisto = new Date(); mesVisto.setDate(1);

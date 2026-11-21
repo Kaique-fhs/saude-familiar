@@ -4,6 +4,7 @@
 //  - deps.aoMudarEstado(novo) deve gravar o novo estado de forma SÍNCRONA antes de retornar
 //    (o cursor do /sync é gravado logo depois);
 //  - o app chama registrar(antes, depois) a cada salvarTudo e agenda sincronizar() usando esperaMs().
+//  - ao reler o estado do armazenamento (evento storage, aba visível), o app chama rebase(estado).
 (function (raiz) {
   var TIPOS = ["fav", "sel", "check", "checkplano", "quero", "feito", "treino", "registro"];
   var TAMANHO_LOTE = 200;
@@ -135,6 +136,10 @@
       if (ok) ref = copia(depois); // se não coube, a mudança é recalculada no próximo registrar
       notificar();
     }
+
+    // O app releu o estado do armazenamento (outra aba gravou): esse passa a ser o "antes" da próxima
+    // comparação, sem enfileirar nada. Sem isto, a próxima gravação reenviaria as mudanças da outra aba.
+    function rebase(estado) { ref = copia(estado); }
 
     // ---- fotos ----
     function tirarFoto(id) {
@@ -275,6 +280,7 @@
 
     return {
       registrar: registrar,
+      rebase: rebase,
       sincronizar: sincronizar,
       rejeitados: function () { return lerRejeitados(); },
       avisos: function () { return lerAvisos().concat(avisosMem); },

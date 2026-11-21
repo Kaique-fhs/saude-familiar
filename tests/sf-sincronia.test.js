@@ -426,6 +426,31 @@ test("remoto: item mais novo que a mudança na fila tira a mudança da fila e é
   assert.equal(fila(h).length, 0);
 });
 
+test("rebase: aba B relê o estado gravado pela aba A e não reenfileira as chaves de A", () => {
+  const local = localFalso();
+  const hB = montar({ local });
+  hB.mudar(com({ sel: ["x"] }));                       // ref de B = { sel: [x] }
+  const hA = montar({ local, estado: com({ sel: ["x"] }) });
+  hA.relogio("2026-11-21T10:00:05.000Z");
+  hA.mudar(com({ sel: ["x"], favs: ["a"] }));           // A favorita "a"
+  local.gravar("u1", "fila", []);                       // A já enviou tudo
+  // B recebe o evento storage, relê o estado e faz o rebase
+  const relido = com({ sel: ["x"], favs: ["a"] });
+  hB.sinc.rebase(relido);
+  hB.relogio("2026-11-21T10:00:09.000Z");
+  hB.mudar(com({ sel: ["x"], favs: ["a"], despensa: ["b"] }));
+  assert.deepEqual(fila(hB).map((m) => m.tipo + "|" + m.chave), ["quero|b"]);
+});
+
+test("rebase guarda uma cópia: mexer no estado depois não muda a referência", () => {
+  const h = montar();
+  const e = com({ favs: ["a"] });
+  h.sinc.rebase(e);
+  e.favs.push("b"); // mutação no lugar, como o app faz
+  h.mudar(com({ favs: ["a", "b"] }));
+  assert.deepEqual(fila(h).map((m) => m.chave), ["b"]);
+});
+
 // ---------- integração: SF.local + SF.dados + SF.fotos reais, dois aparelhos da mesma conta ----------
 const Local = require("../js/sf-local.js");
 const Fotos = require("../js/sf-fotos.js");
@@ -481,8 +506,8 @@ function servidorFalso() {
 }
 
 // Um aparelho: lê e grava o estado como o app (SF.local no prefixo do usuário, nomes de SF.dados.NOMES).
-function aparelho(srv, relogio) {
-  const local = Local.criar({ storage: storageMemoria() });
+function aparelho(srv, relogio, storage) {
+  const local = Local.criar({ storage: storage || storageMemoria() });
   const banco = new Map();
   const bancoFotos = { ler: async (id) => banco.get(id), gravar: async (id, b) => { banco.set(id, b); } };
   const fotos = Fotos.criar({ api: srv.api, fetch: srv.fetch, banco: bancoFotos, ErroApi });
@@ -498,6 +523,8 @@ function aparelho(srv, relogio) {
   });
   return {
     local, banco, fotos, sinc, lerEstado,
+    // como o recarregarEstado do app ao receber o evento storage de outra aba
+    releu: () => sinc.rebase(lerEstado()),
     salvar: (muda) => { const antes = lerEstado(); const depois = Dados.aplicar(antes, []); muda(depois); gravarEstado(depois); sinc.registrar(antes, depois); }
   };
 }
@@ -536,4 +563,29 @@ test("integração: favorita + diário + registro com foto sobem e o outro apare
   assert.deepEqual(a.lerEstado(), b.lerEstado());
   assert.deepEqual(a.lerEstado().favs, []);
   assert.equal(a.sinc.pendentes(), 0);
+});
+
+test("integração: aba B relê (evento storage) o que a aba A gravou e não desfaz a mudança de outro aparelho", async () => {
+  const srv = servidorFalso();
+  let t = Date.parse(T0);
+  const relogio = () => new Date(t += 1000).toISOString();
+  const compartilhado = storageMemoria();
+  const abaA = aparelho(srv, relogio, compartilhado);
+  const abaB = aparelho(srv, relogio, compartilhado);
+  const outro = aparelho(srv, relogio);
+
+  abaB.salvar((e) => { e.sel.push("x"); });           // a aba B já tem uma referência
+  abaA.salvar((e) => { e.favs.push("a"); });          // a aba A favorita "a" e envia
+  await abaA.sinc.sincronizar();
+  await outro.sinc.sincronizar();
+  outro.salvar((e) => { e.favs = []; });               // outro aparelho desfavorita "a", depois
+  await outro.sinc.sincronizar();
+
+  abaB.releu();                                        // evento storage na aba B
+  abaB.salvar((e) => { e.despensa.push("b"); });
+  assert.deepEqual(abaB.local.ler("u1", "fila", []).map((m) => m.tipo + "|" + m.chave), ["quero|b"]);
+  await abaB.sinc.sincronizar();
+  await outro.sinc.sincronizar();
+  assert.deepEqual(outro.lerEstado().favs, []);        // "a" não ressuscitou
+  assert.deepEqual(outro.lerEstado().despensa, ["b"]);
 });
