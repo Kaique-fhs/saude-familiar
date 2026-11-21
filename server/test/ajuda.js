@@ -16,3 +16,11 @@ export function configTeste(extra = {}) {
 export function cabecalhos(extra = {}) {
   return { 'x-saude-origem': 'segredo-teste', ...extra };
 }
+
+export async function novoBancoTeste() {
+  const { criarBancoPglite } = await import('../src/banco.js');
+  const { migrar } = await import('../src/migrar.js');
+  const banco = await criarBancoPglite();
+  await migrar(banco);
+  return banco;
+}
