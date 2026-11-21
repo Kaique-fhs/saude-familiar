@@ -1372,32 +1372,9 @@
     leitor.readAsText(arquivo);
   }
 
-  // ---------- aviso para instalar o app ----------
-  var pedidoInstalacao = null;
-  var instalado = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
-  var ehIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  window.addEventListener("beforeinstallprompt", function (e) {
-    e.preventDefault(); pedidoInstalacao = e; rerenderMantendoScroll();
-  });
-  window.addEventListener("appinstalled", function () { instalado = true; pedidoInstalacao = null; render(); toast("App instalado"); });
-
-  function avisoInstalar() {
-    if (instalado || ler("mp-instalar-dispensado", false)) return "";
-    var corpo;
-    if (pedidoInstalacao) {
-      corpo = '<p><b>Instale o Saúde Familiar no celular.</b> Ele abre como um app, funciona sem internet e guarda seus dados com mais segurança.</p>' +
-        '<div class="linha-acoes"><button class="btn primario" id="instalar">Instalar app</button>';
-    } else if (ehIOS) {
-      corpo = '<p><b>Instale o Saúde Familiar no iPhone.</b> Assim ele funciona sem internet e o Safari não apaga seus dias marcados.</p>' +
-        '<ol class="passos-ios"><li>Toque em <b>Compartilhar</b> ' + ICON.share + ' na barra do Safari.</li>' +
-        '<li>Escolha <b>Adicionar à Tela de Início</b>.</li><li>Toque em <b>Adicionar</b>.</li></ol>' +
-        '<div class="linha-acoes">';
-    } else {
-      return "";
-    }
-    return '<section class="aviso-instalar" aria-label="Instalar o app">' + corpo +
-      '<button class="btn" id="dispensar-instalar">Agora não</button></div></section>';
-  }
+  // Por enquanto o app é só site: não convida a instalar e segura a faixa de instalação do navegador.
+  // O service worker continua (abre sem internet). Quem quiser ainda instala pelo menu do navegador.
+  window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); });
 
   // ---------- roteamento ----------
   function render() {
@@ -1412,7 +1389,7 @@
     else if (aba === "compras") html = telaCompras();
     else if (aba === "quero" || aba === "despensa") { html = telaDespensa(); aba = "quero"; }
     else { html = telaPlano(); aba = "plano"; }
-    main.innerHTML = avisoInstalar() + html;
+    main.innerHTML = html;
     preencherFotos(main);
     document.querySelectorAll(".abas a").forEach(function (a) {
       if (a.dataset.aba === aba) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
@@ -1475,12 +1452,6 @@
     } else if (b.dataset.desp) {
       alternar(despensa, b.dataset.desp); salvarTudo();
       atualizarQueroComer(b.dataset.desp);
-    } else if (b.id === "instalar" && pedidoInstalacao) {
-      pedidoInstalacao.prompt();
-      pedidoInstalacao.userChoice.then(function () { pedidoInstalacao = null; rerenderMantendoScroll(); });
-    } else if (b.id === "dispensar-instalar") {
-      gravar("mp-instalar-dispensado", true); rerenderMantendoScroll();
-      toast("Tudo bem. Dá para instalar depois pelo menu do navegador.");
     } else if (b.id === "limpar-despensa") {
       var antesQuero = despensa.slice();
       despensa = []; salvarTudo(); atualizarQueroComer();

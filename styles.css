@@ -391,16 +391,12 @@ table.nutri th:first-child, table.nutri td:first-child { text-align: left; }
 }
 @media (prefers-color-scheme: dark) { .toast .desfazer { color: var(--primary-soft); color: #065f46; } }
 
-/* Aviso para instalar e lembrete de cópia */
-.aviso-instalar, .lembrete {
+/* Lembrete de cópia */
+.lembrete {
   background: var(--accent-soft); border: 1px solid var(--accent); border-radius: var(--radius);
   padding: 14px; margin-bottom: 16px;
 }
-.aviso-instalar p, .lembrete p { margin: 0 0 10px; }
-.aviso-instalar .linha-acoes { margin: 0; }
-.passos-ios { margin: 0 0 12px; padding-left: 20px; }
-.passos-ios li + li { margin-top: 4px; }
-.passos-ios svg { width: 16px; height: 16px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 2; }
+.lembrete p { margin: 0 0 10px; }
 
 /* Refeições do dia (Frequência) */
 .refeicoes-dia { margin: 4px 0 0; }
