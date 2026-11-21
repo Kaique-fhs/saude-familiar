@@ -30,8 +30,8 @@ test('comoUsuario(A) não enxerga itens de B', async () => {
   const banco = await novoBancoTeste();
   const a = await novoUsuario(banco, 'a@x.com');
   const b = await novoUsuario(banco, 'b@x.com');
-  await inserirItem(banco, a, 'ia');
-  await inserirItem(banco, b, 'ib');
+  await banco.comoUsuario(a, (tx) => inserirItem(tx, a, 'ia'));
+  await banco.comoUsuario(b, (tx) => inserirItem(tx, b, 'ib'));
   const rows = await banco.comoUsuario(a, async (tx) => (await tx.consulta('select * from itens')).rows);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].user_id, a);
@@ -49,17 +49,22 @@ test('comoUsuario(A) não consegue inserir item com user_id de B', async () => {
 test('apagar usuário apaga sessões, tokens e itens (cascade)', async () => {
   const banco = await novoBancoTeste();
   const a = await novoUsuario(banco, 'a@x.com');
-  await inserirItem(banco, a, 'ia');
+  await banco.comoUsuario(a, (tx) => inserirItem(tx, a, 'ia'));
+  assert.equal((await banco.comoUsuario(a, (tx) => tx.consulta('select 1 from itens'))).rows.length, 1);
   await banco.consulta('insert into sessoes (hash, user_id) values ($1, $2)', ['h1', a]);
   await banco.consulta(
     "insert into tokens (hash, user_id, tipo, expira_em) values ($1, $2, 'confirmar', now())",
     ['t1', a],
   );
   await banco.consulta('delete from usuarios where id = $1', [a]);
-  for (const t of ['itens', 'sessoes', 'tokens']) {
+  for (const t of ['sessoes', 'tokens']) {
     const r = await banco.consulta(`select count(*)::int as n from ${t}`);
     assert.equal(r.rows[0].n, 0, t);
   }
+  // Itens não se contam como dono (a RLS força): recria o mesmo id e confere que nada órfão reaparece.
+  await banco.consulta("insert into usuarios (id, email, senha_hash) values ($1, 'a2@x.com', 'x')", [a]);
+  const itens = await banco.comoUsuario(a, (tx) => tx.consulta('select 1 from itens'));
+  assert.equal(itens.rows.length, 0, 'itens');
   await banco.fechar();
 });
 
