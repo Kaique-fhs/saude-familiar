@@ -37,15 +37,15 @@ Erros têm sempre o formato `{"erro": "<codigo>"}`.
 | Rota | Corpo / consulta | Respostas |
 | --- | --- | --- |
 | `GET /saude` | - | `200 {ok:true}` |
-| `POST /conta/cadastro` | `{email, senha}` (senha 8 a 128); cabeçalho `x-turnstile-token` | `202 {ok:true}` sempre (exista ou não o e-mail); `400 senha` / `400 email`; `403 captcha`; `429 limite` |
+| `POST /conta/cadastro` | `{email, senha}` (senha 8 a 128); cabeçalho `x-turnstile-token` | `202 {ok:true}` sempre (exista ou não o e-mail); `400 senha` / `400 email` / `400 captcha`; `429 limite` |
 | `POST /conta/confirmar` | `{token}` | `200 {ok:true}`; `400 token` |
 | `POST /conta/entrar` | `{email, senha}` | `200 {token, usuario:{id,email}}`; `401 credenciais`; `403 nao-confirmado`; `429 limite` |
 | `POST /conta/sair` (sessão) | - | `204` |
 | `GET /conta` (sessão) | - | `200 {id, email}` |
-| `POST /conta/esqueci` | `{email}`; cabeçalho `x-turnstile-token` | `202 {ok:true}` sempre; `403 captcha`; `429 limite` |
+| `POST /conta/esqueci` | `{email}`; cabeçalho `x-turnstile-token` | `202 {ok:true}` sempre; `400 captcha`; `429 limite` |
 | `POST /conta/nova-senha` | `{token, senha}` | `200 {ok:true}` (apaga todas as sessões); `400 senha` / `400 token` |
 | `DELETE /conta` (sessão) | `{senha}` | `204` (apaga conta, dados e fotos); `401 credenciais` |
-| `POST /sync` (sessão) | `{mudancas:[{tipo, chave, valor, ativo, em}]}` (1 a N itens) | `200 {conflitos:[item]}`; `400 sync` |
+| `POST /sync` (sessão) | `{mudancas:[{tipo, chave, valor, ativo, em}]}` (1 a 500 mudanças; valor até 64 KB; corpo até 1 MB) | `200 {conflitos:[item]}`; `400 sync`; `413 requisicao` (corpo acima de 1 MB) |
 | `GET /sync` (sessão) | `?depois=<seq>&limite=<n>` (padrão 0 e 500; máx. 1000) | `200 {itens, cursor, mais}`; `400 sync` |
 | `POST /fotos/:fotoId/envio` (sessão) | - | `200 {url, campos}` (POST assinado, até 5 MB, `image/jpeg`, 5 min); `400 foto-id` |
 | `GET /fotos/:fotoId` (sessão) | - | `200 {url}` (leitura assinada, 5 min); `400 foto-id` |
