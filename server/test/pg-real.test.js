@@ -41,12 +41,21 @@ test('RLS isola A de B via comoUsuario com FORCE', { skip: pular }, async () => 
     await assert.rejects(banco.comoUsuario(a, (tx) => inserirItem(tx, b, 'x')), /row-level security/);
     // FORCE: nem o dono da tabela passa sem comoUsuario (sem FORCE este insert funcionaria)
     await assert.rejects(inserirItem(banco, a, 'dono'), /row-level security/);
-    // sem app.user_id definido, o papel saude_app não vê nada
+    // app.user_id vazio ('' em conexão reaproveitada do pool): 0 linhas no select, RLS (não erro de cast) no insert
     const semId = await banco.transacao(async (tx) => {
       await tx.consulta('set local role saude_app');
+      await tx.consulta("select set_config('app.user_id', '', true)");
       return (await tx.consulta('select * from itens')).rows;
     });
     assert.equal(semId.length, 0);
+    await assert.rejects(
+      banco.transacao(async (tx) => {
+        await tx.consulta('set local role saude_app');
+        await tx.consulta("select set_config('app.user_id', '', true)");
+        await inserirItem(tx, a, 'sem-id');
+      }),
+      /row-level security/,
+    );
   } finally {
     await banco.fechar();
   }

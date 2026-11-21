@@ -13,6 +13,7 @@ test('migrar aplica as migrações e é repetível', async () => {
   assert.deepEqual(await executarTarefa('migrar', { banco, config: configTeste() }), [
     '001_contas.sql',
     '002_dados.sql',
+    '003_politica_itens.sql',
   ]);
   assert.deepEqual(await executarTarefa('migrar', { banco, config: configTeste() }), []);
   await banco.fechar();

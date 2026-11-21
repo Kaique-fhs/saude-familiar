@@ -21,7 +21,7 @@ const inserirItem = (tx, userId, chave) =>
 test('migrar aplica 001 e 002 e na segunda vez não aplica nada', async () => {
   const banco = await criarBancoPglite();
   const primeira = await migrar(banco);
-  assert.deepEqual(primeira, ['001_contas.sql', '002_dados.sql']);
+  assert.deepEqual(primeira, ['001_contas.sql', '002_dados.sql', '003_politica_itens.sql']);
   assert.deepEqual(await migrar(banco), []);
   await banco.fechar();
 });
@@ -90,7 +90,22 @@ test('migrar com o papel saude_app já concedido ao dono (sem admin) não falha'
   await banco.consulta('grant saude_app to dono_teste');
   await banco.consulta('grant all on schema public to dono_teste');
   await banco.consulta('set role dono_teste');
-  assert.deepEqual(await migrar(banco), ['001_contas.sql', '002_dados.sql']);
+  assert.deepEqual(await migrar(banco), ['001_contas.sql', '002_dados.sql', '003_politica_itens.sql']);
   assert.deepEqual(await migrar(banco), []);
+  await banco.fechar();
+});
+
+test('com app.user_id vazio o saude_app vê 0 itens e não insere (RLS, não erro de cast)', async () => {
+  const banco = await novoBancoTeste();
+  const a = await novoUsuario(banco, 'a@x.com');
+  await banco.comoUsuario(a, (tx) => inserirItem(tx, a, 'ia'));
+  const vazio = (fn) =>
+    banco.transacao(async (tx) => {
+      await tx.consulta('set local role saude_app');
+      await tx.consulta("select set_config('app.user_id', '', true)");
+      return fn(tx);
+    });
+  assert.equal((await vazio((tx) => tx.consulta('select * from itens'))).rows.length, 0);
+  await assert.rejects(vazio((tx) => inserirItem(tx, a, 'x')), /row-level security/);
   await banco.fechar();
 });
