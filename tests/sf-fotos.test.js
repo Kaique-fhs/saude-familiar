@@ -94,3 +94,25 @@ test("garantir devolve null se a rede falha ou a resposta não é ok", async () 
   assert.equal(await montar({ resposta: resp(404) }).fotos.garantir(ID), null);
   assert.equal(await montar({ urlErro: new ErroApi(0, "rede") }).fotos.garantir(ID), null);
 });
+
+test("garantir simultâneo da mesma foto faz 1 download e 1 gravação, e devolve o mesmo blob", async () => {
+  const { fotos, chamadas, banco } = montar();
+  let gravacoes = 0;
+  const gravar = banco.gravar;
+  banco.gravar = async (id, b) => { gravacoes++; return gravar(id, b); };
+  const [a, b] = await Promise.all([fotos.garantir(ID), fotos.garantir(ID)]);
+  assert.equal(chamadas.length, 1);
+  assert.equal(gravacoes, 1);
+  assert.ok(a instanceof Blob);
+  assert.equal(a, b);
+});
+
+test("garantir tenta de novo numa nova chamada depois de uma falha", async () => {
+  let falha = true;
+  const api = { urlFoto: async () => ({ url: "http://s3/ler" }) };
+  const fetchFalso = async () => { if (falha) throw new TypeError("x"); return resp(200); };
+  const fotos = Fotos.criar({ api, fetch: fetchFalso, banco: bancoFalso() });
+  assert.equal(await fotos.garantir(ID), null);
+  falha = false;
+  assert.ok((await fotos.garantir(ID)) instanceof Blob);
+});

@@ -12,6 +12,7 @@
     var banco = deps.banco;
     var ErroApi = erroApiClasse(deps);
     var enviadas = {};
+    var emVoo = {};
 
     // "sem-foto" | "sessao" | "rede" | "permanente"
     function classificar(e) {
@@ -47,6 +48,13 @@
     function foiEnviada(fotoId) { return enviadas[fotoId] === true; }
 
     function garantir(fotoId) {
+      if (emVoo[fotoId]) return emVoo[fotoId];
+      var p = baixar(fotoId).then(function (r) { delete emVoo[fotoId]; return r; }, function (e) { delete emVoo[fotoId]; throw e; });
+      emVoo[fotoId] = p;
+      return p;
+    }
+
+    function baixar(fotoId) {
       return Promise.resolve(banco.ler(fotoId)).then(function (local) {
         if (local) return local;
         return api.urlFoto(fotoId).then(function (r) {
