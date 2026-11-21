@@ -55,22 +55,33 @@
 
   function confirmacaoApagarOk(t) { return String(t || "").trim().toUpperCase() === "APAGAR"; }
 
-  // Apaga a conta: só depois da resposta de sucesso (204) limpa o aparelho e chama aoApagar(userId).
+  var MSG_LIMPEZA = "Sua conta foi apagada, mas não deu para apagar as fotos guardadas neste aparelho. Feche as outras abas do app e tente de novo.";
+  var MSG_LIMPEZA_SAIR = "Você saiu, mas não deu para apagar as fotos guardadas neste aparelho. Feche as outras abas do app e tente de novo.";
+
+  // Roda aoApagar sem deixar a falha dele virar erro da API: devolve true se a limpeza local falhou.
+  function limpar(aoApagar, userId) {
+    return Promise.resolve().then(function () { return aoApagar ? aoApagar(userId) : undefined; }).then(
+      function () { return false; }, function () { return true; });
+  }
+
+  // Apaga a conta. Erro da API rejeita (nada é limpo). Depois do sucesso (204) a conta está encerrada:
+  // sessão e chaves saem, e a falha de aoApagar vira {limpezaFalhou:true}, nunca rejeição.
   function apagarConta(o) {
     return o.api.apagarConta(o.senha).then(function () {
       o.local.apagarSessao();
       o.local.apagarUsuario(o.userId);
-      return o.aoApagar ? o.aoApagar(o.userId) : undefined;
+      return limpar(o.aoApagar, o.userId).then(function (falhou) { return { limpezaFalhou: falhou }; });
     });
   }
 
   // Sair: sempre apaga a sessão; sem pendências também limpa a conta do aparelho (aoApagar), com pendências mantém.
+  // Falha de aoApagar não impede a saída: vira {limpezaFalhou:true}.
   function sairDaConta(o) {
     return Promise.resolve().then(function () { return o.api.sair(); }).catch(function () { /* sai mesmo sem rede */ }).then(function () {
       o.local.apagarSessao();
-      if (o.pendentes > 0) return undefined;
+      if (o.pendentes > 0) return { limpezaFalhou: false };
       o.local.apagarUsuario(o.userId);
-      return o.aoApagar ? o.aoApagar(o.userId) : undefined;
+      return limpar(o.aoApagar, o.userId).then(function (falhou) { return { limpezaFalhou: falhou }; });
     });
   }
 
@@ -280,6 +291,24 @@
       });
     }
 
+    // Aviso quando a conta/sessão já acabou mas a limpeza das fotos locais falhou: dá para tentar de novo.
+    function mostrarLimpeza(userId, msg) {
+      var t = tela("Falta limpar o aparelho", msg);
+      var tentar = botao("Tentar de novo", "primario");
+      tentar.addEventListener("click", function () {
+        ocupado(tentar, true, "Tentar de novo");
+        limpar(aoApagar, userId).then(function (falhou) {
+          if (falhou) { ocupado(tentar, false, "Tentar de novo"); t.erro.textContent = "Ainda não deu. Feche as outras abas do app e tente de novo."; }
+          else mostrarEntrar("Fotos apagadas deste aparelho.");
+        });
+      });
+      var seguir = botao("Continuar sem apagar", "");
+      seguir.addEventListener("click", function () { mostrarEntrar(); });
+      t.caixa.appendChild(tentar);
+      t.caixa.appendChild(seguir);
+      foco(tentar);
+    }
+
     function mostrarConta() {
       var s = local.sessao();
       if (!s) { mostrarEntrar(); return; }
@@ -293,9 +322,10 @@
       var sair = botao("Sair", "flex");
       sair.addEventListener("click", function () {
         ocupado(sair, true, "Sair");
-        sairDaConta({ api: api, local: local, userId: s.usuario.id, pendentes: Array.isArray(fila) ? fila.length : 0, aoApagar: aoApagar }).catch(function () { /* ignora */ }).then(function () {
+        sairDaConta({ api: api, local: local, userId: s.usuario.id, pendentes: Array.isArray(fila) ? fila.length : 0, aoApagar: aoApagar }).then(function (r) {
           esconder();
           if (o.aoSair) o.aoSair();
+          if (r.limpezaFalhou) mostrarLimpeza(s.usuario.id, MSG_LIMPEZA_SAIR);
         });
       });
       t.caixa.appendChild(sair);
@@ -333,9 +363,10 @@
           if (!senha.input.value) { erro.textContent = mensagemErro("credenciais"); foco(senha.input); return; }
           if (!confirmacaoApagarOk(conf.input.value)) { erro.textContent = "Escreva a palavra APAGAR para confirmar."; foco(conf.input); return; }
           ocupado(b, true, "Apagar para sempre");
-          apagarConta({ api: api, local: local, userId: s.usuario.id, senha: senha.input.value, aoApagar: aoApagar }).then(function () {
+          apagarConta({ api: api, local: local, userId: s.usuario.id, senha: senha.input.value, aoApagar: aoApagar }).then(function (r) {
             esconder();
             if (o.aoSair) o.aoSair();
+            if (r.limpezaFalhou) mostrarLimpeza(s.usuario.id, MSG_LIMPEZA);
           }, function (e) {
             ocupado(b, false, "Apagar para sempre");
             erro.textContent = mensagemErro(codigoDe(e));

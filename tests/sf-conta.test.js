@@ -90,3 +90,21 @@ test("sairDaConta: sem pendências limpa o aparelho; com pendências mantém os 
   await conta.sairDaConta({ api: b.api, local: b.local, userId: "u1", pendentes: 2, aoApagar: b.aoApagar });
   assert.deepEqual(b.ev, ["api.sair", "sessao"]);
 });
+
+test("apagarConta com aoApagar rejeitando: conta encerrada e aviso de limpeza (não é erro da API)", async () => {
+  const f = falsos();
+  const r = await conta.apagarConta({ api: f.api, local: f.local, userId: "u1", senha: "x", aoApagar: async () => { throw new Error("onerror"); } });
+  assert.deepEqual(r, { limpezaFalhou: true });
+  assert.deepEqual(f.ev, ["api.apagar", "sessao", "usuario:u1"]);
+  const ok = await conta.apagarConta({ api: f.api, local: f.local, userId: "u1", senha: "x", aoApagar: f.aoApagar });
+  assert.deepEqual(ok, { limpezaFalhou: false });
+});
+
+test("sairDaConta com aoApagar rejeitando: sessão encerrada e aviso de limpeza", async () => {
+  const f = falsos();
+  const r = await conta.sairDaConta({ api: f.api, local: f.local, userId: "u1", pendentes: 0, aoApagar: () => { throw new Error("boom"); } });
+  assert.deepEqual(r, { limpezaFalhou: true });
+  assert.deepEqual(f.ev, ["api.sair", "sessao", "usuario:u1"]);
+  const g = falsos();
+  assert.deepEqual(await conta.sairDaConta({ api: g.api, local: g.local, userId: "u1", pendentes: 1, aoApagar: g.aoApagar }), { limpezaFalhou: false });
+});
