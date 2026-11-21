@@ -136,7 +136,7 @@ verifica "postgres.sql: grant saude_app aos donos" grep -qi "grant saude_app" "$
 verifica "journald: SystemMaxUse=500M" grep -qx "SystemMaxUse=500M" "$AQUI/journald.conf"
 verifica "journald: MaxRetentionSec=30day" grep -qx "MaxRetentionSec=30day" "$AQUI/journald.conf"
 S="$AQUI/saude-api@.service"
-for k in "User=saude" "EnvironmentFile=/etc/saude/%i.env" "ExecStartPre=/opt/node/bin/node src/tarefas.js migrar" "ExecStart=/opt/node/bin/node src/principal.js" "Restart=always" "StartLimitIntervalSec=300" "StartLimitBurst=5" "OnFailure=saude-alerta@%n.service" "After=network-online.target postgresql@16-main.service" "Requires=postgresql@16-main.service" "NoNewPrivileges=true" "ProtectSystem=strict" "PrivateTmp=true"; do
+for k in "User=saude" "EnvironmentFile=/etc/saude/%i.env" "ExecStartPre=/opt/node/bin/node src/tarefas.js migrar" "ExecStart=/opt/node/bin/node src/principal.js" "Restart=always" "RestartSec=10" "StartLimitIntervalSec=300" "StartLimitBurst=5" "OnFailure=saude-alerta@%n.service" "After=network-online.target postgresql@16-main.service" "Requires=postgresql@16-main.service" "NoNewPrivileges=true" "ProtectSystem=strict" "PrivateTmp=true"; do
   verifica "saude-api@.service: $k" grep -qx "$k" "$S"
 done
 verifica "saude-api@.service: nao depende so do guarda-chuva postgresql.service" bash -c "! grep -qE '(After|Requires)=.*[ =]postgresql\.service' '$S'"

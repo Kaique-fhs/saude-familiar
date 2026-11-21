@@ -51,7 +51,7 @@ Obs.: o primeiro resultado foi 44 de 47 (`remaining connection slots are reserve
 
 ## Correcoes da revisao final (pendentes de aplicar na stack)
 
-- Bucket de backups versionado (versoes antigas expiram em 30 dias): a maquina continua sem `DeleteObject`.
+- Bucket de backups versionado (objeto expira em 23 dias e a versao antiga em mais 7: some em 30, como a politica de privacidade promete): a maquina continua sem `DeleteObject`.
 - `AlarmeTravada` (`StatusCheckFailed_Instance`, reinicia e avisa). API com limite de reinicios, aviso por SNS (`saude-alerta@.service`) e dependencia de `postgresql@16-main.service`: entram no proximo provisionamento.
 - `test:pg` na maquina roda com `--test-concurrency=1` e o dono de teste tem `CONNECTION LIMIT 8` (nao esgota as 20 conexoes da producao). Ainda assim, evite rodar na maquina em horario de uso.
 - Decisao: maquina fica ligada (~US$ 11,50/mes nos creditos). Restaurar e refazer do zero: `RUNBOOK.md`.

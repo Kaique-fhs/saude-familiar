@@ -40,7 +40,7 @@ Confira o change set (`aws cloudformation describe-change-set`): so deve haver o
 
 ## Restaurar um backup
 
-Backups: `s3://<BucketBackups>/<ambiente>/<AAAA-MM-DD>.dump` (e `contas_apagadas-<data>.csv`), um por dia, 30 dias. O bucket e versionado; versoes antigas (ate 30 dias) ficam recuperaveis pelo console ou `list-object-versions` se um dump for sobrescrito. A maquina nao apaga nada nesse bucket. Rodar na maquina, como root (Session Manager):
+Backups: `s3://<BucketBackups>/<ambiente>/<AAAA-MM-DD>.dump` (e `contas_apagadas-<data>.csv`), um por dia, somem em 30 dias (23 dias como objeto atual + 7 como versao antiga). O bucket e versionado; versoes antigas (ate 7 dias) ficam recuperaveis pelo console ou `list-object-versions` se um dump for sobrescrito. A maquina nao apaga nada nesse bucket. Rodar na maquina, como root (Session Manager):
 
 - **Conferir sem tocar no banco vivo** (nao mexe na API): `sudo server/infra/maquina/restaurar.sh <teste|producao> <AAAA-MM-DD>`. Restaura no banco novo `saude_restauro_<ambiente>`, reaplica as exclusoes de contas (`contas_apagadas`) e imprime contagens. Confira e apague a mao: `drop database saude_restauro_<ambiente>`.
 - **Trocar o banco vivo**: `sudo server/infra/maquina/restaurar.sh <ambiente> <data> saude_<ambiente> --substituir`. Para a API, restaura num banco temporario, reaplica as exclusoes, renomeia o vivo para `saude_<ambiente>_reserva_<data-hora>` e o temporario para `saude_<ambiente>`, e religa a API. A reserva **nao** e apagada (confira e remova com `drop database`); se algo falhar, o banco vivo fica intacto. Exclusoes de conta feitas depois do ultimo backup e antes da perda (ate 24 h) nao tem copia: reaplique a mao se souber quais sao.

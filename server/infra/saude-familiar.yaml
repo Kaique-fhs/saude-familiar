@@ -223,16 +223,17 @@ Resources:
               SSEAlgorithm: AES256
       # Versionado: um PutObject da maquina nao destroi o dump anterior. O papel
       # da maquina nao tem DeleteObject/DeleteObjectVersion nem lifecycle; so o
-      # lifecycle abaixo apaga (objeto atual e versoes antigas, 30 dias).
+      # lifecycle abaixo apaga: 23 dias o objeto atual (vira versao antiga) + 7 dias a
+      # versao antiga = some em ate 30 dias, como promete a politica de privacidade.
       VersioningConfiguration:
         Status: Enabled
       LifecycleConfiguration:
         Rules:
           - Id: expirar-backups-em-30-dias
             Status: Enabled
-            ExpirationInDays: 30
+            ExpirationInDays: 23
             NoncurrentVersionExpiration:
-              NoncurrentDays: 30
+              NoncurrentDays: 7
           - Id: remover-marcadores-de-exclusao
             Status: Enabled
             ExpiredObjectDeleteMarker: true

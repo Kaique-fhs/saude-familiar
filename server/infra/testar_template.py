@@ -119,9 +119,14 @@ class Template(unittest.TestCase):
         # versionado: sem isso, PutObject da maquina sobrescreveria os dumps sem deixar copia
         self.assertEqual(bk["VersioningConfiguration"]["Status"], "Enabled")
         regras_bk = bk["LifecycleConfiguration"]["Rules"]
-        self.assertTrue(any(r.get("ExpirationInDays") == 30 for r in regras_bk))
-        self.assertTrue(any(r.get("NoncurrentVersionExpiration", {}).get("NoncurrentDays") == 30
-                            for r in regras_bk))
+        # promessa da politica de privacidade: o backup some em ate 30 dias no total
+        # (com versionamento, a expiracao atual so cria uma versao antiga, que espera mais)
+        atual = [r["ExpirationInDays"] for r in regras_bk if "ExpirationInDays" in r]
+        antiga = [r["NoncurrentVersionExpiration"]["NoncurrentDays"] for r in regras_bk
+                  if "NoncurrentVersionExpiration" in r]
+        self.assertEqual(len(atual), 1)
+        self.assertEqual(len(antiga), 1)
+        self.assertLessEqual(atual[0] + antiga[0], 30)
         self.assertTrue(any(r.get("ExpiredObjectDeleteMarker") is True for r in regras_bk))
         self.assertTrue(all(r["Status"] == "Enabled" for r in regras_bk))
 
