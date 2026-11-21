@@ -12,6 +12,7 @@ export function lerConfig(env) {
     ambiente: env.AMBIENTE === 'teste' ? 'teste' : 'producao',
     databaseUrl: env.DATABASE_URL ?? '',
     origemSite,
+    caminhoSite: env.CAMINHO_SITE || '/saude-familiar/',
     segredoOrigem,
     turnstileSegredo: env.TURNSTILE_SECRET ?? '',
     smtp: {

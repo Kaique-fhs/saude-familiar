@@ -58,9 +58,10 @@ async function rodar(alvo, sql, params) {
   return alvo.query(sql, params);
 }
 
-export async function criarBancoPglite() {
+// Sem pasta: em memória. Com pasta: persistido em disco (usado só pelo servidor de desenvolvimento).
+export async function criarBancoPglite(pasta) {
   const { PGlite } = await import('@electric-sql/pglite');
-  const db = new PGlite();
+  const db = pasta ? new PGlite(pasta) : new PGlite();
   await db.waitReady;
   return montar(
     (sql, params) => rodar(db, sql, params),

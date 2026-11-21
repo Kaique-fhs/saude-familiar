@@ -55,7 +55,7 @@ export function registrarContas(app, { banco, email, captcha, armazenamento, lim
     if (porEmail) preHandler.push(porEmail);
     return { ...limitePorIp(limites, nome, limite), preHandler };
   }
-  const link = (marcador, token) => `${config.origemSite}/saude-familiar/#${marcador}=${token}`;
+  const link = (marcador, token) => `${config.origemSite}${config.caminhoSite ?? '/saude-familiar/'}#${marcador}=${token}`;
 
   // Sem await: o tempo de resposta não pode revelar se a conta existe.
   function enviarEmail(msg) {

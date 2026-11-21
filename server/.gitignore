@@ -1,3 +1,5 @@
 node_modules/
 .env
 .pg*/
+.pg-dev/
+.fotos-dev/

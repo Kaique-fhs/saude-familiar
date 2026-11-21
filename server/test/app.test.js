@@ -107,3 +107,53 @@ test('lerConfig aplica os padrões', () => {
   assert.equal(c.tetoEmailsDia, 300);
   assert.equal(c.s3.regiao, 'us-east-2');
 });
+
+const preflight = (a, headers) =>
+  a.inject({
+    method: 'OPTIONS',
+    url: '/conta',
+    headers: {
+      origin: 'http://localhost:5500',
+      'access-control-request-method': 'GET',
+      'access-control-request-headers': headers,
+    },
+  });
+
+test('em AMBIENTE=teste o preflight aceita x-saude-origem; em producao não', async () => {
+  const teste = await criarApp({ config: configTeste() });
+  const rt = await preflight(teste, 'x-saude-origem');
+  assert.match(rt.headers['access-control-allow-headers'] ?? '', /x-saude-origem/);
+  await teste.close();
+  const prod = await criarApp({
+    config: configTeste({ ambiente: 'producao', origemSite: 'http://localhost:5500' }),
+  });
+  const rp = await preflight(prod, 'x-saude-origem');
+  assert.doesNotMatch(rp.headers['access-control-allow-headers'] ?? '', /x-saude-origem/);
+  await prod.close();
+});
+
+test('rotasLivres isenta só os prefixos dados; sem a opção nada é isento', async () => {
+  const livre = await criarApp({ config: configTeste(), rotasLivres: ['/dev-fotos', '/config.js'] });
+  livre.get('/config.js', async () => 'ok');
+  livre.get('/dev-fotos/x', async () => 'ok');
+  livre.get('/outra', async () => 'ok');
+  livre.get('/dev-fotosx', async () => 'ok');
+  const status = async (a, url) => (await a.inject({ method: 'GET', url })).statusCode;
+  assert.equal(await status(livre, '/config.js'), 200);
+  assert.equal(await status(livre, '/dev-fotos/x'), 200);
+  assert.equal(await status(livre, '/dev-fotos/x?a=1'), 200);
+  assert.equal(await status(livre, '/outra'), 403);
+  assert.equal(await status(livre, '/dev-fotosx'), 403);
+  await livre.close();
+
+  const sem = await criarApp({ config: configTeste() });
+  sem.get('/config.js', async () => 'ok');
+  assert.equal(await status(sem, '/config.js'), 403);
+  await sem.close();
+});
+
+test('lerConfig: CAMINHO_SITE tem padrão /saude-familiar/ e aceita outro valor', () => {
+  const base = { ORIGEM_SITE: 'https://x', SEGREDO_ORIGEM: 's' };
+  assert.equal(lerConfig(base).caminhoSite, '/saude-familiar/');
+  assert.equal(lerConfig({ ...base, CAMINHO_SITE: '/' }).caminhoSite, '/');
+});
