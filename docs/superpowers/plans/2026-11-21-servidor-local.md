@@ -54,7 +54,7 @@
 - Produces:
   - `lerConfig(env: object) -> Config` com `{ porta:number, ambiente:'teste'|'producao', databaseUrl:string, origemSite:string, segredoOrigem:string, turnstileSegredo:string, smtp:{host,porta,usuario,senha,remetente}, tetoEmailsDia:number, s3:{regiao,bucketFotos} }`. Variáveis: `PORT` (3000), `AMBIENTE`, `DATABASE_URL`, `ORIGEM_SITE`, `SEGREDO_ORIGEM`, `TURNSTILE_SECRET`, `SMTP_HOST`, `SMTP_PORT` (465), `SMTP_USER`, `SMTP_PASS`, `EMAIL_REMETENTE`, `TETO_EMAILS_DIA` (300), `S3_REGIAO` (`us-east-2`), `S3_BUCKET_FOTOS`. Faltando `SEGREDO_ORIGEM` ou `ORIGEM_SITE` → lança `Error("config: <NOME> ausente")`.
   - `criarApp({ config, banco, email, captcha, armazenamento, relogio?, limites? }) -> Promise<FastifyInstance>`; `relogio` padrão `() => new Date()`; `limites` padrão `true` (a Task 5 usa; antes dela é ignorado).
-  - Fastify com **`trustProxy: 1`** (só o CloudFront à frente; nunca `true`, que aceitaria `X-Forwarded-For` forjado).
+  - Fastify com **`trustProxy: (_, salto) => salto < 1`** (confia só no par TCP = CloudFront; `request.ip` = último endereço do `X-Forwarded-For`; o valor numérico `1` é ignorado pelo Fastify 5.12.8; nunca `true`).
   - `@fastify/cors` registrado **antes** da portaria, com `methods: ['GET','POST','DELETE']`.
   - Parser JSON que aceita corpo vazio como `{}` (o app chama `POST /conta/sair` sem corpo).
   - `server/test/ajuda.js`: `configTeste(extra?) -> Config` (ambiente `teste`, segredo `segredo-teste`) e `cabecalhos(extra?) -> object` com `x-saude-origem`.
@@ -69,7 +69,7 @@
   - `GET /nao-existe com o cabeçalho → 404 {erro:"nao-encontrado"}`; `POST com JSON malformado → 400 {erro:"requisicao"}`
   - `preflight OPTIONS de DELETE vindo da origem do site → access-control-allow-methods inclui DELETE`
 - [ ] **Step 2:** `cd server && npm install && npm test` → FAIL (módulos não existem).
-- [ ] **Step 3: Implementar** `config.js` e `app.js`: Fastify com `trustProxy: 1`, `@fastify/cors` com as origens da regra global, hook `onRequest` que confere `x-saude-origem` com `timingSafeEqual` (comprimentos diferentes = recusa) e libera só `GET /saude`. `.gitignore`: `node_modules/`, `.env`, `.pg*/`. `.env.example` com todas as variáveis, sem valores reais.
+- [ ] **Step 3: Implementar** `config.js` e `app.js`: Fastify com o `trustProxy` acima, `@fastify/cors` com as origens da regra global, hook `onRequest` que confere `x-saude-origem` com `timingSafeEqual` (comprimentos diferentes = recusa) e libera só `GET /saude`. `.gitignore`: `node_modules/`, `.env`, `.pg*/`. `.env.example` com todas as variáveis, sem valores reais.
 - [ ] **Step 4:** `npm test` → PASS.
 - [ ] **Step 5: Commit** `git add server/package.json server/package-lock.json server/.env.example server/.gitignore server/src/config.js server/src/app.js server/test/app.test.js server/test/ajuda.js` — "Servidor: esqueleto, configuração e cabeçalho secreto".
 
