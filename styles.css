@@ -487,3 +487,29 @@ dialog#registro::backdrop { background: rgba(0,0,0,.55); }
 .cal-dia.descanso { background: transparent; border-style: dashed; color: var(--muted); }
 .ponto.descanso { background: transparent; border: 1px dashed var(--muted); }
 .agora-ex { min-height: 44px; display: flex; align-items: center; }
+
+/* Telas de conta (cobrem o app enquanto abertas) */
+.conta { position: fixed; inset: 0; z-index: 50; overflow-y: auto; background: var(--bg); }
+.conta[hidden] { display: none; }
+.conta-tela { max-width: 420px; margin: 0 auto; padding: 32px 16px 48px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.conta-caixa { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 16px; }
+.conta-caixa h2 { margin: 0 0 8px; font-family: "Rubik", sans-serif; font-size: 1.3rem; outline: none; }
+.conta-caixa h3 { margin: 0 0 6px; font-size: 1.05rem; }
+.conta-sub { margin: 0 0 12px; color: var(--muted); font-size: .95rem; }
+.conta-email { margin: 0 0 12px; font-weight: 700; word-break: break-all; }
+.conta-campo { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.conta-campo label { font-weight: 700; font-size: .9rem; }
+.conta-campo input { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); font: inherit; }
+.conta-campo input:focus-visible, .conta-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.conta-erro { margin: 0 0 8px; color: var(--heart); font-weight: 700; font-size: .92rem; }
+.conta-erro:empty { display: none; }
+.conta-aviso { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: .9rem; font-weight: 700; }
+.conta-captcha { min-height: 0; margin-bottom: 12px; }
+.conta-links { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.conta-link { min-height: 44px; padding: 0 4px; border: 0; background: transparent; color: var(--primary-strong); font-weight: 700; text-decoration: underline; }
+.conta-caixa form .btn.flex, .conta-caixa > .btn { width: 100%; }
+.conta-bloco { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.conta-rejeitados { margin: 0; padding-left: 18px; font-size: .9rem; }
+.btn.perigo { background: var(--heart); border-color: var(--heart); color: #fff; }
+.conta-caixa .acoes { margin-top: 0; }
+.conta-caixa > .btn + .btn, .conta-caixa > .conta-bloco + .btn { margin-top: 12px; }

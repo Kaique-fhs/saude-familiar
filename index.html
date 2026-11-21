@@ -16,7 +16,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700&family=Rubik:wght@500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=32">
+  <link rel="stylesheet" href="styles.css?v=33">
 </head>
 <body>
   <header class="topo">
@@ -53,16 +53,19 @@
 
   <main id="conteudo" tabindex="-1"></main>
 
+  <div id="conta" class="conta" hidden></div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="config.js?v=32"></script>
-  <script src="data.js?v=32"></script>
-  <script src="js/sf-api.js?v=32"></script>
-  <script src="js/sf-local.js?v=32"></script>
-  <script src="js/sf-dados.js?v=32"></script>
-  <script src="js/sf-fotos.js?v=32"></script>
-  <script src="js/sf-sincronia.js?v=32"></script>
-  <script src="app.js?v=32"></script>
+  <script src="config.js?v=33"></script>
+  <script src="data.js?v=33"></script>
+  <script src="js/sf-api.js?v=33"></script>
+  <script src="js/sf-local.js?v=33"></script>
+  <script src="js/sf-dados.js?v=33"></script>
+  <script src="js/sf-fotos.js?v=33"></script>
+  <script src="js/sf-sincronia.js?v=33"></script>
+  <script src="js/sf-conta.js?v=33"></script>
+  <script src="app.js?v=33"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
