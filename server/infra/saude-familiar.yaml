@@ -1,0 +1,360 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Saude Familiar: uma maquina EC2 (Postgres + API, ambientes teste e producao),
+  dois buckets S3 (fotos e backups), duas distribuicoes CloudFront na frente da
+  maquina, alerta por e-mail, recuperacao automatica e orcamento mensal.
+  Regional so em us-east-2. Sem WAF.
+
+# Avisos conhecidos do cfn-lint/validacao, todos intencionais:
+# - A maquina usa a VPC e a sub-rede padrao (conta nova, sem VPC propria); o
+#   security group nao informa VpcId.
+# - O topico SNS usa a chave padrao (sem KMS proprio) para o CloudWatch e o
+#   Budgets poderem publicar sem politica de chave extra.
+
+Parameters:
+  EmailAlerta:
+    Type: String
+    Description: E-mail que recebe alarmes e avisos de orcamento.
+    AllowedPattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+  TipoInstancia:
+    Type: String
+    Default: t4g.micro
+    AllowedValues: [t4g.micro, t4g.small]
+    Description: t4g.micro (1 GB) e o padrao; t4g.small (2 GB) se faltar memoria.
+  AmiId:
+    Type: AWS::EC2::Image::Id
+    Default: ami-09c4af6de8b9844f6
+    Description: >-
+      AMI fixa (Ubuntu 24.04 arm64). Nunca usar o parametro SSM "current":
+      um deploy futuro trocaria a instancia e o Postgres do disco raiz.
+  SegredoOrigemTeste:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: Valor do cabecalho x-saude-origem do ambiente de teste.
+  SegredoOrigemProducao:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: Valor do cabecalho x-saude-origem do ambiente de producao.
+  LimiteOrcamentoUSD:
+    Type: Number
+    Default: 20
+    MinValue: 1
+    Description: Limite mensal de custo, em dolares.
+
+Resources:
+  GrupoSeguranca:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Saude Familiar - 443 so do CloudFront, 80 para o desafio ACME
+      SecurityGroupIngress:
+        - Description: HTTPS somente da prefix list gerenciada do CloudFront
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          SourcePrefixListId: pl-b6a144df
+        - Description: HTTP aberto so para o desafio ACME do Lets Encrypt
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: saude-familiar
+
+  PapelMaquina:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: saude-familiar-maquina
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: ObjetosDosBuckets
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:DeleteObject
+                  - s3:DeleteObjectVersion
+                Resource:
+                  - !Sub "${BucketFotos.Arn}/*"
+                  - !Sub "${BucketBackups.Arn}/*"
+              - Sid: ListarBuckets
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                  - s3:ListBucketVersions
+                Resource:
+                  - !GetAtt BucketFotos.Arn
+                  - !GetAtt BucketBackups.Arn
+              - Sid: LerSegredos
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/saude-familiar/*"
+              - Sid: PublicarAlertas
+                Effect: Allow
+                Action: sns:Publish
+                Resource: !Ref TopicoAlertas
+
+  PerfilMaquina:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref PapelMaquina
+
+  Maquina:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref TipoInstancia
+      IamInstanceProfile: !Ref PerfilMaquina
+      SecurityGroupIds:
+        - !GetAtt GrupoSeguranca.GroupId
+      DisableApiTermination: true
+      MetadataOptions:
+        HttpTokens: required
+        HttpEndpoint: enabled
+        HttpPutResponseHopLimit: 1
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: gp3
+            VolumeSize: 20
+            Encrypted: true
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: saude-familiar
+
+  IpFixo:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: saude-familiar
+
+  AssociacaoIp:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt IpFixo.AllocationId
+      InstanceId: !Ref Maquina
+
+  BucketFotos:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: expirar-versoes-antigas
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
+          - Id: remover-marcadores-de-exclusao
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
+          - Id: abortar-multipart-incompleto
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      CorsConfiguration:
+        CorsRules:
+          - AllowedMethods: [POST, GET]
+            AllowedOrigins:
+              - https://kaique-fhs.github.io
+              - "http://localhost:*"
+            AllowedHeaders: ["*"]
+            ExposedHeaders: [ETag]
+            MaxAge: 3600
+
+  BucketBackups:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: expirar-backups-em-30-dias
+            Status: Enabled
+            ExpirationInDays: 30
+
+  TopicoAlertas:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Saude Familiar alertas
+
+  AssinaturaAlertas:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref TopicoAlertas
+      Protocol: email
+      Endpoint: !Ref EmailAlerta
+
+  Orcamento:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: saude-familiar-mensal
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref LimiteOrcamentoUSD
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref EmailAlerta
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref EmailAlerta
+
+  AlarmeRecuperacao:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Falha de hardware da maquina; recupera a instancia sozinho.
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Dimensions:
+        - Name: InstanceId
+          Value: !Ref Maquina
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: missing
+      AlarmActions:
+        - !Sub "arn:aws:automate:${AWS::Region}:ec2:recover"
+        - !Ref TopicoAlertas
+
+  CloudFrontTeste:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: saude-familiar teste
+        PriceClass: PriceClass_100
+        HttpVersion: http2
+        Origins:
+          - Id: maquina
+            DomainName: !Sub "${IpFixo}.sslip.io"
+            OriginPath: /teste
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+              HTTPSPort: 443
+            OriginCustomHeaders:
+              - HeaderName: x-saude-origem
+                HeaderValue: !Ref SegredoOrigemTeste
+        DefaultCacheBehavior:
+          TargetOriginId: maquina
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+          Compress: true
+
+  CloudFrontProducao:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: saude-familiar producao
+        PriceClass: PriceClass_100
+        HttpVersion: http2
+        Origins:
+          - Id: maquina
+            DomainName: !Sub "${IpFixo}.sslip.io"
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+              HTTPSPort: 443
+            OriginCustomHeaders:
+              - HeaderName: x-saude-origem
+                HeaderValue: !Ref SegredoOrigemProducao
+        DefaultCacheBehavior:
+          TargetOriginId: maquina
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+          CachedMethods: [GET, HEAD]
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+          Compress: true
+
+Outputs:
+  IpPublico:
+    Description: IP fixo da maquina
+    Value: !Ref IpFixo
+  NomeOrigem:
+    Description: Nome da origem (certificado Lets Encrypt do Caddy)
+    Value: !Sub "${IpFixo}.sslip.io"
+  UrlTeste:
+    Description: URL da API de teste
+    Value: !Sub "https://${CloudFrontTeste.DomainName}"
+  UrlProducao:
+    Description: URL da API de producao
+    Value: !Sub "https://${CloudFrontProducao.DomainName}"
+  BucketFotos:
+    Description: Bucket das fotos
+    Value: !Ref BucketFotos
+  BucketBackups:
+    Description: Bucket dos backups
+    Value: !Ref BucketBackups
+  IdMaquina:
+    Description: Id da instancia EC2
+    Value: !Ref Maquina
+  TopicoAlertas:
+    Description: ARN do topico de alertas
+    Value: !Ref TopicoAlertas
