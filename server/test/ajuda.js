@@ -24,3 +24,60 @@ export async function novoBancoTeste() {
   await migrar(banco);
   return banco;
 }
+
+// Email falso: registra na chamada (síncrono), pois a rota não espera o envio.
+export function emailFalso() {
+  const enviados = [];
+  return {
+    enviados,
+    enviar(msg) {
+      enviados.push(msg);
+      return Promise.resolve();
+    },
+  };
+}
+
+const emailsDosApps = new WeakMap();
+
+export async function criarAppTeste(opcoes = {}) {
+  const { criarApp } = await import('../src/app.js');
+  const banco = await novoBancoTeste();
+  const email = emailFalso();
+  let agora = new Date('2026-11-21T12:00:00Z').getTime();
+  const relogio = () => new Date(agora);
+  relogio.avancar = (ms) => {
+    agora += ms;
+  };
+  const app = await criarApp({
+    config: configTeste(opcoes.config),
+    banco,
+    email,
+    captcha: { verificar: async () => true },
+    armazenamento: {},
+    relogio,
+    ...opcoes.deps,
+  });
+  emailsDosApps.set(app, email);
+  return { app, banco, email, relogio };
+}
+
+// Último token enviado por e-mail com o marcador (ex.: '#confirmar=').
+export function tokenDoEmail(email, marcador) {
+  for (let i = email.enviados.length - 1; i >= 0; i--) {
+    const m = email.enviados[i].texto.match(new RegExp(`${marcador}([A-Za-z0-9_-]+)`));
+    if (m) return m[1];
+  }
+  return null;
+}
+
+export async function contaLogada(app, email, opcoes = {}) {
+  const senha = opcoes.senha ?? 'senha-de-teste-123';
+  const caixa = emailsDosApps.get(app);
+  const h = cabecalhos();
+  await app.inject({ method: 'POST', url: '/conta/cadastro', headers: h, payload: { email, senha } });
+  const token = tokenDoEmail(caixa, '#confirmar=');
+  await app.inject({ method: 'POST', url: '/conta/confirmar', headers: h, payload: { token } });
+  const r = await app.inject({ method: 'POST', url: '/conta/entrar', headers: h, payload: { email, senha } });
+  const corpo = r.json();
+  return { token: corpo.token, id: corpo.usuario.id, email: corpo.usuario.email };
+}

@@ -51,7 +51,7 @@ test('POST com JSON malformado → 400 {erro:"requisicao"}', async () => {
 test('POST com corpo vazio é aceito como {} (chega ao 404, não ao 400)', async () => {
   const a = await app();
   const r = await a.inject({
-    method: 'POST', url: '/conta/sair',
+    method: 'POST', url: '/nao-existe',
     headers: cabecalhos({ 'content-type': 'application/json' }),
   });
   assert.equal(r.statusCode, 404);

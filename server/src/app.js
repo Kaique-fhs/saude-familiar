@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import { registrarContas } from './contas.js';
 
 function segredoConfere(recebido, esperado) {
   if (typeof recebido !== 'string') return false;
@@ -25,6 +26,7 @@ export async function criarApp({
   const app = Fastify({ trustProxy: 1 });
   app.decorate('config', config);
   app.decorate('relogio', relogio);
+  app.decorate('banco', banco);
 
   const origensLocais = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
   await app.register(cors, {
@@ -70,6 +72,8 @@ export async function criarApp({
   });
 
   app.get('/saude', async () => ({ ok: true }));
+
+  registrarContas(app, { banco, email });
 
   return app;
 }
