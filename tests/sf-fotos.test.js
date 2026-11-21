@@ -116,3 +116,20 @@ test("garantir tenta de novo numa nova chamada depois de uma falha", async () =>
   falha = false;
   assert.ok((await fotos.garantir(ID)) instanceof Blob);
 });
+
+test("apagarBancoFotos fecha a conexão antes de apagar e resolve no sucesso", async () => {
+  const { apagarBancoFotos, nomeBanco } = require("../js/sf-fotos.js");
+  const ordem = [];
+  const indexedDB = { deleteDatabase(nome) { ordem.push("apagar:" + nome); const r = {}; setTimeout(() => r.onsuccess(), 0); return r; } };
+  const r = await apagarBancoFotos({ indexedDB, nome: nomeBanco("u1"), fecharConexao: () => ordem.push("fechar") });
+  assert.deepEqual(ordem, ["fechar", "apagar:saude-familiar-u1"]);
+  assert.deepEqual(r, { bloqueado: false });
+});
+
+test("apagarBancoFotos: onblocked resolve com bloqueado e onerror rejeita", async () => {
+  const { apagarBancoFotos } = require("../js/sf-fotos.js");
+  const bloq = { deleteDatabase() { const r = {}; setTimeout(() => r.onblocked(), 0); return r; } };
+  assert.deepEqual(await apagarBancoFotos({ indexedDB: bloq, nome: "x" }), { bloqueado: true });
+  const erro = { deleteDatabase() { const r = { error: new Error("boom") }; setTimeout(() => r.onerror(), 0); return r; } };
+  await assert.rejects(apagarBancoFotos({ indexedDB: erro, nome: "x" }), /boom/);
+});

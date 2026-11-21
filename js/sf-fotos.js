@@ -71,7 +71,25 @@
     return { enviar: enviar, garantir: garantir, classificar: classificar, foiEnviada: foiEnviada };
   }
 
+  // Nome do IndexedDB de fotos de uma conta.
+  function nomeBanco(userId) { return "saude-familiar-" + userId; }
+
+  // Apaga o banco de fotos: primeiro fecha a conexão aberta, depois deleteDatabase.
+  // Resolve {bloqueado:false} em onsuccess; rejeita em onerror.
+  // onblocked (outra aba ainda com o banco aberto): resolve {bloqueado:true} na hora, porque o navegador
+  // mantém o pedido pendente e apaga assim que a outra conexão fechar.
+  function apagarBancoFotos(o) {
+    return new Promise(function (ok, falha) {
+      try { if (o.fecharConexao) o.fecharConexao(); } catch (e) { /* segue para apagar */ }
+      var req;
+      try { req = o.indexedDB.deleteDatabase(o.nome); } catch (e) { falha(e); return; }
+      req.onsuccess = function () { ok({ bloqueado: false }); };
+      req.onerror = function () { falha(req.error || new Error("Não deu para apagar as fotos do aparelho.")); };
+      req.onblocked = function () { ok({ bloqueado: true }); };
+    });
+  }
+
   raiz.SF = raiz.SF || {};
-  raiz.SF.fotos = { criar: criar };
+  raiz.SF.fotos = { criar: criar, nomeBanco: nomeBanco, apagarBancoFotos: apagarBancoFotos };
   if (typeof module !== "undefined") module.exports = raiz.SF.fotos;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -59,3 +59,34 @@ test("confirmacaoApagarOk exige a palavra APAGAR", () => {
   assert.equal(conta.confirmacaoApagarOk("apag"), false);
   assert.equal(conta.confirmacaoApagarOk(""), false);
 });
+
+function falsos(opcoes = {}) {
+  const ev = [];
+  const api = {
+    apagarConta: async () => { ev.push("api.apagar"); if (opcoes.falha) throw new Error("401"); },
+    sair: async () => { ev.push("api.sair"); if (opcoes.semRede) throw new Error("rede"); }
+  };
+  const local = { apagarSessao: () => ev.push("sessao"), apagarUsuario: (id) => ev.push("usuario:" + id) };
+  return { ev, api, local, aoApagar: (id) => { ev.push("aoApagar:" + id); } };
+}
+
+test("apagarConta chama a limpeza só depois do sucesso", async () => {
+  const f = falsos();
+  await conta.apagarConta({ api: f.api, local: f.local, userId: "u1", senha: "x", aoApagar: f.aoApagar });
+  assert.deepEqual(f.ev, ["api.apagar", "sessao", "usuario:u1", "aoApagar:u1"]);
+});
+
+test("apagarConta com erro da API não limpa nada", async () => {
+  const f = falsos({ falha: true });
+  await assert.rejects(conta.apagarConta({ api: f.api, local: f.local, userId: "u1", senha: "x", aoApagar: f.aoApagar }));
+  assert.deepEqual(f.ev, ["api.apagar"]);
+});
+
+test("sairDaConta: sem pendências limpa o aparelho; com pendências mantém os dados", async () => {
+  const a = falsos();
+  await conta.sairDaConta({ api: a.api, local: a.local, userId: "u1", pendentes: 0, aoApagar: a.aoApagar });
+  assert.deepEqual(a.ev, ["api.sair", "sessao", "usuario:u1", "aoApagar:u1"]);
+  const b = falsos({ semRede: true });
+  await conta.sairDaConta({ api: b.api, local: b.local, userId: "u1", pendentes: 2, aoApagar: b.aoApagar });
+  assert.deepEqual(b.ev, ["api.sair", "sessao"]);
+});

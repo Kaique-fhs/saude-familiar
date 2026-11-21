@@ -55,6 +55,25 @@
 
   function confirmacaoApagarOk(t) { return String(t || "").trim().toUpperCase() === "APAGAR"; }
 
+  // Apaga a conta: só depois da resposta de sucesso (204) limpa o aparelho e chama aoApagar(userId).
+  function apagarConta(o) {
+    return o.api.apagarConta(o.senha).then(function () {
+      o.local.apagarSessao();
+      o.local.apagarUsuario(o.userId);
+      return o.aoApagar ? o.aoApagar(o.userId) : undefined;
+    });
+  }
+
+  // Sair: sempre apaga a sessão; sem pendências também limpa a conta do aparelho (aoApagar), com pendências mantém.
+  function sairDaConta(o) {
+    return Promise.resolve().then(function () { return o.api.sair(); }).catch(function () { /* sai mesmo sem rede */ }).then(function () {
+      o.local.apagarSessao();
+      if (o.pendentes > 0) return undefined;
+      o.local.apagarUsuario(o.userId);
+      return o.aoApagar ? o.aoApagar(o.userId) : undefined;
+    });
+  }
+
   function montar(o) {
     var rz = o.raiz, api = o.api, local = o.local, config = o.config || {};
     var doc = rz.ownerDocument;
@@ -107,6 +126,8 @@
       turnstileToken = "";
       try { if (janela.turnstile && turnstileId !== null) janela.turnstile.reset(turnstileId); } catch (e) { /* ignora */ }
     }
+
+    function aoApagar(userId) { return o.aoApagar ? o.aoApagar(userId) : undefined; }
 
     function esconder() { rz.hidden = true; rz.textContent = ""; }
 
@@ -272,8 +293,7 @@
       var sair = botao("Sair", "flex");
       sair.addEventListener("click", function () {
         ocupado(sair, true, "Sair");
-        Promise.resolve().then(function () { return api.sair(); }).catch(function () { /* sai mesmo sem rede */ }).then(function () {
-          local.apagarSessao();
+        sairDaConta({ api: api, local: local, userId: s.usuario.id, pendentes: Array.isArray(fila) ? fila.length : 0, aoApagar: aoApagar }).catch(function () { /* ignora */ }).then(function () {
           esconder();
           if (o.aoSair) o.aoSair();
         });
@@ -313,9 +333,7 @@
           if (!senha.input.value) { erro.textContent = mensagemErro("credenciais"); foco(senha.input); return; }
           if (!confirmacaoApagarOk(conf.input.value)) { erro.textContent = "Escreva a palavra APAGAR para confirmar."; foco(conf.input); return; }
           ocupado(b, true, "Apagar para sempre");
-          api.apagarConta(senha.input.value).then(function () {
-            local.apagarSessao();
-            local.apagarUsuario(s.usuario.id);
+          apagarConta({ api: api, local: local, userId: s.usuario.id, senha: senha.input.value, aoApagar: aoApagar }).then(function () {
             esconder();
             if (o.aoSair) o.aoSair();
           }, function (e) {
@@ -363,7 +381,7 @@
   raiz.SF = raiz.SF || {};
   raiz.SF.conta = {
     modoInicial: modoInicial, lerHash: lerHash, mensagemErro: mensagemErro,
-    validarEmail: validarEmail, validarSenha: validarSenha, textoSair: textoSair,
+    validarEmail: validarEmail, validarSenha: validarSenha, textoSair: textoSair, apagarConta: apagarConta, sairDaConta: sairDaConta,
     rotuloRejeitado: rotuloRejeitado, confirmacaoApagarOk: confirmacaoApagarOk, montar: montar
   };
   if (typeof module !== "undefined") module.exports = raiz.SF.conta;
