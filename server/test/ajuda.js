@@ -14,7 +14,19 @@ export function configTeste(extra = {}) {
 }
 
 export function cabecalhos(extra = {}) {
-  return { 'x-saude-origem': 'segredo-teste', ...extra };
+  return { 'x-saude-origem': 'segredo-teste', 'x-turnstile-token': 'token-teste', ...extra };
+}
+
+// Captcha falso: aceita (ou recusa) qualquer token; registra as chamadas.
+export function captchaFalso(aceita = true) {
+  const chamadas = [];
+  return {
+    chamadas,
+    async verificar(token, ip) {
+      chamadas.push({ token, ip });
+      return aceita;
+    },
+  };
 }
 
 export async function novoBancoTeste() {
@@ -43,23 +55,31 @@ export async function criarAppTeste(opcoes = {}) {
   const { criarApp } = await import('../src/app.js');
   const bancoReal = await novoBancoTeste();
   const banco = opcoes.envolverBanco ? opcoes.envolverBanco(bancoReal) : bancoReal;
-  const email = emailFalso();
+  const caixa = emailFalso();
   let agora = new Date('2026-11-21T12:00:00Z').getTime();
   const relogio = () => new Date(agora);
   relogio.avancar = (ms) => {
     agora += ms;
   };
+  // opcoes.tetoEmails: envolve o e-mail falso com o teto diário.
+  let email = caixa;
+  if (opcoes.tetoEmails !== undefined) {
+    const { comTetoDiario } = await import('../src/protecao.js');
+    email = comTetoDiario(caixa, banco, opcoes.tetoEmails, relogio);
+  }
   const app = await criarApp({
     config: configTeste(opcoes.config),
     banco,
     email,
-    captcha: { verificar: async () => true },
+    captcha: captchaFalso(true),
     armazenamento: {},
     relogio,
+    // Limites desligados por padrão: os testes de contas repetem muitas chamadas do mesmo IP.
+    limites: opcoes.limites ?? false,
     ...opcoes.deps,
   });
-  emailsDosApps.set(app, email);
-  return { app, banco, email, relogio };
+  emailsDosApps.set(app, caixa);
+  return { app, banco, email: caixa, relogio };
 }
 
 // Último token enviado por e-mail com o marcador (ex.: '#confirmar=').

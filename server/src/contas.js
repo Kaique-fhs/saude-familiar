@@ -1,5 +1,7 @@
 import { hashSenha, conferirSenha, novoToken, hashToken, HASH_FALSO } from './seguranca.js';
 
+import { exigirCaptcha, limitePorEmail, limitePorIp, MINUTO } from './protecao.js';
+
 const HORA = 3600 * 1000;
 const DIA = 24 * HORA;
 const VALIDADE_CONFIRMAR = 24 * HORA;
@@ -41,8 +43,18 @@ export async function exigirSessao(req, reply) {
   req.usuario = { id: linha.id, email: linha.email };
 }
 
-export function registrarContas(app, { banco, email }) {
+export function registrarContas(app, { banco, email, captcha, limites }) {
   const { config } = app;
+
+  // Cada rota sensível: limite por IP (config da rota) + captcha + limite por e-mail (preHandler).
+  // O captcha vem antes do limite por e-mail: quem não passa nele não gasta a cota de um e-mail alheio.
+  function protecao(nome, limite, { comCaptcha }) {
+    const preHandler = [];
+    if (comCaptcha) preHandler.push(exigirCaptcha(captcha));
+    const porEmail = limitePorEmail(app, limites, nome, limite);
+    if (porEmail) preHandler.push(porEmail);
+    return { ...limitePorIp(limites, nome, limite), preHandler };
+  }
   const link = (marcador, token) => `${config.origemSite}/saude-familiar/#${marcador}=${token}`;
 
   // Sem await: o tempo de resposta não pode revelar se a conta existe.
@@ -65,7 +77,7 @@ export function registrarContas(app, { banco, email }) {
     return token;
   }
 
-  app.post('/conta/cadastro', async (req, reply) => {
+  app.post('/conta/cadastro', protecao('cadastro', { max: 5, timeWindow: HORA }, { comCaptcha: true }), async (req, reply) => {
     const corpo = req.body ?? {};
     const endereco = normalizarEmail(corpo.email);
     if (!senhaValida(corpo.senha)) return reply.code(400).send({ erro: 'senha' });
@@ -124,7 +136,7 @@ export function registrarContas(app, { banco, email }) {
     return { ok: true };
   });
 
-  app.post('/conta/entrar', async (req, reply) => {
+  app.post('/conta/entrar', protecao('entrar', { max: 10, timeWindow: 15 * MINUTO }, { comCaptcha: false }), async (req, reply) => {
     const corpo = req.body ?? {};
     const endereco = normalizarEmail(corpo.email);
     const senha = typeof corpo.senha === 'string' ? corpo.senha : '';
@@ -163,7 +175,7 @@ export function registrarContas(app, { banco, email }) {
     email: req.usuario.email,
   }));
 
-  app.post('/conta/esqueci', async (req, reply) => {
+  app.post('/conta/esqueci', protecao('esqueci', { max: 3, timeWindow: HORA }, { comCaptcha: true }), async (req, reply) => {
     const endereco = normalizarEmail((req.body ?? {}).email);
     const agora = app.relogio();
     const r = await banco.consulta('select id from usuarios where email = $1', [endereco]);
