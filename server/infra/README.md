@@ -37,3 +37,14 @@ npm run test:pg
 ```
 
 Obs.: o primeiro resultado foi 44 de 47 (`remaining connection slots are reserved`): `criarAppTeste` nao fechava o pool de cada teste e o `max_connections=20` esgotava. Corrigido em `server/test/ajuda.js` (`app.close()` fecha o banco do teste).
+
+## Teste de fumaça e restauração (Task 8, 2026-11-21, ambiente teste)
+
+`server/infra/fumaca.sh` (subcomandos `inicio`, `continuar`, `apos-confirmar`, `apagar`, `entrar-errado`; estado em `~/.saude-fumaca`). Com o segredo de teste do Turnstile no SSM de teste:
+
+- Cadastro 202, e-mail recebido, confirmar 200, entrar 200, `GET /conta` 200 (o `Authorization` atravessa o CloudFront), `/sync` envia e devolve o item.
+- Foto: upload real ao bucket pelo POST assinado 204; leitura real pela URL assinada devolve o mesmo arquivo (`cmp`).
+- IP do cliente: o log da API (`remoteAddress`) mostra o IPv6 do computador e o IP público da máquina, nenhum da faixa do CloudFront. Esgotado o limite de `/conta/entrar` neste computador (429 na 9ª tentativa; a janela é de 15 min), a máquina, com outro e-mail, ainda recebeu 401 (não 429).
+- Backup: `systemctl start saude-backup` gravou `2026-11-21.dump` e `contas_apagadas-2026-11-21.csv` em `teste/` e `producao/` do bucket de backups.
+- `DELETE /conta` 204; `list-object-versions --prefix teste/<id>/` no bucket de fotos: sem versões nem delete markers. `restaurar.sh teste 2026-11-21`: o dump tinha a conta (`COPY 1`), a restauração reaplicou `contas_apagadas` e removeu a conta (`usuarios|0`, `contas_apagadas|1`). Banco `saude_restauro_teste` apagado.
+- Origem barrada: de fora, `curl --connect-timeout 5 https://<NomeOrigem>/conta` expira (exit 28); de dentro, sem o cabeçalho, `/conta` 403 e `/saude` 200.
