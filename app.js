@@ -590,7 +590,7 @@
     if (!reg) return;
     if (dia !== hojeChave()) { toast("De dias passados, só dá para compartilhar o resultado do dia."); return; }
     var texto = textoEntrega(dia, ref, reg), arquivo = null;
-    if (blob) { try { arquivo = new File([blob], "meu-prato-" + dia + "-" + ref + ".jpg", { type: "image/jpeg" }); } catch (e) { arquivo = null; } }
+    if (blob) { try { arquivo = new File([blob], "saude-familiar-" + dia + "-" + ref + ".jpg", { type: "image/jpeg" }); } catch (e) { arquivo = null; } }
     if (arquivo && navigator.canShare && navigator.canShare({ files: [arquivo] })) {
       navigator.share({ files: [arquivo], text: texto }).catch(function (err) {
         if (!err || err.name !== "AbortError") abrirWhatsSoTexto(texto);
@@ -1268,7 +1268,7 @@
     concluirBackup("Cópia salva em Downloads", c.mes, c.faltando);
   }
   function compartilharCopia(c) {
-    navigator.share({ files: [c.arquivo], title: "Cópia do Meu Prato" })
+    navigator.share({ files: [c.arquivo], title: "Cópia do Saúde Familiar" })
       .then(function () { concluirBackup("Cópia salva", c.mes, c.faltando); })
       .catch(function (err) {
         if (err && err.name === "AbortError") { toast("Cópia não salva"); return; }
@@ -1284,7 +1284,7 @@
       var fotos = res.fotos;
       // todos os dados (sem fotos) vão em toda cópia; as fotos, só as do mês escolhido
       var dados = { app: "meu-prato", versao: 4, salvoEm: new Date().toISOString(), mesFotos: mes, favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario, registros: registros, treinos: treinos, fotos: fotos };
-      var c = { mes: mes, faltando: res.faltando, texto: JSON.stringify(dados), nome: "meu-prato-" + mes + "-salvo-em-" + hojeChave() + ".json", feitaEm: Date.now(), arquivo: null };
+      var c = { mes: mes, faltando: res.faltando, texto: JSON.stringify(dados), nome: "saude-familiar-" + mes + "-salvo-em-" + hojeChave() + ".json", feitaEm: Date.now(), arquivo: null };
       try { c.arquivo = new File([c.texto], c.nome, { type: "application/json" }); } catch (e) { c.arquivo = null; }
       if (podeCompartilhar(c.arquivo)) {
         copiaPronta = c;
@@ -1367,7 +1367,7 @@
         gravarFotos.then(function () { salvarTudo(); render(); toast("Cópia restaurada"); },
           function () { salvarTudo(); render(); toast("Cópia restaurada, mas algumas fotos não couberam no celular"); });
         return;
-      } catch (e) { toast("Esse arquivo não é uma cópia do Meu Prato"); }
+      } catch (e) { toast("Esse arquivo não é uma cópia do Saúde Familiar"); }
     };
     leitor.readAsText(arquivo);
   }
@@ -1385,10 +1385,10 @@
     if (instalado || ler("mp-instalar-dispensado", false)) return "";
     var corpo;
     if (pedidoInstalacao) {
-      corpo = '<p><b>Instale o Meu Prato no celular.</b> Ele abre como um app, funciona sem internet e guarda seus dados com mais segurança.</p>' +
+      corpo = '<p><b>Instale o Saúde Familiar no celular.</b> Ele abre como um app, funciona sem internet e guarda seus dados com mais segurança.</p>' +
         '<div class="linha-acoes"><button class="btn primario" id="instalar">Instalar app</button>';
     } else if (ehIOS) {
-      corpo = '<p><b>Instale o Meu Prato no iPhone.</b> Assim ele funciona sem internet e o Safari não apaga seus dias marcados.</p>' +
+      corpo = '<p><b>Instale o Saúde Familiar no iPhone.</b> Assim ele funciona sem internet e o Safari não apaga seus dias marcados.</p>' +
         '<ol class="passos-ios"><li>Toque em <b>Compartilhar</b> ' + ICON.share + ' na barra do Safari.</li>' +
         '<li>Escolha <b>Adicionar à Tela de Início</b>.</li><li>Toque em <b>Adicionar</b>.</li></ol>' +
         '<div class="linha-acoes">';

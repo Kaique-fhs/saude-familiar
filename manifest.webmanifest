@@ -1,6 +1,6 @@
 {
-  "name": "Meu Prato",
-  "short_name": "Meu Prato",
+  "name": "Saúde Familiar",
+  "short_name": "Saúde Familiar",
   "description": "Plano alimentar, receitas e lista de compras",
   "lang": "pt-BR",
   "start_url": "./",
