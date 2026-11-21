@@ -1,19 +1,23 @@
 # Handoff
 
 ## Decisões tomadas
-- Servidor próprio na AWS, com app local primeiro: ADR-001. Login próprio: ADR-002. Região us-east-2: ADR-003 (todos em `docs/ams/adr/`).
-- Plano 1: rulings e triagem da revisão final estão no roteiro (`docs/superpowers/plans/2026-11-21-contas-roteiro.md`), nas seções "Checklist para o plano 5" e "Pendências menores".
+- Servidor próprio na AWS, com app local primeiro: ADR-001. Login próprio: ADR-002. Região us-east-2: ADR-003 (em `docs/ams/adr/`).
+- Rulings e triagens dos planos 1 e 2 estão no roteiro `docs/superpowers/plans/2026-11-21-contas-roteiro.md` ("Pendências", "Para o plano 3", conflitos de merge).
+- Plano 2: sair com pendências mantém dados, fila e fotos (diverge da spec §8.1; alinhar spec ou ADR, ver "Para o plano 3").
 
 ## Estado atual
-- Plano 1 (servidor local) concluído no branch `feat/contas-ec2` (commits f6c8c37..b01ed23, 87 testes passando, `cd server && npm test`). Sem PR, sem push.
-- AWS configurada com o perfil `saude-familiar`, região us-east-2. Nada implantado.
-- Site renomeado para `saude-familiar` no GitHub Pages; convite de instalar removido.
-- Não há deploy possível ainda: o servidor nunca rodou contra Postgres, S3, Turnstile ou SMTP reais.
+- Plano 1 pronto (`feat/contas-ec2`). Plano 2 pronto (`feat/app-conta-sync`, e285582..a93c407, 100 testes do site, 103 do servidor, navegador headless 47/47). Plano 5 tasks 1-5 prontas (`feat/aws-infra`).
+- Plano 5 PARADO na Task 6, esperando o OK do Kaique sobre: a lista de 15 recursos (~US$ 11,50/mês, t4g.micro); a conta Gmail do app com senha de app; a conta Cloudflare com o widget Turnstile.
+- Nada criado na AWS ainda. Nada com push nem PR.
+- Três worktrees: `../saude-familiar`, `../saude-familiar-app`, `../saude-familiar-aws`.
+- Site em produção (`main`) intocado e funcionando como antes.
 
 ## Próximos passos
-- Decisão pendente do Kaique: antecipar o plano 5 (AWS: EC2, Postgres, CloudFront, S3) para provar o servidor em ambiente real, ou seguir para o plano 2 (app: conta e sincronização). O plano 5 está na ordem depois dos 1 a 4.
-- Qualquer que seja o caminho, abrir PR de `feat/contas-ec2` quando o Kaique pedir.
+- Tasks 6-8 do plano 5 (criam recursos pagos; só após o OK acima).
+- Juntar os branches (conflitos triviais previstos em `server/package.json`, `server/test/app.test.js`, `server/test/banco.test.js`); rodar `npm test` em `server/` depois.
+- Planos 3 e 4. Plano 3 começa pelo parked `naoGravado` e pelo cursor do `/sync`.
 
 ## Dúvidas em aberto
-- Ordem dos planos 2 e 5 (acima).
-- Onde ficam: spec `docs/superpowers/specs/2026-11-21-contas-ec2-design.md`; plano 1 `docs/superpowers/plans/2026-11-21-servidor-local.md`; roteiro com checklist do plano 5 `docs/superpowers/plans/2026-11-21-contas-roteiro.md`; contrato da API em `server/README.md`.
+- OK do Kaique para a Task 6 (lista de recursos, Gmail, Cloudflare/Turnstile).
+- Spec §8.1 x "sair com pendências mantém dados": alinhar spec ou ADR.
+- Kaique limpar os dados `mp-*` de teste no Chrome (`localhost:5500`).
