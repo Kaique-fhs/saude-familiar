@@ -157,3 +157,43 @@ test('lerConfig: CAMINHO_SITE tem padrão /saude-familiar/ e aceita outro valor'
   assert.equal(lerConfig(base).caminhoSite, '/saude-familiar/');
   assert.equal(lerConfig({ ...base, CAMINHO_SITE: '/' }).caminhoSite, '/');
 });
+
+test('TETO_EMAILS_DIA inválido lança config: TETO_EMAILS_DIA inválido', () => {
+  const base = { ORIGEM_SITE: 'https://x', SEGREDO_ORIGEM: 's' };
+  assert.throws(() => lerConfig({ ...base, TETO_EMAILS_DIA: 'abc' }), /config: TETO_EMAILS_DIA inválido/);
+  for (const nome of ['PORT', 'SMTP_PORT', 'TRUST_PROXY_SALTOS']) {
+    for (const ruim of ['abc', '0', '-1', '1.5']) {
+      assert.throws(() => lerConfig({ ...base, [nome]: ruim }), new RegExp(`config: ${nome} inválido`));
+    }
+  }
+  assert.equal(lerConfig(base).trustProxySaltos, 1);
+});
+
+test('DB_POOL_MAX: padrão 5, valor do env e inválido lança config: DB_POOL_MAX inválido', () => {
+  const base = { ORIGEM_SITE: 'https://x', SEGREDO_ORIGEM: 's' };
+  assert.equal(lerConfig(base).dbPoolMax, 5);
+  assert.equal(lerConfig({ ...base, DB_POOL_MAX: '3' }).dbPoolMax, 3);
+  for (const ruim of ['abc', '0', '-1', '1.5']) {
+    assert.throws(() => lerConfig({ ...base, DB_POOL_MAX: ruim }), /config: DB_POOL_MAX inválido/);
+  }
+});
+
+test('TRUST_PROXY_SALTOS=2: request.ip é o 2º endereço a partir da direita do X-Forwarded-For', async () => {
+  const a = await criarApp({
+    config: configTeste({ trustProxySaltos: 2 }),
+    banco: {},
+    email: {},
+    captcha: {},
+    armazenamento: {},
+    limites: false,
+  });
+  a.get('/ip', async (req) => ({ ip: req.ip }));
+  const r = await a.inject({
+    method: 'GET',
+    url: '/ip',
+    remoteAddress: '127.0.0.1',
+    headers: cabecalhos({ 'x-forwarded-for': '9.9.9.9, 1.1.1.1, 2.2.2.2' }),
+  });
+  assert.equal(r.json().ip, '1.1.1.1');
+  await a.close();
+});

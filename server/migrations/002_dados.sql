@@ -29,10 +29,12 @@ begin
   if not exists (select 1 from pg_roles where rolname = 'saude_app') then
     create role saude_app nologin;
   end if;
+  if not pg_has_role(current_user, 'saude_app', 'MEMBER') then
+    grant saude_app to current_user;
+  end if;
 end
 $$;
 
-grant saude_app to current_user;
 grant select, insert, update, delete on itens to saude_app;
 grant usage, select on sequence itens_seq to saude_app;
 

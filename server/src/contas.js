@@ -259,3 +259,21 @@ export async function apagarFotosPendentes({ banco, armazenamento, ambiente, rel
   }
   return concluidas;
 }
+
+// Revarre o prefixo de fotos das contas apagadas dentro da janela, mesmo as já marcadas como
+// concluídas: cobre foto enviada por URL assinada ainda válida logo após a exclusão.
+export async function revarrerFotosRecentes({ banco, armazenamento, ambiente, relogio, janelaMs = 48 * HORA, log = { error() {} } }) {
+  const desde = new Date(relogio().getTime() - janelaMs);
+  const r = await banco.consulta('select user_id from contas_apagadas where apagada_em > $1', [desde]);
+  let concluidas = 0;
+  for (const { user_id: userId } of r.rows) {
+    try {
+      await armazenamento.apagarPrefixo(`${ambiente}/${userId}/`);
+      await banco.consulta('update contas_apagadas set fotos_apagadas_em = $1 where user_id = $2', [relogio(), userId]);
+      concluidas++;
+    } catch (e) {
+      log.error({ err: e, userId }, 'falha ao revarrer fotos da conta');
+    }
+  }
+  return concluidas;
+}

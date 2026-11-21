@@ -1,0 +1,7 @@
+[Unit]
+Description=Saude Familiar: alerta de disco
+
+[Service]
+Type=oneshot
+ExecStart=/opt/saude-familiar/server/infra/maquina/disco.sh
+StateDirectory=saude

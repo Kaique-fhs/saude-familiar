@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "node --test",
+    "test:pg": "node --test --test-concurrency=1 test/pg-real.test.js test/banco.test.js test/sincronia.test.js test/contas.test.js",
     "start": "node src/principal.js",
     "dev": "node src/dev.js"
   },

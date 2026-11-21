@@ -1,0 +1,14 @@
+[Unit]
+Description=Saude Familiar: apagar fotos pendentes (%i)
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=saude
+WorkingDirectory=/opt/saude-familiar/server
+EnvironmentFile=/etc/saude/%i.env
+ExecStart=/opt/node/bin/node src/tarefas.js apagar-fotos
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true

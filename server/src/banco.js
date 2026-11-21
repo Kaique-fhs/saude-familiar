@@ -19,8 +19,8 @@ function montar(executar, abrirTransacao, fechar) {
   return banco;
 }
 
-export function criarBancoPg(url) {
-  const pool = new pg.Pool({ connectionString: url });
+export function criarBancoPg(url, { max } = {}) {
+  const pool = new pg.Pool({ connectionString: url, ...(max ? { max } : {}) });
   // Erro em client ocioso (queda de rede, reinício do banco) não pode derrubar o processo.
   pool.on('error', (e) => console.error('erro no pool do banco:', e.message));
   const doCliente = (cliente) => ({

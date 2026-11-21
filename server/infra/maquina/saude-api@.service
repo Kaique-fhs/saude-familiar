@@ -1,0 +1,25 @@
+[Unit]
+Description=Saude Familiar API (%i)
+After=network-online.target postgresql@16-main.service
+Wants=network-online.target
+Requires=postgresql@16-main.service
+# Laco de reinicio para: 5 partidas em 300 s levam a unidade a "failed" e avisam no SNS.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+OnFailure=saude-alerta@%n.service
+
+[Service]
+User=saude
+WorkingDirectory=/opt/saude-familiar/server
+EnvironmentFile=/etc/saude/%i.env
+ExecStartPre=/opt/node/bin/node src/tarefas.js migrar
+ExecStart=/opt/node/bin/node src/principal.js
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { lerConfig } from '../src/config.js';
 
 export function configTeste(extra = {}) {
@@ -29,11 +30,42 @@ export function captchaFalso(aceita = true) {
   };
 }
 
+// Com TEST_DATABASE_URL (Postgres real, conexão do dono, não superusuário) cria um schema
+// próprio t_<aleatório>, migra nele e o apaga em fechar(). O search_path vai na própria URL
+// (options=-c search_path=...), então vale para todas as conexões do pool. Sem a variável, PGlite.
 export async function novoBancoTeste() {
-  const { criarBancoPglite } = await import('../src/banco.js');
+  const { criarBancoPg, criarBancoPglite } = await import('../src/banco.js');
   const { migrar } = await import('../src/migrar.js');
-  const banco = await criarBancoPglite();
-  await migrar(banco);
+  const base = process.env.TEST_DATABASE_URL;
+  if (!base) {
+    const banco = await criarBancoPglite();
+    await migrar(banco);
+    return banco;
+  }
+  const schema = `t_${randomBytes(6).toString('hex')}`;
+  const admin = criarBancoPg(base);
+  await admin.consulta(`create schema ${schema}`);
+  await admin.fechar();
+  const u = new URL(base);
+  u.searchParams.set('options', `-c search_path=${schema}`);
+  const banco = criarBancoPg(u.toString());
+  try {
+    await migrar(banco); // cria as tabelas no schema e dá os grants de itens/itens_seq ao saude_app
+    await banco.consulta(`grant usage on schema ${schema} to saude_app`);
+  } catch (e) {
+    await banco.consulta(`drop schema ${schema} cascade`).catch(() => {});
+    await banco.fechar();
+    throw e;
+  }
+  const fecharPool = banco.fechar;
+  banco.fechar = async () => {
+    try {
+      await banco.consulta(`drop schema ${schema} cascade`);
+    } finally {
+      await fecharPool();
+    }
+  };
+  banco.schema = schema;
   return banco;
 }
 
@@ -99,6 +131,20 @@ export async function criarAppTeste(opcoes = {}) {
     ...opcoes.deps,
   });
   emailsDosApps.set(app, caixa);
+  // app.close() também fecha o banco do teste (apaga o schema e encerra o pool). Sem isso, com Postgres
+  // real cada teste deixa um pool aberto e o max_connections=20 da máquina esgota ("remaining connection slots").
+  const fecharApp = app.close.bind(app);
+  let fechado = false;
+  app.close = async () => {
+    try {
+      await fecharApp();
+    } finally {
+      if (!fechado) {
+        fechado = true;
+        await bancoReal.fechar();
+      }
+    }
+  };
   return { app, banco, email: caixa, relogio };
 }
 
