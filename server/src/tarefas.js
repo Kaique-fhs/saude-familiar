@@ -22,7 +22,7 @@ export async function executarTarefa(nome, { banco, config, armazenamento, relog
 async function principal() {
   const nome = process.argv[2];
   const config = lerConfig(process.env);
-  const banco = criarBancoPg(config.databaseUrl);
+  const banco = criarBancoPg(config.databaseUrl, { max: config.dbPoolMax });
   try {
     const armazenamento = nome === 'apagar-fotos'
       ? criarArmazenamentoS3({ regiao: config.s3.regiao, bucket: config.s3.bucketFotos })

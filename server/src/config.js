@@ -30,6 +30,7 @@ export function lerConfig(env) {
     },
     tetoEmailsDia: inteiroPositivo(env, 'TETO_EMAILS_DIA', 300),
     trustProxySaltos: inteiroPositivo(env, 'TRUST_PROXY_SALTOS', 1),
+    dbPoolMax: inteiroPositivo(env, 'DB_POOL_MAX', 5),
     s3: {
       regiao: env.S3_REGIAO ?? 'us-east-2',
       bucketFotos: env.S3_BUCKET_FOTOS ?? '',

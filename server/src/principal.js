@@ -10,7 +10,7 @@ import { apagarFotosPendentes } from './contas.js';
 const config = lerConfig(process.env);
 const relogio = () => new Date();
 
-const banco = criarBancoPg(config.databaseUrl);
+const banco = criarBancoPg(config.databaseUrl, { max: config.dbPoolMax });
 await migrar(banco);
 
 const armazenamento = criarArmazenamentoS3({ regiao: config.s3.regiao, bucket: config.s3.bucketFotos });

@@ -83,6 +83,15 @@ test('criarBancoPg registra listener de erro no Pool e um erro ocioso não derru
   await banco.fechar();
 });
 
+test('criarBancoPg limita o Pool ao max informado (padrão do pg, 10, sem max)', async () => {
+  const a = criarBancoPg('postgres://usuario:senha@127.0.0.1:1/nada', { max: 3 });
+  assert.equal(a.pool.options.max, 3);
+  await a.fechar();
+  const b = criarBancoPg('postgres://usuario:senha@127.0.0.1:1/nada');
+  assert.equal(b.pool.options.max, 10);
+  await b.fechar();
+});
+
 test('migrar com o papel saude_app já concedido ao dono (sem admin) não falha', async () => {
   const banco = await criarBancoPglite();
   await banco.consulta('create role saude_app nologin');

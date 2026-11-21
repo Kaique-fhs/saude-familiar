@@ -119,6 +119,15 @@ test('TETO_EMAILS_DIA inválido lança config: TETO_EMAILS_DIA inválido', () =>
   assert.equal(lerConfig(base).trustProxySaltos, 1);
 });
 
+test('DB_POOL_MAX: padrão 5, valor do env e inválido lança config: DB_POOL_MAX inválido', () => {
+  const base = { ORIGEM_SITE: 'https://x', SEGREDO_ORIGEM: 's' };
+  assert.equal(lerConfig(base).dbPoolMax, 5);
+  assert.equal(lerConfig({ ...base, DB_POOL_MAX: '3' }).dbPoolMax, 3);
+  for (const ruim of ['abc', '0', '-1', '1.5']) {
+    assert.throws(() => lerConfig({ ...base, DB_POOL_MAX: ruim }), /config: DB_POOL_MAX inválido/);
+  }
+});
+
 test('TRUST_PROXY_SALTOS=2: request.ip é o 2º endereço a partir da direita do X-Forwarded-For', async () => {
   const a = await criarApp({
     config: configTeste({ trustProxySaltos: 2 }),

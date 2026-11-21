@@ -12,8 +12,9 @@ AWS_BIN="${AWS_BIN:-aws}"
 REGIAO="us-east-2"
 
 ambiente="${1:-}"
+pool=5
 case "$ambiente" in
-  teste) porta=3001 ;;
+  teste) porta=3001; pool=3 ;;
   producao) porta=3000 ;;
   *) echo "uso: $0 <teste|producao>" >&2; exit 2 ;;
 esac
@@ -60,6 +61,7 @@ trap 'rm -f "$tmp"' EXIT
   printf '%s=%s\n' S3_REGIAO "$REGIAO"
   printf '%s=%s\n' S3_BUCKET_FOTOS "$bucket"
   printf '%s=%s\n' TRUST_PROXY_SALTOS 2
+  printf '%s=%s\n' DB_POOL_MAX "$pool"
 } > "$tmp"
 install -m 0600 "$tmp" "$DIR_ENV/$ambiente.env"
 echo "gravado $DIR_ENV/$ambiente.env"
