@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { criarAppTeste, cabecalhos, tokenDoEmail, contaLogada } from './ajuda.js';
-import { hashToken } from '../src/seguranca.js';
+import { hashToken, hashSenha } from '../src/seguranca.js';
 
 const H = cabecalhos();
 const SENHA = 'senha-de-teste-123';
@@ -256,5 +256,38 @@ test('banco guarda só hashes: coluna hash de sessoes e tokens nunca é o token'
   }
   const guardada = (await banco.consulta('select senha_hash from usuarios')).rows[0].senha_hash;
   assert.ok(guardada.startsWith('scrypt$'));
+  await app.close();
+});
+
+test('entrar não ganha corrida com nova-senha: sessão criada após a troca de senha não vale', async () => {
+  let gancho = null;
+  const { app, banco } = await criarAppTeste({
+    envolverBanco: (real) => ({
+      ...real,
+      consulta: async (sql, params) => {
+        const r = await real.consulta(sql, params);
+        // ponto entre a leitura do senha_hash e o insert da sessão
+        if (gancho && sql.includes('senha_hash, confirmado_em')) {
+          const g = gancho;
+          gancho = null;
+          await g();
+        }
+        return r;
+      },
+    }),
+  });
+  await contaLogada(app, 'a@b.com');
+  gancho = async () => {
+    // o que nova-senha faz ao confirmar: troca a senha e apaga as sessões
+    await banco.transacao(async (tx) => {
+      await tx.consulta('update usuarios set senha_hash = $1', [await hashSenha('senha-nova-456')]);
+      await tx.consulta('delete from sessoes');
+    });
+  };
+  const r = await post(app, '/conta/entrar', { email: 'a@b.com', senha: SENHA });
+  assert.equal(r.statusCode, 401);
+  assert.deepEqual(r.json(), { erro: 'credenciais' });
+  const n = await banco.consulta('select count(*)::int as n from sessoes');
+  assert.equal(n.rows[0].n, 0);
   await app.close();
 });

@@ -137,11 +137,19 @@ export function registrarContas(app, { banco, email }) {
     if (!usuario.confirmado_em) return reply.code(403).send({ erro: 'nao-confirmado' });
     const agora = app.relogio();
     const { token, hash } = novoToken();
-    await banco.consulta('insert into sessoes (hash, user_id, criada_em, ultimo_uso) values ($1, $2, $3, $3)', [
-      hash,
-      usuario.id,
-      agora,
-    ]);
+    // Trava a linha do usuário: se a senha mudou durante a conferência (nova-senha
+    // já apagou as sessões), a sessão nova não pode entrar depois do delete.
+    const entrou = await banco.transacao(async (tx) => {
+      const atual = await tx.consulta('select senha_hash from usuarios where id = $1 for share', [usuario.id]);
+      if (!atual.rows[0] || atual.rows[0].senha_hash !== usuario.senha_hash) return false;
+      await tx.consulta('insert into sessoes (hash, user_id, criada_em, ultimo_uso) values ($1, $2, $3, $3)', [
+        hash,
+        usuario.id,
+        agora,
+      ]);
+      return true;
+    });
+    if (!entrou) return reply.code(401).send({ erro: 'credenciais' });
     return { token, usuario: { id: usuario.id, email: usuario.email } };
   });
 
@@ -186,6 +194,7 @@ export function registrarContas(app, { banco, email }) {
       );
       if (!r.rows[0]) return false;
       const userId = r.rows[0].user_id;
+      await tx.consulta('select id from usuarios where id = $1 for update', [userId]);
       await tx.consulta('update usuarios set senha_hash = $1 where id = $2', [hash, userId]);
       await tx.consulta('delete from sessoes where user_id = $1', [userId]);
       return true;

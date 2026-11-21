@@ -41,7 +41,8 @@ const emailsDosApps = new WeakMap();
 
 export async function criarAppTeste(opcoes = {}) {
   const { criarApp } = await import('../src/app.js');
-  const banco = await novoBancoTeste();
+  const bancoReal = await novoBancoTeste();
+  const banco = opcoes.envolverBanco ? opcoes.envolverBanco(bancoReal) : bancoReal;
   const email = emailFalso();
   let agora = new Date('2026-11-21T12:00:00Z').getTime();
   const relogio = () => new Date(agora);
