@@ -77,3 +77,30 @@ test('criarBancoPg registra listener de erro no Pool e um erro ocioso não derru
   assert.equal(chamadas.length, 1);
   await banco.fechar();
 });
+
+test('criarBancoPglite(pasta) mantém os dados ao reabrir', async () => {
+  const { mkdtemp, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const pasta = await mkdtemp(join(tmpdir(), 'sf-pg-'));
+  const a = await criarBancoPglite(pasta);
+  await migrar(a);
+  await a.consulta("insert into usuarios (email, senha_hash) values ('p@x.com', 'x')");
+  await a.fechar();
+  const b = await criarBancoPglite(pasta);
+  assert.deepEqual(await migrar(b), []);
+  const r = await b.consulta('select email from usuarios');
+  assert.deepEqual(r.rows.map((l) => l.email), ['p@x.com']);
+  await b.fechar();
+  await rm(pasta, { recursive: true, force: true });
+});
+
+test('criarBancoPglite() sem pasta continua em memória (não guarda nada entre aberturas)', async () => {
+  const a = await criarBancoPglite();
+  await migrar(a);
+  await a.consulta("insert into usuarios (email, senha_hash) values ('m@x.com', 'x')");
+  await a.fechar();
+  const b = await criarBancoPglite();
+  assert.deepEqual(await migrar(b), ['001_contas.sql', '002_dados.sql']);
+  await b.fechar();
+});

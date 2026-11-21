@@ -32,6 +32,30 @@ Toda rota, exceto `GET /saude`, exige o cabeçalho `x-saude-origem` com o valor 
 Rotas com sessão usam `Authorization: Bearer <token>`; sem sessão válida → `401 {"erro":"sessao"}`.
 Erros têm sempre o formato `{"erro": "<codigo>"}`.
 
+## Servidor de desenvolvimento
+
+Para testar o site sem AWS (sem Postgres, S3, SMTP nem Turnstile reais):
+
+```
+cd server
+npm install
+npm run dev
+```
+
+Sobe em `http://127.0.0.1:3000` (`PORT` muda a porta) com `AMBIENTE=teste`,
+`SEGREDO_ORIGEM="dev"`, `ORIGEM_SITE="http://localhost:5500"` e `CAMINHO_SITE="/"`
+(sirva o site em `http://localhost:5500`, na raiz).
+
+- Banco: PGlite persistido em `server/.pg-dev/` (apague a pasta para zerar).
+- E-mail: não envia; imprime a mensagem, com o link `#confirmar=` / `#nova-senha=`, no console.
+- Captcha: aceita qualquer token. Limites de uso desligados.
+- Fotos: gravadas em `server/.fotos-dev/`; `POST /dev-fotos` e `GET /dev-fotos/<chave>` fazem o papel do S3.
+- `GET /config.js` devolve o `window.SF_CONFIG` de desenvolvimento
+  (`apiUrl` `http://localhost:3000`, chave de teste do Turnstile, `cabecalhoOrigemDev: "dev"`).
+- `/dev-fotos` e `/config.js` ficam isentos do `x-saude-origem` (opção `rotasLivres` de `criarApp`, usada só aqui).
+
+`CAMINHO_SITE` (padrão `/saude-familiar/`) é o caminho do site nos links enviados por e-mail.
+
 ## Rotas
 
 | Rota | Corpo / consulta | Respostas |

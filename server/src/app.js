@@ -24,6 +24,7 @@ export async function criarApp({
   armazenamento,
   relogio = () => new Date(),
   limites = true,
+  rotasLivres = [],
   logger = false,
 }) {
   // Só 1 salto de proxy (o CloudFront) é confiável; nunca true (aceitaria X-Forwarded-For forjado).
@@ -45,7 +46,13 @@ export async function criarApp({
       cb(null, permitida);
     },
     methods: ['GET', 'POST', 'DELETE'],
-    allowedHeaders: ['authorization', 'content-type', 'x-turnstile-token'],
+    // Em teste o site de desenvolvimento manda o x-saude-origem (em produção quem injeta é o CloudFront).
+    allowedHeaders: [
+      'authorization',
+      'content-type',
+      'x-turnstile-token',
+      ...(config.ambiente === 'teste' ? ['x-saude-origem'] : []),
+    ],
   });
 
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, corpo, done) => {
@@ -61,7 +68,10 @@ export async function criarApp({
 
   app.addHook('onRequest', async (req, reply) => {
     if (req.method === 'OPTIONS') return; // preflight é tratado pelo CORS
-    if (req.method === 'GET' && req.url.split('?')[0] === '/saude') return;
+    const caminho = req.url.split('?')[0];
+    if (req.method === 'GET' && caminho === '/saude') return;
+    // rotasLivres: só o servidor de desenvolvimento usa (/dev-fotos, /config.js).
+    if (rotasLivres.some((p) => caminho === p || caminho.startsWith(p.endsWith('/') ? p : `${p}/`))) return;
     if (!segredoConfere(req.headers['x-saude-origem'], config.segredoOrigem)) {
       return reply.code(403).send({ erro: 'origem' });
     }

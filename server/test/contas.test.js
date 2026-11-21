@@ -307,3 +307,21 @@ test('nova-senha invalida os outros tokens de senha pendentes (t1 não troca dep
   assert.equal((await post(app, '/conta/entrar', { email: 'a@b.com', senha: 'senha-nova-456' })).statusCode, 200);
   await app.close();
 });
+
+test('CAMINHO_SITE="/" gera link ${origemSite}/#confirmar= e #nova-senha=', async () => {
+  const { app, email } = await criarAppTeste({
+    config: { origemSite: 'http://localhost:5500', caminhoSite: '/' },
+  });
+  await contaLogada(app, 'a@b.com');
+  assert.match(email.enviados[0].texto, /http:\/\/localhost:5500\/#confirmar=[A-Za-z0-9_-]+/);
+  await post(app, '/conta/esqueci', { email: 'a@b.com' });
+  assert.match(email.enviados.at(-1).texto, /http:\/\/localhost:5500\/#nova-senha=[A-Za-z0-9_-]+/);
+  await app.close();
+});
+
+test('sem CAMINHO_SITE o link continua /saude-familiar/', async () => {
+  const { app, email } = await criarAppTeste();
+  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA });
+  assert.match(email.enviados[0].texto, /https:\/\/kaique-fhs\.github\.io\/saude-familiar\/#confirmar=/);
+  await app.close();
+});
