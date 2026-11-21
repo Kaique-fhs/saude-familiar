@@ -28,7 +28,11 @@
 - Fotos no S3: chave `<AMBIENTE>/<user_id>/<foto_id>.jpg`; envio por POST assinado com limite de **5 MB** e `image/jpeg`; URLs válidas por **5 minutos**.
 - Respostas de erro sempre `{"erro": "<código>"}` com os códigos citados nas tasks.
 - Mensagens de commit em português, terminando com a linha `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-- Commits só com caminhos explícitos (`git add server/...`), nunca `git add -A`. Branch `feat/contas-ec2`.
+- Commits só com caminhos explícitos (`git add server/...`), nunca `git add -A`. Branch `feat/contas-ec2`. `server/package.json` e `server/package-lock.json` podem mudar em qualquer task que instale pacote: inclua no commit da task.
+- Versões exatas: `fastify` 5.12.8, `@fastify/cors` 11.4.3, `@fastify/rate-limit` 11.3.0, `pg` 8.23.1, `@electric-sql/pglite` 0.5.17 (dev). Demais pacotes: versão estável atual, fixada.
+- Toda data gravada ou comparada no servidor vem de `relogio()` (passada como parâmetro SQL), nunca de `now()` do banco, para os testes controlarem o tempo.
+- Erros sempre `{"erro": ...}`: `setErrorHandler` e `setNotFoundHandler` na Task 1 (`400 requisicao`, `404 nao-encontrado`, `500 interno`, mantendo o status de erros com `statusCode` 4xx).
+- E-mails são disparados **sem `await`** na rota (erros só vão para o log), para o tempo de resposta não revelar se a conta existe.
 
 ## Review Focus
 
@@ -49,7 +53,10 @@
 **Interfaces:**
 - Produces:
   - `lerConfig(env: object) -> Config` com `{ porta:number, ambiente:'teste'|'producao', databaseUrl:string, origemSite:string, segredoOrigem:string, turnstileSegredo:string, smtp:{host,porta,usuario,senha,remetente}, tetoEmailsDia:number, s3:{regiao,bucketFotos} }`. Variáveis: `PORT` (3000), `AMBIENTE`, `DATABASE_URL`, `ORIGEM_SITE`, `SEGREDO_ORIGEM`, `TURNSTILE_SECRET`, `SMTP_HOST`, `SMTP_PORT` (465), `SMTP_USER`, `SMTP_PASS`, `EMAIL_REMETENTE`, `TETO_EMAILS_DIA` (300), `S3_REGIAO` (`us-east-2`), `S3_BUCKET_FOTOS`. Faltando `SEGREDO_ORIGEM` ou `ORIGEM_SITE` → lança `Error("config: <NOME> ausente")`.
-  - `criarApp({ config, banco, email, captcha, armazenamento, relogio? }) -> Promise<FastifyInstance>`; `relogio` padrão `() => new Date()`.
+  - `criarApp({ config, banco, email, captcha, armazenamento, relogio?, limites? }) -> Promise<FastifyInstance>`; `relogio` padrão `() => new Date()`; `limites` padrão `true` (a Task 5 usa; antes dela é ignorado).
+  - Fastify com **`trustProxy: 1`** (só o CloudFront à frente; nunca `true`, que aceitaria `X-Forwarded-For` forjado).
+  - `@fastify/cors` registrado **antes** da portaria, com `methods: ['GET','POST','DELETE']`.
+  - Parser JSON que aceita corpo vazio como `{}` (o app chama `POST /conta/sair` sem corpo).
   - `server/test/ajuda.js`: `configTeste(extra?) -> Config` (ambiente `teste`, segredo `segredo-teste`) e `cabecalhos(extra?) -> object` com `x-saude-origem`.
 - Scripts no `package.json`: `"test": "node --test test/"`, `"start": "node src/principal.js"`; `"engines": {"node": ">=22"}`.
 
@@ -59,6 +66,8 @@
   - `CORS: Origin https://kaique-fhs.github.io recebe access-control-allow-origin igual`; `Origin https://outro.site não recebe o cabeçalho`; em `teste`, `http://localhost:5500` recebe
   - `lerConfig sem SEGREDO_ORIGEM lança "config: SEGREDO_ORIGEM ausente"`
   - Use `app.inject(...)`; para o 403 use uma rota de teste qualquer (`GET /nao-existe` deve dar 403, não 404, sem o cabeçalho).
+  - `GET /nao-existe com o cabeçalho → 404 {erro:"nao-encontrado"}`; `POST com JSON malformado → 400 {erro:"requisicao"}`
+  - `preflight OPTIONS de DELETE vindo da origem do site → access-control-allow-methods inclui DELETE`
 - [ ] **Step 2:** `cd server && npm install && npm test` → FAIL (módulos não existem).
 - [ ] **Step 3: Implementar** `config.js` e `app.js`: Fastify com `trustProxy: true`, `@fastify/cors` com as origens da regra global, hook `onRequest` que confere `x-saude-origem` com `timingSafeEqual` (comprimentos diferentes = recusa) e libera só `GET /saude`. `.gitignore`: `node_modules/`, `.env`, `.pg*/`. `.env.example` com todas as variáveis, sem valores reais.
 - [ ] **Step 4:** `npm test` → PASS.
@@ -80,9 +89,10 @@
   - `criarBancoPg(url:string) -> Banco` (Pool do `pg`) e `criarBancoPglite() -> Promise<Banco>` (em memória).
   - `migrar(banco:Banco, pasta?:string) -> Promise<string[]>` (nomes aplicados; tabela `migracoes(nome text primary key, aplicada_em timestamptz default now())`; cada arquivo numa transação; idempotente).
   - `server/test/ajuda.js`: `novoBancoTeste() -> Promise<Banco>` (PGlite + `migrar`).
+  - `seq` (bigint) sai do banco como texto no `pg` e número no PGlite: quem lê converte com `Number(...)`.
 - Esquema (exato):
   - `001_contas.sql` (sem extensões: `gen_random_uuid()` é nativo desde o Postgres 13): tabelas `usuarios(id uuid primary key default gen_random_uuid(), email text not null unique, senha_hash text not null, confirmado_em timestamptz, criado_em timestamptz not null default now())`; `sessoes(hash text primary key, user_id uuid not null references usuarios(id) on delete cascade, criada_em timestamptz not null default now(), ultimo_uso timestamptz not null default now())`; `tokens(hash text primary key, user_id uuid not null references usuarios(id) on delete cascade, tipo text not null check (tipo in ('confirmar','senha')), expira_em timestamptz not null, usado_em timestamptz)`.
-  - `002_dados.sql`: `create sequence itens_seq`; `itens(user_id uuid not null references usuarios(id) on delete cascade, tipo text not null check (tipo in ('fav','sel','check','checkplano','quero','feito','treino','registro','plano','meta')), chave text not null check (length(chave) between 1 and 200), valor jsonb, ativo boolean not null default true, em timestamptz not null, seq bigint not null default nextval('itens_seq'), primary key (user_id, tipo, chave))`; índice `(user_id, seq)`; `contas_apagadas(user_id uuid primary key, apagada_em timestamptz not null default now())` (sem FK, sem dado pessoal); `envios_email(dia date primary key, total int not null)`. Papel `saude_app` (criar só se não existir, `nologin`), `grant select, insert, update, delete on itens to saude_app`, `grant usage, select on sequence itens_seq to saude_app`. `alter table itens enable row level security; alter table itens force row level security;` política `itens_dono` para `saude_app` com `using (user_id = current_setting('app.user_id', true)::uuid) with check (mesma condição)`.
+  - `002_dados.sql`: `create sequence itens_seq`; `itens(user_id uuid not null references usuarios(id) on delete cascade, tipo text not null check (tipo in ('fav','sel','check','checkplano','quero','feito','treino','registro','plano','meta')), chave text not null check (length(chave) between 1 and 200), valor jsonb, ativo boolean not null default true, em timestamptz not null, seq bigint not null default nextval('itens_seq'), primary key (user_id, tipo, chave))`; índice `(user_id, seq)`; `contas_apagadas(user_id uuid primary key, apagada_em timestamptz not null, fotos_apagadas_em timestamptz)` (sem FK, sem dado pessoal); `envios_email(dia date primary key, total int not null)`. Papel `saude_app` (criar só se não existir, `nologin`), `grant saude_app to current_user` (para o `SET ROLE` funcionar também com usuário não-superusuário em produção), `grant select, insert, update, delete on itens to saude_app`, `grant usage, select on sequence itens_seq to saude_app`. `alter table itens enable row level security; alter table itens force row level security;` política `itens_dono` para `saude_app` com `using (user_id = current_setting('app.user_id', true)::uuid) with check (mesma condição)`.
 
 - [ ] **Step 1: Testes que falham** em `banco.test.js`:
   - `migrar aplica 001 e 002 e na segunda vez não aplica nada` (`[]`)
@@ -128,11 +138,12 @@
 **Interfaces:**
 - Consumes: `Banco` (Task 2), `hashSenha`, `conferirSenha`, `novoToken`, `hashToken`, `HASH_FALSO` (Task 3).
 - Produces:
-  - Interface `Email`: `enviar({ para, assunto, texto }) -> Promise<void>`. `criarEmailSmtp(smtp) -> Email` (nodemailer). Em `ajuda.js`: `emailFalso() -> Email & { enviados: object[] }`.
+  - Interface `Email`: `enviar({ para, assunto, texto }) -> Promise<void>`. `criarEmailSmtp(smtp) -> Email` (nodemailer). Em `ajuda.js`: `emailFalso() -> Email & { enviados: object[] }` (registra **na chamada**, de forma síncrona, porque a rota não espera o envio).
+  - Em `ajuda.js`: `criarAppTeste(opcoes?) -> Promise<{ app, banco, email, relogio }>` (PGlite, e-mail falso, captcha falso que aceita, armazenamento falso, relógio controlável `relogio.avancar(ms)`), e `contaLogada(app, email, opcoes?) -> Promise<{ token, id, email }>` (cadastra, confirma pelo link do e-mail falso, entra). Os testes das tasks seguintes usam esses dois, sem repetir o fluxo.
   - Hook Fastify `exigirSessao` (exportado de `contas.js`): lê `Authorization: Bearer <token>`, acha a sessão pelo hash; sem sessão, ou `ultimo_uso` há mais de 60 dias → `401 {erro:"sessao"}` (e apaga a vencida). Atualiza `ultimo_uso` se tiver mais de 1 h. Coloca `request.usuario = { id, email }`.
   - `registrarContas(app, deps)` com as rotas:
-    - `POST /conta/cadastro {email, senha}` → sempre `202 {ok:true}`. Senha fora de 8–128 → `400 {erro:"senha"}`; e-mail sem `@` → `400 {erro:"email"}`. E-mail novo: cria usuário não confirmado e manda e-mail com link `${origemSite}/saude-familiar/#confirmar=<token>`. E-mail existente não confirmado: manda novo link. Existente confirmado: não manda nada. Sempre calcula um `hashSenha` (mesmo tempo).
-    - `POST /conta/confirmar {token}` → `200 {ok:true}`; token inválido, vencido ou usado → `400 {erro:"token"}`.
+    - `POST /conta/cadastro {email, senha}` → sempre `202 {ok:true}`. Senha fora de 8–128 → `400 {erro:"senha"}`; e-mail sem `@` → `400 {erro:"email"}`. E-mail novo: cria usuário não confirmado e manda e-mail com link `${origemSite}/saude-familiar/#confirmar=<token>`. E-mail existente não confirmado: **troca a senha guardada pela nova**, invalida os tokens `confirmar` anteriores e manda novo link (evita alguém reservar o e-mail de outra pessoa com a própria senha). Existente confirmado: não manda nada. Sempre calcula um `hashSenha` (mesmo tempo).
+    - `POST /conta/confirmar {token}` → `200 {ok:true}` e apaga sessões que existirem; token inválido, vencido ou usado → `400 {erro:"token"}`.
     - `POST /conta/entrar {email, senha}` → `200 {token, usuario:{id,email}}`; errado → `401 {erro:"credenciais"}` (usa `HASH_FALSO` quando o e-mail não existe); senha certa mas não confirmado → `403 {erro:"nao-confirmado"}`.
     - `POST /conta/sair` (sessão) → `204`, apaga só aquela sessão.
     - `GET /conta` (sessão) → `200 {id, email}`.
@@ -150,6 +161,10 @@
   - `sessão sem uso há 61 dias → 401 sessao`
   - `nova-senha encerra todas as sessões: dois tokens de entrar param de funcionar; entrar com a senha nova funciona`
   - `token de nova-senha vencido (relógio +61 min) → 400 token`
+  - `token de nova-senha usado duas vezes → a segunda dá 400 token`
+  - `esqueci com e-mail existente envia link #nova-senha=; com inexistente responde 202 igual e não envia`
+  - `recadastro de e-mail não confirmado troca a senha: entrar com a senha antiga falha, com a nova (após confirmar o link novo) funciona; o link antigo dá 400 token`
+  - `banco guarda só hashes: a coluna hash de sessoes e de tokens nunca é igual ao token devolvido/enviado`
 - [ ] **Step 2:** `npm test` → FAIL.
 - [ ] **Step 3: Implementar** `email.js` e `contas.js`; registrar em `criarApp`.
 - [ ] **Step 4:** `npm test` → PASS.
@@ -161,7 +176,7 @@
 
 **Files:**
 - Create: `server/src/protecao.js`
-- Modify: `server/src/app.js`, `server/src/contas.js`, `server/test/ajuda.js`
+- Modify: `server/src/app.js`, `server/src/contas.js`, `server/test/ajuda.js`, `server/test/contas.test.js` (passar a mandar `x-turnstile-token` pelo helper e usar `limites:false` onde o teste repete muitas chamadas)
 - Test: `server/test/protecao.test.js`
 
 **Interfaces:**
@@ -169,11 +184,11 @@
 - Produces:
   - Interface `Captcha`: `verificar(token:string, ip:string) -> Promise<boolean>`. `criarCaptchaTurnstile(segredo) -> Captcha` (POST `https://challenges.cloudflare.com/turnstile/v0/siteverify` com `secret`, `response`, `remoteip`; usa `success`). Em `ajuda.js`: `captchaFalso(aceita=true)`.
   - `comTetoDiario(email:Email, banco:Banco, teto:number, relogio) -> Email`: antes de enviar, `insert … on conflict (dia) do update set total = envios_email.total + 1 returning total`; acima do teto não envia e lança `Error("teto-email")`.
-  - Limites (`@fastify/rate-limit`, por IP, em memória): `/conta/cadastro` 5 por hora; `/conta/entrar` 10 por 15 min (e também 10 por 15 min por e-mail normalizado); `/conta/esqueci` 3 por hora; demais rotas 300 por minuto. Estourou → `429 {erro:"limite"}`.
+  - Limites (`@fastify/rate-limit`, em memória), cada rota com limite **por IP** e **por e-mail normalizado**: `/conta/cadastro` 5 por hora; `/conta/entrar` 10 por 15 min; `/conta/esqueci` 3 por hora; demais rotas 300 por minuto por IP. O limite por e-mail roda em `preHandler` (o corpo só existe depois do parse), com `keyGenerator` pelo e-mail e `groupId` próprio. Estourou → `429 {erro:"limite"}` (via `errorResponseBuilder`). `criarApp({limites:false})` desliga tudo (usado só onde o teste não é sobre limites).
   - Captcha em `/conta/cadastro` e `/conta/esqueci`: sem `x-turnstile-token` ou recusado → `400 {erro:"captcha"}`, antes de tocar no banco ou mandar e-mail.
   - Teto estourado no cadastro/esqueci: a rota continua respondendo `202` (não revela nada) e registra o erro no log.
 
-- [ ] **Step 1: Testes que falham:** `cadastro sem x-turnstile-token → 400 captcha e nenhum e-mail`; `captcha recusado → 400 captcha`; `6º cadastro do mesmo IP na hora → 429 limite`; `11ª tentativa de entrar com o mesmo e-mail de IPs diferentes → 429`; `com teto 2, o 3º e-mail não é enviado e a rota responde 202`.
+- [ ] **Step 1: Testes que falham:** `cadastro sem x-turnstile-token → 400 captcha e nenhum e-mail`; `captcha recusado → 400 captcha`; `6º cadastro do mesmo IP na hora → 429 limite`; `11ª tentativa de entrar com o mesmo e-mail de IPs diferentes → 429`; `4º esqueci do mesmo e-mail de IPs diferentes → 429`; `X-Forwarded-For forjado pelo cliente não escapa do limite (com trustProxy 1, IP = último da lista)`; `com teto 2, o 3º e-mail não é enviado e a rota responde 202`.
 - [ ] **Step 2:** `npm test` → FAIL.
 - [ ] **Step 3: Implementar** e registrar em `criarApp` (captcha e e-mail com teto entram pelas `deps`).
 - [ ] **Step 4:** `npm test` → PASS (todas as anteriores também).
@@ -196,7 +211,7 @@
     - sem `atual` → `aplicar`;
     - `tipo === 'registro'` e `atual.ativo` e `atual.valor?.foto` → `conflito` se o `valor` for diferente, `ignorar` se igual (registro com foto nunca muda);
     - nos demais casos: `aplicar` se `mudanca.em > atual.em`, senão `ignorar` (empate = `ignorar`).
-  - `POST /sync` (sessão) corpo `{ mudancas: Mudanca[] }` (1 a 500) → `200 { conflitos: Item[] }` (para cada conflito, devolve o item do servidor). Validação → `400 {erro:"sync"}`: `tipo` fora da lista da Task 2, `chave` vazia ou > 200, `valor` serializado > 64 KB, `em` inválido; para `feito`, `treino` e `registro` a chave tem de casar `^\d{4}-\d{2}-\d{2}\|[a-z0-9_-]{1,60}$`. `em` acima de `agora + 5 min` é gravado como `agora + 5 min`. Ao aplicar, `seq = nextval('itens_seq')`. Tudo numa transação `comoUsuario`.
+  - `POST /sync` (sessão) corpo `{ mudancas: Mudanca[] }` (1 a 500) → `200 { conflitos: Item[] }` (para cada conflito, devolve o item do servidor). Validação → `400 {erro:"sync"}`: `tipo` fora da lista da Task 2, `chave` vazia ou > 200, `valor` serializado > 64 KB, `em` inválido; para `feito`, `treino` e `registro` a chave tem de casar `^\d{4}-\d{2}-\d{2}\|[a-z0-9_-]{1,60}$`. `em` acima de `agora + 5 min` é gravado como `agora + 5 min`. Ao aplicar, `seq = nextval('itens_seq')`. Tudo numa transação `comoUsuario` que começa com `select pg_advisory_xact_lock(hashtext($userId))` (o mesmo vale para o `GET /sync`), para dois envios do mesmo usuário não correrem e o cursor nunca pular item. "Plano e metas: vale a versão gravada por último" (spec) = maior `em`, a mesma regra dos outros tipos.
   - `GET /sync?depois=<seq>&limite=<n>` (sessão; `depois` padrão 0, `limite` padrão 500, máx 1000) → `200 { itens: Item[], cursor: number, mais: boolean }`, ordenado por `seq`; `cursor` = maior `seq` devolvido (ou `depois` se vazio).
 
 - [ ] **Step 1: Testes que falham:**
@@ -226,11 +241,11 @@
 - Consumes: `exigirSessao`.
 - Produces:
   - Interface `Armazenamento`: `urlEnvio(chave:string) -> Promise<{url:string, campos:object}>` (POST assinado, `content-length-range` 1..5 MB, `Content-Type` `image/jpeg`, 5 min); `urlLeitura(chave:string) -> Promise<string>` (GET assinado, 5 min); `apagarPrefixo(prefixo:string) -> Promise<void>` (apaga todos os objetos **e versões** sob o prefixo).
-  - `criarArmazenamentoS3({ regiao, bucket }) -> Armazenamento` (credenciais pela cadeia padrão do SDK: papel da EC2 em produção). Em `ajuda.js`: `armazenamentoFalso()` que registra chamadas e devolve `https://falso/<chave>`.
+  - `criarArmazenamentoS3({ regiao, bucket, cliente? }) -> Armazenamento` (credenciais pela cadeia padrão do SDK: papel da EC2 em produção; `cliente` opcional = `S3Client` injetado nos testes). `apagarPrefixo` pagina `ListObjectVersions` (`IsTruncated`, `NextKeyMarker`, `NextVersionIdMarker`), apaga versões **e** delete markers em lotes de até 1000 com `DeleteObjects`, e lança erro se a resposta trouxer `Errors`. Em `ajuda.js`: `armazenamentoFalso()` que registra chamadas e devolve `https://falso/<chave>`.
   - `chaveFoto(ambiente, userId, fotoId) -> string` exportada; `fotoId` tem de casar `^f-\d{4}-\d{2}-\d{2}-[a-z0-9_-]{1,60}-\d{10,16}$` (formato atual do app: `"f-" + dia + "-" + ref + "-" + Date.now()`), senão lança `Error("foto-id")`.
   - `POST /fotos/:fotoId/envio` (sessão) → `200 {url, campos}`; `GET /fotos/:fotoId` (sessão) → `200 {url}`; id inválido → `400 {erro:"foto-id"}`. A chave usa sempre o `id` da sessão, nunca um valor vindo do cliente.
 
-- [ ] **Step 1: Testes que falham:** `envio gera chave teste/<meuId>/<fotoId>.jpg`; `fotoId com ../ → 400 foto-id`; `fotoId fora do formato → 400`; `leitura usa o id da sessão: A pedindo a foto de B gera chave com o id de A` (nunca de B); `sem sessão → 401`.
+- [ ] **Step 1: Testes que falham:** `apagarPrefixo com cliente falso: duas páginas, versões e delete markers → tudo enviado para DeleteObjects; resposta com Errors → lança`; `envio gera chave teste/<meuId>/<fotoId>.jpg`; `fotoId com ../ → 400 foto-id`; `fotoId fora do formato → 400`; `leitura usa o id da sessão: A pedindo a foto de B gera chave com o id de A` (nunca de B); `sem sessão → 401`.
 - [ ] **Step 2:** `npm test` → FAIL.
 - [ ] **Step 3: Implementar** (`@aws-sdk/s3-presigned-post` para o envio, `@aws-sdk/s3-request-presigner` para a leitura, `ListObjectVersions` + `DeleteObjects` para apagar).
 - [ ] **Step 4:** `npm test` → PASS.
@@ -248,11 +263,12 @@
 **Interfaces:**
 - Consumes: tudo acima.
 - Produces:
-  - `DELETE /conta` (sessão) corpo `{senha}` → `204`; senha errada → `401 {erro:"credenciais"}`. Ordem: confere senha → `armazenamento.apagarPrefixo("<ambiente>/<id>/")` → numa transação: `insert into contas_apagadas(user_id)` e `delete from usuarios where id = $1` (sessões, tokens e itens caem por cascade). Se apagar as fotos falhar → `500 {erro:"fotos"}` e nada é apagado do banco.
+  - `DELETE /conta` (sessão) corpo `{senha}` → `204`; senha errada → `401 {erro:"credenciais"}`. Ordem: confere senha → numa transação: `insert into contas_apagadas(user_id, apagada_em)` e `delete from usuarios where id = $1` (sessões, tokens e itens caem por cascade) → `apagarFotosPendentes()`. Responde `204` mesmo se as fotos falharem (a conta já sumiu; as fotos ficam pendentes e são tentadas de novo).
+  - `apagarFotosPendentes({ banco, armazenamento, ambiente, relogio }) -> Promise<number>`: para cada linha de `contas_apagadas` com `fotos_apagadas_em is null`, chama `apagarPrefixo("<ambiente>/<user_id>/")` e grava `fotos_apagadas_em`; falha de uma não impede as outras; devolve quantas concluiu. Roda também ao iniciar o servidor (`principal.js`).
   - `principal.js`: `lerConfig(process.env)` → `criarBancoPg` → `migrar` → `criarApp` com `criarEmailSmtp` + `comTetoDiario`, `criarCaptchaTurnstile`, `criarArmazenamentoS3` → `listen({ host: '0.0.0.0', port })`.
   - `server/README.md`: como rodar os testes (`npm test`, sem instalar Postgres) e o servidor local com um `.env` (copiar de `.env.example`), lista das rotas com corpo e respostas.
 
-- [ ] **Step 1: Testes que falham:** `apagar conta com senha errada → 401 e nada muda`; `apagar conta → 204, usuário sumiu, itens sumiram, contas_apagadas tem o id, apagarPrefixo chamado com "teste/<id>/"`; `token da conta apagada → 401 sessao`; `falha ao apagar fotos → 500 fotos e o usuário continua existindo`.
+- [ ] **Step 1: Testes que falham:** `apagar conta com senha errada → 401 e nada muda`; `apagar conta → 204, usuário sumiu, itens sumiram, contas_apagadas tem o id com fotos_apagadas_em preenchido, apagarPrefixo chamado com "teste/<id>/"`; `token da conta apagada → 401 sessao`; `falha ao apagar fotos → 204, usuário sumiu e fotos_apagadas_em fica nulo; apagarFotosPendentes depois conclui`.
 - [ ] **Step 2:** `npm test` → FAIL.
 - [ ] **Step 3: Implementar** a rota, `principal.js` e o README.
 - [ ] **Step 4:** `npm test` → PASS (suíte inteira) e `node --check src/principal.js` sem erro.
