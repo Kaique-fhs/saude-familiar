@@ -80,24 +80,30 @@ Resources:
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
-              - Sid: ObjetosDosBuckets
+              - Sid: ObjetosDasFotos
                 Effect: Allow
                 Action:
                   - s3:PutObject
                   - s3:GetObject
                   - s3:DeleteObject
                   - s3:DeleteObjectVersion
-                Resource:
-                  - !Sub "${BucketFotos.Arn}/*"
-                  - !Sub "${BucketBackups.Arn}/*"
-              - Sid: ListarBuckets
+                Resource: !Sub "${BucketFotos.Arn}/*"
+              - Sid: ObjetosDosBackups
+                Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                Resource: !Sub "${BucketBackups.Arn}/*"
+              - Sid: ListarFotos
                 Effect: Allow
                 Action:
                   - s3:ListBucket
                   - s3:ListBucketVersions
-                Resource:
-                  - !GetAtt BucketFotos.Arn
-                  - !GetAtt BucketBackups.Arn
+                Resource: !GetAtt BucketFotos.Arn
+              - Sid: ListarBackups
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: !GetAtt BucketBackups.Arn
               - Sid: LerSegredos
                 Effect: Allow
                 Action:
@@ -118,6 +124,8 @@ Resources:
 
   Maquina:
     Type: AWS::EC2::Instance
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       ImageId: !Ref AmiId
       InstanceType: !Ref TipoInstancia
@@ -135,7 +143,7 @@ Resources:
             VolumeType: gp3
             VolumeSize: 20
             Encrypted: true
-            DeleteOnTermination: true
+            DeleteOnTermination: false
       Tags:
         - Key: Name
           Value: saude-familiar
@@ -299,7 +307,7 @@ Resources:
                 HeaderValue: !Ref SegredoOrigemTeste
         DefaultCacheBehavior:
           TargetOriginId: maquina
-          ViewerProtocolPolicy: redirect-to-https
+          ViewerProtocolPolicy: https-only
           AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
           CachedMethods: [GET, HEAD]
           CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
@@ -326,7 +334,7 @@ Resources:
                 HeaderValue: !Ref SegredoOrigemProducao
         DefaultCacheBehavior:
           TargetOriginId: maquina
-          ViewerProtocolPolicy: redirect-to-https
+          ViewerProtocolPolicy: https-only
           AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
           CachedMethods: [GET, HEAD]
           CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad

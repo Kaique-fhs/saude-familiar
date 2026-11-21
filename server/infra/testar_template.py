@@ -87,6 +87,10 @@ class Template(unittest.TestCase):
         self.assertEqual(ebs["VolumeSize"], 20)
         self.assertTrue(ebs["Encrypted"])
         self.assertIn({"Key": "Name", "Value": "saude-familiar"}, m["Tags"])
+        # o Postgres mora no disco raiz: nada de apagar junto com a instancia
+        self.assertEqual(R["Maquina"]["DeletionPolicy"], "Retain")
+        self.assertEqual(R["Maquina"]["UpdateReplacePolicy"], "Retain")
+        self.assertIs(ebs["DeleteOnTermination"], False)
 
     def test_buckets(self):
         for nome in ("BucketFotos", "BucketBackups"):
@@ -128,6 +132,12 @@ class Template(unittest.TestCase):
             "s3:DeleteObject", "s3:DeleteObjectVersion",
             "ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath", "sns:Publish"})
         self.assertIn("parameter/saude-familiar/", str(stm))
+        # backups: a maquina nao apaga nada (expiracao fica com o lifecycle)
+        for s in stm:
+            if "BucketBackups" in str(s["Resource"]):
+                for a in (s["Action"] if isinstance(s["Action"], list) else [s["Action"]]):
+                    self.assertNotIn("Delete", a)
+        self.assertNotIn("s3:ListBucketVersions", str([s for s in stm if "BucketBackups" in str(s["Resource"])]))
 
     def test_cloudfront(self):
         for nome, segredo, caminho in (("CloudFrontTeste", "SegredoOrigemTeste", "/teste"),
@@ -146,7 +156,7 @@ class Template(unittest.TestCase):
             d = c["DefaultCacheBehavior"]
             self.assertEqual(d["CachePolicyId"], "4135ea2d-6df8-44a3-9df3-4b5a84be39ad")
             self.assertEqual(d["OriginRequestPolicyId"], "b689b0a8-53d0-40ab-baf2-68738e2966ac")
-            self.assertEqual(d["ViewerProtocolPolicy"], "redirect-to-https")
+            self.assertEqual(d["ViewerProtocolPolicy"], "https-only")
             self.assertEqual(sorted(d["AllowedMethods"]),
                              sorted(["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]))
 
