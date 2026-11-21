@@ -10,6 +10,11 @@
 #       POST /conta/confirmar, /conta/entrar, GET /conta, POST+GET /sync,
 #       foto: POST /fotos/<id>/envio (upload real, 204) e GET /fotos/<id> (leitura real, mesmo arquivo).
 #       Para antes do DELETE /conta.
+#   fumaca.sh apos-confirmar <url> <email>
+#       Repete tudo de "continuar" depois da confirmacao (entrar com a senha do estado ate a foto),
+#       sem token novo. Guarda ID e FOTO no estado.
+#   fumaca.sh apagar <url> <email>      entra com a senha do estado e faz DELETE /conta (204); confere que sumiu.
+#   fumaca.sh entrar-errado <url> <email-inexistente> <n>   n tentativas erradas de /conta/entrar (so status).
 # Estado: ${ESTADO:-$HOME/.saude-fumaca} (fora do repo). Nada secreto vai para a saida;
 # o token de sessao so aparece truncado.
 set -euo pipefail
@@ -73,16 +78,17 @@ inicio)
   echo "Depois: $0 continuar $URL $EMAIL <token-do-link>"
   ;;
 
-continuar)
-  [ $# -ge 4 ] || uso
-  tokenlink="$4"
+continuar|apos-confirmar|apagar)
   [ -f "$ESTADO" ] || { echo "sem estado em $ESTADO: rode 'inicio' antes" >&2; exit 1; }
   [ "$(lerestado EMAIL)" = "$EMAIL" ] || { echo "o e-mail difere do estado; rode 'inicio' de novo" >&2; exit 1; }
   senha="$(lerestado SENHA)"
-
-  corpo="$(node -e 'process.stdout.write(JSON.stringify({token:process.argv[1]}))' "$tokenlink")"
-  req POST /conta/confirmar 200 "$corpo"
-  ok "POST /conta/confirmar -> 200"
+  if [ "$etapa" = continuar ]; then
+    [ $# -ge 4 ] || uso
+    tokenlink="$4"
+    corpo="$(node -e 'process.stdout.write(JSON.stringify({token:process.argv[1]}))' "$tokenlink")"
+    req POST /conta/confirmar 200 "$corpo"
+    ok "POST /conta/confirmar -> 200"
+  fi
 
   corpo="$(node -e 'process.stdout.write(JSON.stringify({email:process.argv[1],senha:process.argv[2]}))' "$EMAIL" "$senha")"
   req POST /conta/entrar 200 "$corpo"
@@ -94,6 +100,18 @@ continuar)
   req GET /conta 200 "" "${aut[@]}"
   [ "$(json_get email)" = "$EMAIL" ] || falha "GET /conta devolveu outro e-mail"
   ok "GET /conta -> 200 (Authorization chegou a API pelo CloudFront)"
+  idconta="$(json_get id)"
+
+  if [ "$etapa" = apagar ]; then
+    corpo="$(node -e 'process.stdout.write(JSON.stringify({senha:process.argv[1]}))' "$senha")"
+    req DELETE /conta 204 "$corpo" "${aut[@]}"
+    ok "DELETE /conta -> 204 (id $idconta)"
+    req GET /conta 401 "" "${aut[@]}"
+    ok "GET /conta depois de apagar -> 401"
+    exit 0
+  fi
+  printf 'ID=%s
+' "$idconta" >> "$ESTADO"
 
   agora="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   corpo="{\"mudancas\":[{\"tipo\":\"fav\",\"chave\":\"fumaca-receita\",\"valor\":{\"nota\":\"fumaca\"},\"ativo\":true,\"em\":\"$agora\"}]}"
@@ -107,8 +125,13 @@ continuar)
 
   # JPEG minimo (1x1). O S3 so confere tipo e tamanho, nao o conteudo.
   foto="$TMP/foto.jpg"
+  # curl nativo do Windows nao entende /tmp dentro de -F "file=@...": usa caminho no formato C:/...
+  fotocurl="$foto"; volta="$TMP/volta.jpg"
+  if command -v cygpath >/dev/null 2>&1; then fotocurl="$(cygpath -m "$foto")"; fi
   printf '%s' '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=' | base64 -d > "$foto"
   fotoid="f-$(date -u +%Y-%m-%d)-fumaca-$(date -u +%s)000"
+  printf 'FOTO=%s
+' "$fotoid" >> "$ESTADO"
   req POST "/fotos/$fotoid/envio" 200 "" "${aut[@]}"
   url_envio="$(json_get url)"
   [ -n "$url_envio" ] || falha "envio sem url"
@@ -117,20 +140,28 @@ continuar)
     node -e 'const o=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));
       for (const [k,v] of Object.entries(o.campos)) console.log(k+"\t"+v);' "$CORPO")
   [ "${#campos[@]}" -gt 0 ] || falha "envio sem campos"
-  st="$(curl -sS --max-time 60 -o "$CORPO" -w '%{http_code}' "${campos[@]}" -F "file=@$foto;type=image/jpeg" "$url_envio")"
+  st="$(curl -sS --max-time 60 -o "$CORPO" -w '%{http_code}' "${campos[@]}" -F "file=@$fotocurl;type=image/jpeg" "$url_envio")"
   [ "$st" = "204" ] || falha "upload ao S3: esperado 204, veio $st"
   ok "upload real ao S3 pelo POST assinado -> 204"
 
   req GET "/fotos/$fotoid" 200 "" "${aut[@]}"
   url_leitura="$(json_get url)"
   [ -n "$url_leitura" ] || falha "leitura sem url"
-  st="$(curl -sS --max-time 60 -o "$TMP/volta.jpg" -w '%{http_code}' "$url_leitura")"
+  st="$(curl -sS --max-time 60 -o "$volta" -w '%{http_code}' "$url_leitura")"
   [ "$st" = "200" ] || falha "leitura do S3: esperado 200, veio $st"
-  cmp -s "$foto" "$TMP/volta.jpg" || falha "arquivo lido difere do enviado"
+  cmp -s "$foto" "$volta" || falha "arquivo lido difere do enviado"
   ok "leitura real pela URL assinada -> 200, mesmo arquivo"
 
   echo
   echo "Tudo verde ate aqui. Parou antes do DELETE /conta (Step 3). Foto: $fotoid"
+  ;;
+entrar-errado)
+  [ $# -ge 4 ] || uso
+  corpo="$(node -e 'process.stdout.write(JSON.stringify({email:process.argv[1],senha:"senha-errada-fumaca"}))' "$EMAIL")"
+  for i in $(seq 1 "$4"); do
+    st="$(curl -sS --max-time 30 -o "$CORPO" -w '%{http_code}' -X POST -H 'content-type: application/json' --data-binary "$corpo" "$URL/conta/entrar")"
+    echo "tentativa $i: $st"
+  done
   ;;
 *) uso ;;
 esac
