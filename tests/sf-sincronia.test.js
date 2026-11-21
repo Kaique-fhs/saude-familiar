@@ -589,3 +589,46 @@ test("integração: aba B relê (evento storage) o que a aba A gravou e não des
   assert.deepEqual(outro.lerEstado().favs, []);        // "a" não ressuscitou
   assert.deepEqual(outro.lerEstado().despensa, ["b"]);
 });
+
+// ---------- mudança que não coube na fila (armazenamento cheio) ----------
+function localQueFalha(falha) {
+  const l = localFalso();
+  const gravar = l.gravar;
+  l.gravar = (u, n, v) => (n === "fila" && falha.sim ? false : gravar(u, n, v));
+  return l;
+}
+
+test("fila não gravou: rebase não engole a mudança, pendentes() conta e o próximo registrar enfileira", () => {
+  const falha = { sim: true };
+  const local = localQueFalha(falha);
+  const h = montar({ local });
+  h.mudar(com({ favs: ["r1"] }));                 // gravação falha
+  assert.equal(fila(h).length, 0);
+  h.sinc.rebase(com({ favs: ["r1"] }));           // visibilitychange / storage
+  assert.ok(h.sinc.pendentes() >= 1, "mudança não gravada conta como pendente");
+  assert.equal(h.sinc.status(), "erro");
+  falha.sim = false;
+  h.relogio("2026-11-21T10:00:05.000Z");
+  h.mudar(com({ favs: ["r1"], sel: ["r2"] }));    // agora há espaço
+  assert.deepEqual(fila(h).map((m) => m.tipo + "|" + m.chave).sort(), ["fav|r1", "sel|r2"]);
+  assert.equal(h.sinc.pendentes(), 2);
+  assert.notEqual(h.sinc.status(), "erro");
+});
+
+test("fila não gravou: aplicarRemotos não troca a referência pela memória; a diferença entra na fila depois", async () => {
+  const falha = { sim: true };
+  const local = localQueFalha(falha);
+  const h = montar({
+    local,
+    baixar: async (depois) => (depois === 0
+      ? { itens: [{ tipo: "sel", chave: "z", valor: null, ativo: true, em: "2026-11-21T09:00:00.000Z" }], cursor: 1, mais: false }
+      : { itens: [], cursor: depois, mais: false })
+  });
+  h.mudar(com({ favs: ["r1"] }));                 // falha; memória à frente da referência
+  await h.sinc.sincronizar();
+  assert.ok(h.sinc.pendentes() >= 1);
+  falha.sim = false;
+  h.relogio("2026-11-21T10:00:05.000Z");
+  h.mudar(com({ favs: ["r1"], sel: ["z"] }));
+  assert.ok(fila(h).some((m) => m.tipo === "fav" && m.chave === "r1"), "fav|r1 foi enfileirada");
+});

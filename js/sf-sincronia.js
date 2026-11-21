@@ -56,6 +56,7 @@
     var ultimoProblema = null; // "offline" | "erro" | "conflito"
     var erroBranda = false;    // falha que não para a rodada, mas deixa o status em "erro"
     var avisosMem = [];        // avisos que não couberam no armazenamento
+    var naoGravado = false;    // a última mudança não coube na fila: ref fica velho de propósito até um registrar gravar
     var falhas = 0;
     var ultimoStatus = null;
 
@@ -68,10 +69,11 @@
 
     function iso() { var a = agora(); return typeof a === "string" ? a : new Date(a).toISOString(); }
 
-    function pendentes() { return lerFila().length + lerPend().length; }
+    function pendentes() { return lerFila().length + lerPend().length + (naoGravado ? 1 : 0); }
     function status() {
       if (emAndamento) return "enviando";
       if (ultimoProblema) return ultimoProblema;
+      if (naoGravado) return "erro";
       return pendentes() > 0 ? "pendente" : "ok";
     }
     function notificar() {
@@ -133,13 +135,22 @@
       });
       var ok = salvar("fila", f);
       ok = salvar("fotos-pendentes", pf) && ok;
-      if (ok) ref = copia(depois); // se não coube, a mudança é recalculada no próximo registrar
+      if (ok) {
+        ref = copia(depois);
+        if (naoGravado) { naoGravado = false; if (ultimoProblema === "erro") ultimoProblema = null; }
+      }
+      else {
+        // não coube: a mudança é recalculada no próximo registrar (ref segue velho, nunca nulo)
+        naoGravado = true;
+        if (!ref) ref = copia(antes);
+      }
       notificar();
     }
 
     // O app releu o estado do armazenamento (outra aba gravou): esse passa a ser o "antes" da próxima
     // comparação, sem enfileirar nada. Sem isto, a próxima gravação reenviaria as mudanças da outra aba.
-    function rebase(estado) { ref = copia(estado); }
+    // Se a última mudança não coube na fila, o ref não troca: senão ela some sem aviso.
+    function rebase(estado) { if (!naoGravado) ref = copia(estado); }
 
     // ---- fotos ----
     function tirarFoto(id) {
@@ -236,9 +247,9 @@
       });
       if (mexeu) salvar("fila", fila);
       if (!validos.length) return;
-      var novo = dados.aplicar(deps.estado(), validos);
-      ref = copia(novo);
-      avisarEstado(novo);
+      // A referência é "referência + remoto", nunca "memória + remoto": o que a memória tem a mais ainda é mudança local.
+      ref = copia(dados.aplicar(copia(ref || deps.estado()), validos));
+      avisarEstado(dados.aplicar(deps.estado(), validos));
     }
 
     function baixarTudo() {

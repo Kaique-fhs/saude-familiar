@@ -1666,6 +1666,10 @@
     atualizarCabecalhoConta();
   }
 
+  // Sob a tela de entrar o <main> não guarda dados da conta (Tab, leitor de tela e Ctrl+F não os alcançam).
+  function esconderDadosDaConta() { main.textContent = ""; main.inert = true; }
+  function liberarMain() { main.inert = false; }
+
   function atualizarCabecalhoConta() {
     if (!faixaEl) return;
     faixaEl.hidden = modo !== "antigo";
@@ -1689,10 +1693,23 @@
       ler: function (u, n, padrao) { return armazem.ler(u, n, padrao); },
       gravar: function (u, n, v) { return ligada.sim && !!armazem.sessao() && armazem.gravar(u, n, v); }
     };
-    fotosSF = SF.fotos.criar({ api: apiSF, fetch: buscar, banco: { ler: lerFoto, gravar: salvarFoto } });
+    // Esta sincronia tem a sua api: só tem token (e só envia) enquanto estiver ligada E a sessão atual for da
+    // mesma conta. Se A sair com um envio lento em voo e B entrar, a fila de A não vai com o token de B.
+    var idSinc = userId;
+    function sessaoDaSincronia() {
+      if (!ligada.sim) return null;
+      var s = armazem.sessao();
+      return s && s.usuario && s.usuario.id === idSinc && s.token ? s.token : null;
+    }
+    function buscarDaSincronia(u, i) {
+      if (!sessaoDaSincronia()) return Promise.reject(new TypeError("sincronia parada"));
+      return buscar(u, i);
+    }
+    var apiSinc = SF.api.criar({ config: CONFIG, fetch: buscarDaSincronia, sessao: sessaoDaSincronia });
+    fotosSF = SF.fotos.criar({ api: apiSinc, fetch: buscarDaSincronia, banco: { ler: lerFoto, gravar: salvarFoto } });
     sincroniaLigada = ligada;
     sincronia = SF.sincronia.criar({
-      api: apiSF, local: localSinc, fotos: fotosSF, userId: userId, estado: estadoApp,
+      api: apiSinc, local: localSinc, fotos: fotosSF, userId: userId, estado: estadoApp,
       aoMudarEstado: function (novo) { if (ligada.sim) aplicarEstadoRemoto(novo); },
       aoMudarStatus: function (s) { if (ligada.sim) mostrarStatus(s); },
       aoSessaoVencida: function () { if (ligada.sim) sessaoVencida(); }
@@ -1751,6 +1768,7 @@
       recarregarEstado();
     }
     modo = "conta";
+    liberarMain();
     comecarSincronia();
     atualizarCabecalhoConta();
     render();
@@ -1764,6 +1782,7 @@
     clearTimeout(timerSync); clearTimeout(timerRetry);
     timerSync = null; timerRetry = null;
     if (dlg && dlg.open) fecharRegistro();
+    esconderDadosDaConta();
     atualizarCabecalhoConta();
     contaUI.mostrar("entrar", MSG_SESSAO);
   }
@@ -1775,8 +1794,8 @@
     trocarBanco();
     recarregarEstado();
     if (dlg && dlg.open) fecharRegistro();
-    if (armazem.temDadosAntigos()) { modo = "antigo"; render(); }
-    else { modo = "entrar"; contaUI.mostrar("entrar"); }
+    if (armazem.temDadosAntigos()) { modo = "antigo"; liberarMain(); render(); }
+    else { modo = "entrar"; esconderDadosDaConta(); contaUI.mostrar("entrar"); }
     atualizarCabecalhoConta();
   }
 
