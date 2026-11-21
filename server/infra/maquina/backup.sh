@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Backup diario: pg_dump -Fc de cada ambiente -> s3://<bucket-backups>/<amb>/<AAAA-MM-DD>.dump
-# e a lista de contas apagadas -> s3://<bucket-backups>/<amb>/contas_apagadas.csv
-# (objeto pequeno, sobrescrito a cada backup; serve para a restauracao reaplicar
+# e a lista de contas apagadas -> s3://<bucket-backups>/<amb>/contas_apagadas-<AAAA-MM-DD>.csv
+# (objeto pequeno, com chave datada para um banco recriado vazio nao apagar as listas antigas; o lifecycle expira; serve para a restauracao reaplicar
 # as exclusoes feitas depois do dump, mesmo que o banco tenha sido perdido).
 # O dump local e temporario (pasta 700, arquivo 600) e some ao fim; o script nunca
 # apaga nada no S3 (o papel da maquina nao tem Delete; a expiracao e do lifecycle).
@@ -45,7 +45,7 @@ backup_ambiente() { # ambiente
     rc=1
   elif ! "$AWS_BIN" s3 cp "$dump" "s3://$bucket/$amb/$BACKUP_DATA.dump" --only-show-errors --region "$REGIAO"; then
     rc=1
-  elif ! "$AWS_BIN" s3 cp "$contas" "s3://$bucket/$amb/contas_apagadas.csv" --only-show-errors --region "$REGIAO"; then
+  elif ! "$AWS_BIN" s3 cp "$contas" "s3://$bucket/$amb/contas_apagadas-$BACKUP_DATA.csv" --only-show-errors --region "$REGIAO"; then
     rc=1
   fi
   rm -rf "$dir"

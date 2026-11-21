@@ -3,18 +3,25 @@
 # Uso (root): restaurar.sh <teste|producao> <AAAA-MM-DD> [banco-destino] [--substituir]
 #   banco-destino: padrao saude_restauro_<ambiente>. Nunca sobrescreve o banco vivo
 #   (saude_<ambiente>) sem --substituir; destino ja existente tambem e recusado.
-# Ordem: baixa o dump -> exporta contas_apagadas do banco vivo (se existir) -> baixa
-# a lista guardada no S3 -> restaura -> reinsere as duas listas -> apaga de usuarios
-# quem esta em contas_apagadas -> imprime contagens.
-# De onde vem a lista se o banco foi perdido: do objeto s3://<bucket>/<amb>/contas_apagadas.csv,
-# regravado a cada backup diario. Exclusoes feitas depois do ultimo backup e antes da perda
-# do banco nao tem copia (ate 24 h); reaplique-as a mao se souber quais sao.
-# Variaveis de teste: MAQUINA_ENV, AWS_BIN.
+# Ordem: baixa o dump -> (--substituir: para a API) -> exporta contas_apagadas do banco
+# vivo (se existir) -> baixa TODAS as listas datadas do S3 e une tudo (dedup por user_id)
+# -> restaura -> reinsere a uniao -> apaga de usuarios quem esta em contas_apagadas
+# -> imprime contagens.
+# --substituir: restaura num banco temporario, reaplica as exclusoes nele e so entao
+# troca (vivo -> saude_<amb>_reserva_<data-hora>, temporario -> saude_<amb>) e religa a API.
+# A reserva NAO e apagada: confira e remova a mao (drop database). Em qualquer falha o banco
+# vivo fica intacto, a API e religada e a lista de exclusoes fica num arquivo 600 em
+# DIR_PRESERVA (o caminho e impresso).
+# De onde vem a lista se o banco foi perdido: dos objetos s3://<bucket>/<amb>/contas_apagadas-<data>.csv,
+# um por backup diario (o lifecycle de 30 dias limpa). Exclusoes feitas depois do ultimo backup e
+# antes da perda do banco nao tem copia (ate 24 h); reaplique-as a mao se souber quais sao.
+# Variaveis de teste: MAQUINA_ENV, AWS_BIN, DIR_PRESERVA.
 set -euo pipefail
 umask 077
 
 MAQUINA_ENV="${MAQUINA_ENV:-/etc/saude/maquina.env}"
 AWS_BIN="${AWS_BIN:-aws}"
+DIR_PRESERVA="${DIR_PRESERVA:-/var/lib/saude/restauro}"
 REGIAO="us-east-2"
 COMO_POSTGRES=(runuser -u postgres --)
 
@@ -33,6 +40,7 @@ vivo="saude_$ambiente"
 destino="${pos[2]:-saude_restauro_$ambiente}"
 [[ "$destino" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || { echo "nome de banco invalido: $destino" >&2; exit 2; }
 dono="saude_dono_$ambiente"
+temporario="saude_restauro_tmp_$ambiente"
 
 psql_() { "${COMO_POSTGRES[@]}" psql -X -v ON_ERROR_STOP=1 "$@"; }
 existe_banco() { [ -n "$(psql_ -At -d postgres -c "select 1 from pg_database where datname='$1'")" ]; }
@@ -51,14 +59,45 @@ bucket="$(grep -m1 '^S3_BUCKET_BACKUPS=' "$MAQUINA_ENV" | cut -d= -f2-)"
 [ -n "$bucket" ] || { echo "S3_BUCKET_BACKUPS ausente em $MAQUINA_ENV" >&2; exit 1; }
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
 chmod 700 "$tmp"
+api_parada=0
+banco_criado=""
+preservada=""
+
+# Limpeza em qualquer saida. Em falha: religa a API, apaga so o banco que esta
+# funcao criou e mantem a lista de exclusoes preservada (avisando o caminho).
+sair() {
+  local rc=$?
+  trap - EXIT
+  if [ "$rc" -ne 0 ]; then
+    if [ -n "$banco_criado" ]; then
+      psql_ -d postgres -c "drop database if exists \"$banco_criado\" with (force)" >/dev/null 2>&1 || true
+    fi
+    if [ "$api_parada" -eq 1 ]; then
+      systemctl start "saude-api@$ambiente.service" || echo "ATENCAO: religue a API: systemctl start saude-api@$ambiente" >&2
+    fi
+    if [ -n "$preservada" ] && [ -s "$preservada" ]; then
+      echo "FALHOU. Lista de contas apagadas preservada em: $preservada" >&2
+    fi
+  else
+    [ -n "$preservada" ] && rm -f "$preservada"
+  fi
+  rm -rf "$tmp"
+  exit "$rc"
+}
+trap sair EXIT
 
 echo "baixando s3://$bucket/$ambiente/$data.dump"
 "$AWS_BIN" s3 cp "s3://$bucket/$ambiente/$data.dump" "$tmp/backup.dump" --only-show-errors --region "$REGIAO" \
   || { echo "nao foi possivel baixar o dump de $data" >&2; exit 1; }
 
-# Lista de contas apagadas do banco vivo, ANTES de qualquer mudanca.
+# Com --substituir a API para ANTES de exportar, para nao perder exclusao feita no intervalo.
+if [ "$substituir" -eq 1 ]; then
+  api_parada=1
+  systemctl stop "saude-api@$ambiente.service"
+fi
+
+# Lista de contas apagadas do banco vivo, antes de qualquer mudanca.
 : > "$tmp/vivo.csv"
 if existe_banco "$vivo"; then
   if ! psql_ -d "$vivo" -c "copy (select user_id, apagada_em, fotos_apagadas_em from contas_apagadas order by user_id) to stdout with csv" > "$tmp/vivo.csv"; then
@@ -72,33 +111,70 @@ else
   echo "AVISO: banco $vivo nao existe; a lista do banco vivo nao esta disponivel" >&2
 fi
 
-# Lista guardada fora do banco (atualizada a cada backup).
-if ! "$AWS_BIN" s3 cp "s3://$bucket/$ambiente/contas_apagadas.csv" "$tmp/s3.csv" --only-show-errors --region "$REGIAO"; then
-  echo "AVISO: lista s3://$bucket/$ambiente/contas_apagadas.csv indisponivel; so valem as contas do dump e do banco vivo" >&2
-  : > "$tmp/s3.csv"
-fi
+# Listas guardadas fora do banco: uma por dia de backup; une todas as disponiveis.
+n=0
+nomes="$("$AWS_BIN" s3 ls "s3://$bucket/$ambiente/contas_apagadas-" --region "$REGIAO" | awk '{print $NF}' || true)"
+while IFS= read -r nome; do
+  [ -n "$nome" ] || continue
+  n=$((n + 1))
+  if ! "$AWS_BIN" s3 cp "s3://$bucket/$ambiente/$nome" "$tmp/s3-$n.csv" --only-show-errors --region "$REGIAO"; then
+    echo "AVISO: nao consegui baixar $nome; seguindo sem ela" >&2
+    : > "$tmp/s3-$n.csv"
+  fi
+done <<< "$nomes"
+[ "$n" -gt 0 ] || echo "AVISO: nenhuma lista contas_apagadas-*.csv no S3; so valem as contas do dump e do banco vivo" >&2
 
+# Uniao preservada em arquivo 600 fora do tmp, ate o fim bem-sucedido.
+mkdir -p "$DIR_PRESERVA"
+chmod 700 "$DIR_PRESERVA"
+preservada="$DIR_PRESERVA/contas_apagadas-$ambiente-$(date -u +%Y%m%dT%H%M%SZ).csv"
+# Criado sob umask 077 (modo 600), numa unica gravacao.
+for f in "$tmp/vivo.csv" "$tmp"/s3-*.csv; do
+  [ -f "$f" ] && awk 1 "$f"
+done > "$preservada"
+
+# Banco onde se restaura: o destino, ou um temporario no --substituir.
+alvo="$destino"
 if [ "$substituir" -eq 1 ]; then
-  systemctl stop "saude-api@$ambiente.service"
-  psql_ -d postgres -c "drop database if exists \"$destino\" with (force)"
+  alvo="$temporario"
+  psql_ -d postgres -c "drop database if exists \"$alvo\" with (force)"
 fi
-psql_ -d postgres -c "create database \"$destino\" owner \"$dono\""
-"${COMO_POSTGRES[@]}" pg_restore --no-owner --role="$dono" --exit-on-error -d "$destino" < "$tmp/backup.dump"
+banco_criado="$alvo"
+psql_ -d postgres -c "create database \"$alvo\" owner \"$dono\""
+"${COMO_POSTGRES[@]}" pg_restore --no-owner --role="$dono" --exit-on-error -d "$alvo" < "$tmp/backup.dump"
 
-# Reinsere as exclusoes e reaplica. O awk 1 garante quebra de linha final em cada lista.
+# Reinsere as exclusoes (dedup por user_id) e reaplica no banco restaurado.
 {
   echo "create temp table _ca (like contas_apagadas);"
   echo "copy _ca from stdin with csv;"
-  awk 1 "$tmp/vivo.csv"
-  awk 1 "$tmp/s3.csv"
+  cat "$preservada"
   echo '\.'
   echo "insert into contas_apagadas select distinct on (user_id) * from _ca order by user_id, apagada_em on conflict (user_id) do nothing;"
   echo "delete from usuarios where id in (select user_id from contas_apagadas);"
-} | psql_ -d "$destino"
+} | psql_ -d "$alvo"
 
 if [ "$substituir" -eq 1 ]; then
+  reserva="${vivo}_reserva_$(date -u +%Y%m%d%H%M%S)"
+  if existe_banco "$vivo"; then
+    psql_ -d postgres -c "select pg_terminate_backend(pid) from pg_stat_activity where datname='$vivo' and pid <> pg_backend_pid()" >/dev/null
+    psql_ -d postgres -c "alter database \"$vivo\" rename to \"$reserva\""
+  else
+    reserva=""
+  fi
+  if ! psql_ -d postgres -c "alter database \"$alvo\" rename to \"$vivo\""; then
+    [ -n "$reserva" ] && psql_ -d postgres -c "alter database \"$reserva\" rename to \"$vivo\""
+    exit 1
+  fi
+  banco_criado=""
   systemctl start "saude-api@$ambiente.service"
+  api_parada=0
+  alvo="$vivo"
+  if [ -n "$reserva" ]; then
+    echo "O banco anterior ficou como $reserva. Depois de conferir, remova: sudo -u postgres psql -c 'drop database \"$reserva\"'"
+  fi
+else
+  banco_criado=""
 fi
 
-echo "restaurado em $destino. Contagens:"
-psql_ -At -d "$destino" -c "select 'usuarios', count(*) from usuarios union all select 'itens', count(*) from itens union all select 'contas_apagadas', count(*) from contas_apagadas"
+echo "restaurado em $alvo. Contagens:"
+psql_ -At -d "$alvo" -c "select 'usuarios', count(*) from usuarios union all select 'itens', count(*) from itens union all select 'contas_apagadas', count(*) from contas_apagadas"
