@@ -1,4 +1,4 @@
-# Meu Prato
+# Saúde Familiar
 
 Site estático (HTML/CSS/JS, sem build) para consultar o plano alimentar, ver as receitas,
 favoritar e gerar a lista de compras das receitas escolhidas.
