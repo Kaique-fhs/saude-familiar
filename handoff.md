@@ -1,23 +1,24 @@
 # Handoff
 
 ## Decisões tomadas
-- Servidor próprio na AWS, com app local primeiro: ADR-001. Login próprio: ADR-002. Região us-east-2: ADR-003 (em `docs/ams/adr/`).
-- Rulings e triagens dos planos 1 e 2 estão no roteiro `docs/superpowers/plans/2026-11-21-contas-roteiro.md` ("Pendências", "Para o plano 3", conflitos de merge).
-- Plano 2: sair com pendências mantém dados, fila e fotos (diverge da spec §8.1; alinhar spec ou ADR, ver "Para o plano 3").
+- Servidor próprio na AWS, com app local primeiro: ADR-001. Login próprio: ADR-002. Região us-east-2: ADR-003. "Sair com pendências": opção A do Kaique, ADR-004 em gravação (em `docs/ams/adr/`).
+- Máquina mantida ligada (~US$ 11,50/mês nos créditos), decisão do Kaique.
+- Rulings e pendências dos planos 1, 2 e 5 estão em `docs/superpowers/plans/2026-11-21-contas-roteiro.md` ("Rulings do plano 5", "Pendências menores do plano 5", "Para o plano 3").
 
 ## Estado atual
-- Plano 1 pronto (`feat/contas-ec2`). Plano 2 pronto (`feat/app-conta-sync`, e285582..a93c407, 100 testes do site, 103 do servidor, navegador headless 47/47). Plano 5 tasks 1-5 prontas (`feat/aws-infra`).
-- Plano 5 PARADO na Task 6, esperando o OK do Kaique sobre: a lista de 15 recursos (~US$ 11,50/mês, t4g.micro); a conta Gmail do app com senha de app; a conta Cloudflare com o widget Turnstile.
-- Nada criado na AWS ainda. Nada com push nem PR.
-- Três worktrees: `../saude-familiar`, `../saude-familiar-app`, `../saude-familiar-aws`.
-- Site em produção (`main`) intocado e funcionando como antes.
+- Planos 1, 2 e 5 concluídos e juntados em `feat/contas-ec2` (a642551, com push): servidor 112 ok / 6 skip, site 100 ok, `validar.sh` ok, `testar_maquina.sh` 194/194. Sem PR.
+- AWS no ar (stack `saude-familiar`, us-east-2), fumaça de ponta a ponta OK. URLs e saídas em `server/infra/README.md`.
+- O site no ar continua sendo o `main` (sem login).
+- E-mail do app: saudefamiliarr@gmail.com (verificação em 2 etapas ligada, senha de app no SSM). Segredos só no SSM `/saude-familiar/{teste,producao}/*`.
+- Turnstile site key (pública): `0x4AAAAAAGMIsSAsmJojK__Y`; vai no `config.js` do site no lançamento.
+- Falta aplicar na AWS o update da stack (lifecycle e versionamento do BucketBackups, `AlarmeTravada`) e reprovisionar a máquina: espera OK do Kaique.
 
 ## Próximos passos
-- Tasks 6-8 do plano 5 (criam recursos pagos; só após o OK acima).
-- Juntar os branches (conflitos triviais previstos em `server/package.json`, `server/test/app.test.js`, `server/test/banco.test.js`); rodar `npm test` em `server/` depois.
-- Planos 3 e 4. Plano 3 começa pelo parked `naoGravado` e pelo cursor do `/sync`.
+- Plano 3 (plano e metas por pessoa): escrever o plano a partir da spec; começa pelo parked `naoGravado` e pelo cursor do `/sync`.
+- Plano 4 (migração do app antigo).
+- Plano 6 (lançamento 2): checklist da Rejane, tirar `PLANO` do `data.js`, remover modo antigo.
 
 ## Dúvidas em aberto
-- OK do Kaique para a Task 6 (lista de recursos, Gmail, Cloudflare/Turnstile).
-- Spec §8.1 x "sair com pendências mantém dados": alinhar spec ou ADR.
+- OK do Kaique para o update da stack e o reprovisionamento (acima).
+- Alinhar a spec §8.1 ao ADR-004 depois que ele for gravado.
 - Kaique limpar os dados `mp-*` de teste no Chrome (`localhost:5500`).
