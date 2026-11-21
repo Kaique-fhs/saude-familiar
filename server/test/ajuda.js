@@ -49,6 +49,25 @@ export function emailFalso() {
   };
 }
 
+// Armazenamento falso: registra as chamadas e devolve URLs https://falso/<chave>.
+export function armazenamentoFalso() {
+  const chamadas = [];
+  return {
+    chamadas,
+    async urlEnvio(chave) {
+      chamadas.push({ tipo: 'envio', chave });
+      return { url: `https://falso/${chave}`, campos: { key: chave } };
+    },
+    async urlLeitura(chave) {
+      chamadas.push({ tipo: 'leitura', chave });
+      return `https://falso/${chave}`;
+    },
+    async apagarPrefixo(prefixo) {
+      chamadas.push({ tipo: 'apagar', prefixo });
+    },
+  };
+}
+
 const emailsDosApps = new WeakMap();
 
 export async function criarAppTeste(opcoes = {}) {
@@ -72,7 +91,7 @@ export async function criarAppTeste(opcoes = {}) {
     banco,
     email,
     captcha: captchaFalso(true),
-    armazenamento: {},
+    armazenamento: armazenamentoFalso(),
     relogio,
     // Limites desligados por padrão: os testes de contas repetem muitas chamadas do mesmo IP.
     limites: opcoes.limites ?? false,

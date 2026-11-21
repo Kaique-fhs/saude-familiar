@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { registrarContas } from './contas.js';
 import { registrarSincronia } from './sincronia.js';
+import { registrarFotos } from './fotos.js';
 import { registrarLimites } from './protecao.js';
 
 function segredoConfere(recebido, esperado) {
@@ -85,6 +86,7 @@ export async function criarApp({
 
   registrarContas(app, { banco, email, captcha, limites });
   registrarSincronia(app, { banco });
+  registrarFotos(app, { armazenamento });
 
   return app;
 }
