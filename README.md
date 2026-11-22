@@ -30,7 +30,8 @@ favoritar e gerar a lista de compras das receitas escolhidas.
 - A migração envia registros e fotos, retoma se for interrompida e guarda o andamento num marcador.
 - Os dados antigos só são apagados depois de o servidor confirmar tudo. Se a conferência não fechar, a limpeza automática para e a tela Conta explica o motivo. Dá para apagar à mão em "Apagar dados antigos" (pede um segundo toque).
 - Estado: implementado no branch `feat/aceite-site`, sem push e sem deploy. Site 209 testes ok; servidor 125 ok e 6 pulados (só rodam em Postgres real).
-- Também nos planos 3 e 4: limpeza diária de cadastros não confirmados (commit f7e68f2) e segundo e-mail opcional de alerta (commit b9b2b8e, ainda não aplicado na stack).
+
+Servidor e infraestrutura (planos 3 e 4): limpeza diária de cadastros não confirmados (commit f7e68f2) e segundo e-mail opcional de alerta (commit b9b2b8e, ainda não aplicado na stack).
 
 ### Rodar com o servidor de desenvolvimento
 

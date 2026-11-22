@@ -33,7 +33,7 @@
 4. Depois, plano 6.
 
 ## Dúvidas em aberto
-- Troca de celular da Rejane: a migração do plano 4 cobre o aparelho com dados antigos; ainda não há "Restaurar cópia" para aparelho sem dados.
+- Troca de celular da Rejane: a restauração de cópia existe com conta. A cópia é um arquivo exportado, então a Rejane precisa ter salvo uma do aparelho antigo para usar num celular novo.
 - ADR que encerra as travas do ADR-005: rascunho com a sessão principal, aguarda OK do Kaique.
 - Roteiros de incidente e de pedidos de titular (a limpeza de cadastros não confirmados já está no código, f7e68f2, ainda sem deploy).
 - Passar ao plano pago antes de 2027-03-23.
