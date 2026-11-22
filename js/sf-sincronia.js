@@ -10,6 +10,7 @@
   var TAMANHO_LOTE = 200;
   var LIMITE_BAIXAR = 500;
   var ESPERA_TETO_MS = 5 * 60 * 1000;
+  var VERSAO_CURSOR = 2; // sobe quando o cursor do /sync precisa recomeçar do zero uma vez
 
   function classeErroApi(deps) {
     if (deps.ErroApi) return deps.ErroApi;
@@ -122,10 +123,16 @@
       removerDaFila([m]);
     }
 
+    function limparNaoGravado() {
+      if (!naoGravado) return;
+      naoGravado = false;
+      if (ultimoProblema === "erro") ultimoProblema = null;
+    }
+
     function registrar(antes, depois) {
       var base = ref || antes;
       var mudancas = dados.diferencas(base, depois, iso());
-      if (!mudancas.length) { ref = copia(depois); notificar(); return; }
+      if (!mudancas.length) { ref = copia(depois); limparNaoGravado(); notificar(); return; }
       var f = lerFila(), pf = lerPend(), env = lerEnv();
       mudancas.forEach(function (m) {
         f = f.filter(function (x) { return !(x.tipo === m.tipo && x.chave === m.chave); });
@@ -137,7 +144,7 @@
       ok = salvar("fotos-pendentes", pf) && ok;
       if (ok) {
         ref = copia(depois);
-        if (naoGravado) { naoGravado = false; if (ultimoProblema === "erro") ultimoProblema = null; }
+        limparNaoGravado();
       }
       else {
         // não coube: a mudança é recalculada no próximo registrar (ref segue velho, nunca nulo)
@@ -250,15 +257,23 @@
       // A referência é "referência + remoto", nunca "memória + remoto": o que a memória tem a mais ainda é mudança local.
       ref = copia(dados.aplicar(copia(ref || deps.estado()), validos));
       avisarEstado(dados.aplicar(deps.estado(), validos));
+      // o remoto pode ter coberto a mudança que não coube: nada mais a gravar
+      if (naoGravado && dados.diferencas(ref, deps.estado(), iso()).length === 0) limparNaoGravado();
     }
 
     function baixarTudo() {
-      var cursor = local.ler(userId, "cursor", 0);
+      var recomecar = local.ler(userId, "cursor-versao", 0) < VERSAO_CURSOR;
+      var cursor = recomecar ? 0 : local.ler(userId, "cursor", 0);
       function pagina() {
         return chamar(function () { return api.baixar(cursor, LIMITE_BAIXAR); }, timeoutMs).then(function (res) {
           if (!res || !Array.isArray(res.itens) || typeof res.cursor !== "number") throw new ErroApi(0, "rede");
           aplicarRemotos(res.itens);
-          if (res.cursor > cursor) { cursor = res.cursor; salvar("cursor", cursor); }
+          if (res.cursor > cursor || recomecar) {
+            cursor = res.cursor;
+            var gravou = salvar("cursor", cursor);
+            // só marca a versão com o cursor novo gravado; senão o histórico antigo seria pulado
+            if (recomecar && gravou) { salvar("cursor-versao", VERSAO_CURSOR); recomecar = false; }
+          }
           else if (res.mais) throw new ErroApi(500, "cursor");
           if (res.mais) return pagina();
         });

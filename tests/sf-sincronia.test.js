@@ -632,3 +632,86 @@ test("fila não gravou: aplicarRemotos não troca a referência pela memória; a
   h.mudar(com({ favs: ["r1"], sel: ["z"] }));
   assert.ok(fila(h).some((m) => m.tipo === "fav" && m.chave === "r1"), "fav|r1 foi enfileirada");
 });
+
+test("desfazer a mudança que não coube desliga o erro", () => {
+  const falha = { sim: true };
+  const h = montar({ local: localQueFalha(falha) });
+  h.mudar(com({ favs: ["r1"] }));                 // não coube
+  assert.equal(h.sinc.status(), "erro");
+  assert.equal(h.sinc.pendentes(), 1);
+  falha.sim = false;
+  h.mudar(VAZIO);                                 // desfeita: igual ao ref
+  assert.equal(h.sinc.status(), "ok");
+  assert.equal(h.sinc.pendentes(), 0);
+});
+
+test("remoto que cobre a pendência não gravada desliga o erro", async () => {
+  const falha = { sim: true };
+  const h = montar({
+    local: localQueFalha(falha),
+    baixar: async (depois) => (depois === 0
+      ? { itens: [{ tipo: "fav", chave: "r1", valor: null, ativo: true, em: "2026-11-21T11:00:00.000Z" }], cursor: 1, mais: false }
+      : { itens: [], cursor: depois, mais: false })
+  });
+  h.mudar(com({ favs: ["r1"] }));                 // não coube
+  assert.equal(h.sinc.status(), "erro");
+  await h.sinc.sincronizar();                     // o remoto traz o mesmo favorito
+  assert.equal(h.sinc.status(), "ok");
+  assert.equal(h.sinc.pendentes(), 0);
+});
+
+test("aparelho com cursor antigo baixa desde o zero uma vez", async () => {
+  const local = localFalso();
+  local.gravar("u1", "cursor", 900);
+  const h = montar({
+    local,
+    baixar: async (depois) => (depois === 0
+      ? { itens: [], cursor: 5, mais: false }
+      : { itens: [], cursor: depois, mais: false })
+  });
+  await h.sinc.sincronizar();
+  assert.equal(h.reg.baixadas[0][0], 0);
+  assert.equal(local.ler("u1", "cursor-versao", 0), 2);
+  assert.equal(local.ler("u1", "cursor", 0), 5);
+  await h.sinc.sincronizar();
+  assert.equal(h.reg.baixadas[1][0], 5);
+});
+
+test("queda no meio do recomeço retoma do cursor salvo", async () => {
+  const local = localFalso();
+  local.gravar("u1", "cursor", 900);
+  let falhar = true;
+  const h = montar({
+    local,
+    baixar: async (depois) => {
+      if (depois === 0) return { itens: [], cursor: 3, mais: true };
+      if (depois === 3 && falhar) { falhar = false; throw new ErroApi(0, "rede"); }
+      return { itens: [], cursor: 8, mais: false };
+    }
+  });
+  await h.sinc.sincronizar();
+  assert.equal(local.ler("u1", "cursor", 0), 3);
+  await h.sinc.sincronizar();
+  assert.deepEqual(h.reg.baixadas.map((b) => b[0]), [0, 3, 3]);
+  assert.equal(local.ler("u1", "cursor", 0), 8);
+});
+
+test("cursor que não coube no recomeço não grava cursor-versao e a próxima sincronização recomeça do zero", async () => {
+  const local = localFalso();
+  local.gravar("u1", "cursor", 900);
+  const gravar = local.gravar;
+  const falha = { sim: true };
+  local.gravar = (u, n, v) => (n === "cursor" && falha.sim ? false : gravar(u, n, v));
+  const h = montar({
+    local,
+    baixar: async (depois) => (depois === 0
+      ? { itens: [], cursor: 5, mais: false }
+      : { itens: [], cursor: depois, mais: false })
+  });
+  await h.sinc.sincronizar();
+  assert.ok(local.ler("u1", "cursor-versao", 0) < 2, "versão não avança sem o cursor gravado");
+  falha.sim = false;
+  await h.sinc.sincronizar();
+  assert.equal(h.reg.baixadas[1][0], 0);
+  assert.equal(local.ler("u1", "cursor-versao", 0), 2);
+});
