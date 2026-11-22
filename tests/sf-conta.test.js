@@ -150,3 +150,22 @@ test("secoesConta: 'antigos' só com dados antigos e podeOferecer (também migra
   assert.deepEqual(conta.secoesConta({}), []);
   assert.deepEqual(conta.secoesConta(), []);
 });
+
+test("sairDaConta mantém o marcador da migração; apagarConta do dono o apaga", async () => {
+  function armazemFalso() {
+    const mapa = new Map();
+    const st = { get length() { return mapa.size; }, key: (i) => [...mapa.keys()][i] ?? null, getItem: (k) => (mapa.has(k) ? mapa.get(k) : null), setItem: (k, v) => mapa.set(k, String(v)), removeItem: (k) => mapa.delete(k) };
+    return require("../js/sf-local.js").criar({ storage: st });
+  }
+  const api = { sair: async () => {}, apagarConta: async () => {} };
+  const l1 = armazemFalso();
+  l1.gravarGlobal("migracao", { dono: "u1", estado: "recusada" });
+  l1.gravar("u1", "mp-favs", ["x"]);
+  await conta.sairDaConta({ api, local: l1, userId: "u1", pendentes: 0, aoApagar: async () => {} });
+  assert.deepEqual(l1.lerGlobal("migracao", null), { dono: "u1", estado: "recusada" }, "sair não apaga o marcador");
+  assert.equal(l1.ler("u1", "mp-favs", null), null, "sair limpa os dados da conta");
+  const l2 = armazemFalso();
+  l2.gravarGlobal("migracao", { dono: "u1", estado: "recusada" });
+  await conta.apagarConta({ api, local: l2, userId: "u1", senha: "x", aoApagar: async () => {} });
+  assert.equal(l2.lerGlobal("migracao", null), null, "apagar a conta apaga o marcador do dono");
+});
