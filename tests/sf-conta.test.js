@@ -133,3 +133,8 @@ test("contaDisponivel: aparelho do app antigo fica sem conta até a migração",
   assert.equal(conta.contaDisponivel({ sessao: { token: "t" }, usouAppAntigo: true }), false);
   assert.equal(conta.contaDisponivel({ sessao: s, usouAppAntigo: true }), true);
 });
+
+test("rotuloRejeitado cobre plano e meta", () => {
+  assert.equal(conta.rotuloRejeitado({ tipo: "plano", chave: "2026-11-22" }), "Plano alimentar: 2026-11-22");
+  assert.equal(conta.rotuloRejeitado({ tipo: "meta", chave: "m-1" }), "Meta de exercício: m-1");
+});

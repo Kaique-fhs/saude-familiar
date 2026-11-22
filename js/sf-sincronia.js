@@ -6,7 +6,7 @@
 //  - o app chama registrar(antes, depois) a cada salvarTudo e agenda sincronizar() usando esperaMs().
 //  - ao reler o estado do armazenamento (evento storage, aba visível), o app chama rebase(estado).
 (function (raiz) {
-  var TIPOS = ["fav", "sel", "check", "checkplano", "quero", "feito", "treino", "registro"];
+  var TIPOS = ["fav", "sel", "check", "checkplano", "quero", "feito", "treino", "registro", "plano", "meta"];
   var TAMANHO_LOTE = 200;
   var LIMITE_BAIXAR = 500;
   var ESPERA_TETO_MS = 5 * 60 * 1000;
@@ -243,7 +243,7 @@
       itens.forEach(function (it) {
         if (!it || typeof it !== "object" || TIPOS.indexOf(it.tipo) < 0) { avisar("Item remoto de tipo desconhecido ignorado:", it && it.tipo); return; }
         if (!dados.chaveValida(it.tipo, it.chave)) { avisar("Item remoto com chave inválida ignorado:", it.tipo); return; }
-        if (it.ativo && it.tipo === "registro" && !ehObjeto(it.valor)) { avisar("Registro remoto sem valor ignorado:", it.chave); return; }
+        if (it.ativo && (it.tipo === "registro" || it.tipo === "plano" || it.tipo === "meta") && !ehObjeto(it.valor)) { avisar("Item remoto sem valor ignorado:", it.chave); return; }
         var pend = fila.filter(function (f) { return f.tipo === it.tipo && f.chave === it.chave; })[0];
         if (pend) {
           if (ms(pend.em) > ms(it.em)) return; // a mudança local é mais nova: fica

@@ -86,7 +86,7 @@
   var TIPOS = {
     fav: "Receita favorita", sel: "Receita escolhida", check: "Item da lista de compras",
     checkplano: "Item do plano", quero: "Quero comer", feito: "Refeição feita",
-    treino: "Treino feito", registro: "Registro de refeição"
+    treino: "Treino feito", registro: "Registro de refeição", plano: "Plano alimentar", meta: "Meta de exercício"
   };
   function rotuloRejeitado(item) {
     var nome = TIPOS[item && item.tipo] || "Item";

@@ -715,3 +715,21 @@ test("cursor que não coube no recomeço não grava cursor-versao e a próxima s
   assert.equal(h.reg.baixadas[1][0], 0);
   assert.equal(local.ler("u1", "cursor-versao", 0), 2);
 });
+
+test("plano e meta remotos aplicados; ativos sem valor objeto são ignorados", async () => {
+  const P = { refeicoes: [], nutrientes: null, compras: [], prescritoEm: null };
+  const M = { id: "m-1", origem: "manual", nome: "Correr", modo: "dias", dias: [2], vezes: 0, minutos: 20, desde: "2026-11-01", ate: null };
+  const h = montar({
+    baixar: () => ({ itens: [
+      { tipo: "plano", chave: "2026-11-22", valor: P, ativo: true, em: T0, seq: 1 },
+      { tipo: "meta", chave: "m-1", valor: M, ativo: true, em: T0, seq: 2 },
+      { tipo: "plano", chave: "inicio", valor: null, ativo: true, em: T0, seq: 3 },
+      { tipo: "meta", chave: "m-2", valor: [1], ativo: true, em: T0, seq: 4 }
+    ], cursor: 4, mais: false })
+  });
+  await h.sinc.sincronizar();
+  assert.deepEqual(h.estado().planos, { "2026-11-22": P });
+  assert.deepEqual(h.estado().metas, { "m-1": M });
+  h.sinc.registrar(VAZIO, h.estado());
+  assert.deepEqual(fila(h), []);
+});
