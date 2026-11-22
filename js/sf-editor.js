@@ -271,7 +271,89 @@
     return h;
   }
 
+  // ---- Metas de exercício ----
+  var MSG_META_NOME = "Dê um nome à atividade";
+  var MSG_META_DIA = "Escolha ao menos um dia";
+  var MSG_META_VEZES = "De 1 a 7 vezes por semana";
+  var MSG_META_MIN = "Use minutos maiores que zero";
+  var NOMES_DIA = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+  function metaDosCampos(pares, anterior) {
+    var mapa = {};
+    pares.forEach(function (p) { mapa[String(p[0])] = p[1] == null ? "" : String(p[1]); });
+    var erros = [];
+    var nome = (mapa.nome || "").trim();
+    if (nome === "") erros.push({ campo: "nome", msg: MSG_META_NOME });
+    var modo = mapa.modo === "semana" ? "semana" : "dias";
+    var dias = [];
+    var vezes = null;
+    if (modo === "dias") {
+      for (var d = 0; d < 7; d++) { if (mapa["dia-" + d] !== undefined) dias.push(d); }
+      if (dias.length === 0) erros.push({ campo: "dias", msg: MSG_META_DIA });
+    } else {
+      var tv = (mapa.vezes || "").trim();
+      vezes = /^\d+$/.test(tv) ? Number(tv) : null;
+      if (vezes === null || vezes < 1 || vezes > 7) { erros.push({ campo: "vezes", msg: MSG_META_VEZES }); vezes = null; }
+    }
+    var minutos = null;
+    var tm = (mapa.minutos || "").trim();
+    if (tm !== "") {
+      minutos = numeroValido(tm);
+      if (minutos === null || minutos <= 0) { erros.push({ campo: "minutos", msg: MSG_META_MIN }); minutos = null; }
+    }
+    var meta = { nome: nome, modo: modo, dias: dias, vezes: vezes, minutos: minutos };
+    if (anterior) {
+      meta.id = anterior.id;
+      meta.origem = anterior.origem;
+      meta.desde = anterior.desde;
+      meta.ate = anterior.ate == null ? null : anterior.ate;
+    }
+    return { meta: meta, erros: erros };
+  }
+
+  function htmlMeta(meta, erros) {
+    var m = meta || { nome: "", modo: "dias", dias: [], vezes: null, minutos: null };
+    var msgs = {};
+    (erros || []).forEach(function (e) { if (!msgs[e.campo]) msgs[e.campo] = e.msg; });
+    function erroDe(campo) { return msgs[campo] ? '<p class="erro" role="alert">' + esc(msgs[campo]) + "</p>" : ""; }
+    function inv(campo) { return msgs[campo] ? ' aria-invalid="true"' : ""; }
+    var semana = m.modo === "semana";
+    var h = '<form id="form-meta" novalidate>';
+    h += '<label class="campo">Atividade<input name="nome" type="text" value="' + esc(m.nome) + '"' + inv("nome") + "></label>" + erroDe("nome");
+    h += '<fieldset class="modo"><legend>Como repetir</legend>';
+    h += '<label><input type="radio" name="modo" value="dias"' + (semana ? "" : " checked") + "> Em dias fixos</label>";
+    h += '<label><input type="radio" name="modo" value="semana"' + (semana ? " checked" : "") + "> Vezes por semana</label></fieldset>";
+    h += '<fieldset class="dias"' + inv("dias") + "><legend>Dias</legend>";
+    NOMES_DIA.forEach(function (n, d) {
+      h += '<label><input type="checkbox" name="dia-' + d + '" value="on"' + ((m.dias || []).indexOf(d) >= 0 ? " checked" : "") + "> " + n + "</label>";
+    });
+    h += "</fieldset>" + erroDe("dias");
+    h += '<label class="campo">Vezes por semana<input name="vezes" type="number" min="1" max="7" value="' + esc(m.vezes) + '"' + inv("vezes") + "></label>" + erroDe("vezes");
+    h += '<label class="campo">Minutos<input name="minutos" type="number" min="1" value="' + esc(m.minutos) + '"' + inv("minutos") + "></label>" + erroDe("minutos");
+    h += "</form>";
+    return h;
+  }
+
+  function descricaoMeta(m) {
+    var quando = m.modo === "semana" ? m.vezes + (m.vezes === 1 ? " vez" : " vezes") + " por semana" : (m.dias || []).map(function (d) { return NOMES_DIA[d]; }).join(", ");
+    return quando + (m.minutos ? " · " + m.minutos + " min" : "");
+  }
+
+  function htmlMetas(metas, hoje) {
+    var ativas = planoModulo().metasNoDia(metas, hoje);
+    var h = '<ul class="metas">';
+    ativas.forEach(function (m) {
+      h += '<li class="meta"><strong>' + esc(m.nome) + "</strong> <span>" + esc(descricaoMeta(m)) + "</span> ";
+      h += '<button type="button" data-meta-editar="' + esc(m.id) + '">Editar</button> ';
+      h += '<button type="button" data-meta-encerrar="' + esc(m.id) + '">Encerrar</button></li>';
+    });
+    h += "</ul>";
+    if (ativas.length === 0) h += '<p class="vazio">Nenhuma meta ativa hoje.</p>';
+    h += '<button type="button" data-meta-nova>Nova meta</button>';
+    return h;
+  }
+
   raiz.SF = raiz.SF || {};
-  raiz.SF.editor = { htmlPlano: htmlPlano, planoDosCampos: planoDosCampos, planoBrutoDosPares: planoBrutoDosPares, aplicarAcao: aplicarAcao };
+  raiz.SF.editor = { htmlPlano: htmlPlano, planoDosCampos: planoDosCampos, planoBrutoDosPares: planoBrutoDosPares, aplicarAcao: aplicarAcao, htmlMetas: htmlMetas, htmlMeta: htmlMeta, metaDosCampos: metaDosCampos };
   if (typeof module !== "undefined") module.exports = raiz.SF.editor;
 })(typeof window !== "undefined" ? window : globalThis);
