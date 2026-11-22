@@ -125,11 +125,11 @@ test("erro sem corpo JSON usa codigo vazio mas mantém status", async () => {
   await assert.rejects(m.api.conta(), (e) => e.status === 500 && e.codigo === "");
 });
 
-test("config.js versionado tem apiUrl vazio", () => {
+test("config.js versionado aponta para producao, sem cabecalho de desenvolvimento", () => {
   const src = fs.readFileSync(path.join(__dirname, "..", "config.js"), "utf8");
   const janela = {};
   new Function("window", src)(janela);
-  assert.equal(janela.SF_CONFIG.apiUrl, "");
-  assert.equal(janela.SF_CONFIG.turnstileChave, "");
+  assert.equal(janela.SF_CONFIG.apiUrl, "https://d24j5hln30wud.cloudfront.net");
+  assert.equal(janela.SF_CONFIG.turnstileChave, "0x4AAAAAAGMIsSAsmJojK__Y");
   assert.equal(janela.SF_CONFIG.cabecalhoOrigemDev, "");
 });
