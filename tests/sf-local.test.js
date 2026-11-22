@@ -86,3 +86,29 @@ test("usouAppAntigo: storage nulo ou que lança não derruba o app", () => {
   assert.equal(criar({ storage: null }).usouAppAntigo(), false);
   assert.equal(criar({ storage: { get length() { throw new Error("x"); } } }).usouAppAntigo(), false);
 });
+
+test("lerGlobal/gravarGlobal usam sf:<nome>", () => {
+  const s = armazenamentoFalso();
+  const l = SFLocal.criar({ storage: s });
+  assert.deepEqual(l.lerGlobal("migracao", null), null);
+  assert.equal(l.gravarGlobal("migracao", { dono: "A", estado: "oferecida" }), true);
+  assert.deepEqual(s._chaves(), ["sf:migracao"]);
+  assert.deepEqual(l.lerGlobal("migracao"), { dono: "A", estado: "oferecida" });
+  l.apagarGlobal("migracao");
+  assert.deepEqual(s._chaves(), []);
+  assert.equal(l.lerGlobal("migracao", 5), 5);
+  s.setItem = () => { throw new Error("cheio"); };
+  assert.equal(l.gravarGlobal("x", 1), false);
+});
+
+test("apagarUsuario do dono apaga o marcador da migração", () => {
+  const s = armazenamentoFalso({ "sf:A:mp-favs": "[]", "sf:migracao": JSON.stringify({ dono: "A", estado: "concluida" }) });
+  SFLocal.criar({ storage: s }).apagarUsuario("A");
+  assert.deepEqual(s._chaves(), []);
+});
+
+test("apagarUsuario de outra conta mantém o marcador", () => {
+  const s = armazenamentoFalso({ "sf:B:mp-favs": "[]", "sf:migracao": JSON.stringify({ dono: "A", estado: "concluida" }) });
+  SFLocal.criar({ storage: s }).apagarUsuario("B");
+  assert.deepEqual(s._chaves(), ["sf:migracao"]);
+});
