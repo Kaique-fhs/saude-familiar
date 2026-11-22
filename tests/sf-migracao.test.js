@@ -260,6 +260,16 @@ test("executar: interrompido nas fotos, retoma sem juntar de novo", async () => 
   assert.deepEqual(d.__marc().fotos.slice().sort(), ["f1", "f2"]);
 });
 
+test("executar: erro de fotos repassa a causa a aoErro", async () => {
+  const causas = [];
+  const d = depsExec({
+    copiarFotos: async () => { throw new Error("cota"); },
+    aoErro: (e) => causas.push(e.message)
+  });
+  assert.equal(await M.executar(d), "erro-fotos");
+  assert.deepEqual(causas, ["cota"]);
+});
+
 test("executar: sem espaço volta à oferta", async () => {
   const d = depsExec({ gravarEstado: () => false });
   assert.equal(await M.executar(d), "sem-espaco");
@@ -290,6 +300,7 @@ function depsConcluir(extra) {
     copiarParaConta: async (n) => { log.copiados = n; },
     apagarChaves: async (c) => { log.apagadas = c; },
     apagarBancoAntigo: async () => { log.banco++; return {}; },
+    marcador: () => ({ dono: "u1", estado: "migrando", juntado: true, fotos: [], faltando: [], em: 1 }),
     gravarMarcador: (m) => log.marcadores.push(m)
   };
   Object.assign(d, extra || {});
@@ -320,11 +331,40 @@ test("concluir: pronto apaga chaves mp-, banco e marca concluída", async () => 
   assert.equal(d.__log.marcadores.at(-1).estado, "concluida");
 });
 
-test("concluir: banco bloqueado não conclui", async () => {
-  const d = depsConcluir({ apagarBancoAntigo: async () => ({ bloqueado: true }) });
+test("concluir: banco bloqueado não apaga mp-* nem conclui; depois conclui", async () => {
+  let livre = false;
+  const d = depsConcluir({ apagarBancoAntigo: async () => (livre ? {} : { bloqueado: true }) });
   const r = await M.concluir(d);
-  assert.equal(r.pronto, true);
+  assert.equal(r.pronto, false);
+  assert.equal(r.motivo, "bloqueado");
+  assert.equal(d.__log.apagadas, null);
   assert.equal(d.__log.marcadores.length, 0);
+  livre = true;
+  const r2 = await M.concluir(d);
+  assert.equal(r2.pronto, true);
+  assert.deepEqual(d.__log.apagadas, ["mp-fav", "mp-ultimo-backup"]);
+  assert.equal(d.__log.marcadores.at(-1).estado, "concluida");
+});
+
+test("concluir exige marcador migrando com juntado true", async () => {
+  const casos = [
+    () => null,
+    () => ({ dono: "u1", estado: "migrando", juntado: false }),
+    () => ({ dono: "u1", estado: "oferecida", juntado: true }),
+    () => ({ dono: "u1", estado: "concluida", juntado: true })
+  ];
+  for (const m of casos) {
+    const d = depsConcluir({ marcador: m });
+    const r = await M.concluir(d);
+    assert.deepEqual(r, { pronto: false, motivo: "nao-juntado" });
+    assert.equal(d.__log.apagadas, null);
+    assert.equal(d.__log.banco, 0);
+    assert.equal(d.__log.marcadores.length, 0);
+  }
+  const d2 = depsConcluir({ marcador: undefined });
+  delete d2.marcador;
+  assert.equal((await M.concluir(d2)).motivo, "nao-juntado");
+  assert.equal(d2.__log.banco, 0);
 });
 
 test("concluir copia o histórico de cópias para a conta", async () => {

@@ -211,6 +211,7 @@
     try {
       res = await deps.copiarFotos(ids, deps.aoProgresso);
     } catch (e) {
+      if (deps.aoErro) deps.aoErro(e);
       return "erro-fotos";
     }
     if (!jaJuntou) {
@@ -232,11 +233,13 @@
   async function concluir(deps) {
     var c = conferir(deps);
     if (c.pronto !== true) return c;
-    await deps.copiarParaConta(HISTORICO);
-    await deps.apagarChaves(chavesAntigas(deps.storage));
-    var b = await deps.apagarBancoAntigo();
-    if (b && b.bloqueado) return { pronto: true, motivo: "bloqueado" };
     var base = deps.marcador ? await deps.marcador() : null;
+    if (!base || base.juntado !== true || base.estado !== "migrando") return { pronto: false, motivo: "nao-juntado" };
+    await deps.copiarParaConta(HISTORICO);
+    // O banco antigo vai primeiro: se estiver bloqueado (outra aba), nada antigo é apagado e a conferência segue valendo.
+    var b = await deps.apagarBancoAntigo();
+    if (b && b.bloqueado) return { pronto: false, motivo: "bloqueado" };
+    await deps.apagarChaves(chavesAntigas(deps.storage));
     await deps.gravarMarcador(marcadorCom(base, deps.userId, { estado: "concluida" }));
     return { pronto: true, motivo: null };
   }
