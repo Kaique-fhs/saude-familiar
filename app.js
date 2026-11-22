@@ -473,7 +473,7 @@
           : '<span class="' + (ok ? 'ok' : 'pendente') + '" aria-hidden="true">' + (ok ? ICON.check : ICON.camera) + '</span>';
         var passado = diaSel !== hojeChave();
         var detalhe = reg ? resumoRegistro(reg) : ok ? (passado ? "Marcada sem foto" : "Marcada sem foto · toque para completar") : passado ? "Não registrada" : (r.hora ? r.hora + " · " : "") + "Toque para registrar";
-        return '<li><button class="linha-ref" data-registrar="' + r.id + '" aria-label="' + esc(r.nome) + ': ' + (ok ? "registrada" : "não registrada") + '. ' + esc(detalhe) + '">' + icone +
+        return '<li><button class="linha-ref" data-registrar="' + esc(r.id) + '" aria-label="' + esc(r.nome) + ': ' + (ok ? "registrada" : "não registrada") + '. ' + esc(detalhe) + '">' + icone +
           '<span class="flex1"><span class="nome">' + esc(r.nome) + '</span><span class="detalhes">' + esc(detalhe) + '</span></span>' +
           '<span class="seta-linha" aria-hidden="true">›</span></button></li>';
       }).join("") +
@@ -496,7 +496,7 @@
       var passado = k !== hojeChave();
       var aFazer = e.modo === "semana" ? "Meta da semana · toque para registrar com foto" : "Toque para registrar com foto";
       var detalhe = reg ? (reg.hora ? reg.hora + " · " : "") + (reg.foto ? "Treino registrado" : "sem foto") : ok ? "Marcado sem foto" : passado ? "Não registrado" : aFazer;
-      return '<li><button class="linha-ref" data-registrar="' + e.id + '" aria-label="' + esc(e.nome) + ': ' + (ok ? "registrado" : "não registrado") + '. ' + esc(detalhe) + '">' + icone +
+      return '<li><button class="linha-ref" data-registrar="' + esc(e.id) + '" aria-label="' + esc(e.nome) + ': ' + (ok ? "registrado" : "não registrado") + '. ' + esc(detalhe) + '">' + icone +
         '<span class="flex1"><span class="nome">' + esc(e.nome) + '</span><span class="detalhes">' + esc(detalhe) + '</span></span>' +
         '<span class="seta-linha" aria-hidden="true">›</span></button></li>';
     }).join("") + '</ul></div>';
@@ -506,14 +506,14 @@
   function blocoAgenda() {
     var hoje = hojeChave(), hojeDs = dataDaChave(hoje).getDay(), linhas = [];
     var ativas = SF.plano.metasNoDia(modeloAtual().metas, hoje);
-    function comMinutos(m, extra) { return esc(m.nome) + (extra || "") + (m.minutos ? " (" + m.minutos + " min)" : ""); }
+    function comMinutos(m, extra) { return esc(m.nome) + (extra || "") + (m.minutos ? " (" + esc(m.minutos) + " min)" : ""); }
     for (var ds = 1; ds <= 7; ds++) {
       var d = ds % 7;
       var ex = ativas.filter(function (m) { return m.modo === "dias" && (m.dias || []).indexOf(d) >= 0; }).map(function (m) { return comMinutos(m); });
       if (ex.length) linhas.push('<li' + (d === hojeDs ? ' class="hoje"' : '') + '><b>' + DIAS_LONGOS[d] + (d === hojeDs ? ' (hoje)' : '') + '</b><span>' + juntarNomes(ex) + '</span></li>');
     }
     var semanais = ativas.filter(function (m) { return m.modo === "semana"; }).map(function (m) {
-      return comMinutos(m, " · " + m.vezes + (m.vezes === 1 ? " vez" : " vezes") + " por semana");
+      return comMinutos(m, " · " + esc(m.vezes) + (m.vezes === 1 ? " vez" : " vezes") + " por semana");
     });
     if (semanais.length) linhas.push('<li><b>Na semana</b><span>' + juntarNomes(semanais) + '</span></li>');
     return linhas.length ? '<section class="agenda" aria-labelledby="titulo-agenda"><h3 id="titulo-agenda">' + ICON.peso + 'Exercícios da semana</h3><ul>' + linhas.join("") + '</ul></section>' : '';
@@ -978,7 +978,7 @@
       legenda = '<span class="ponto completo"></span>Treino feito <span class="ponto parcial"></span>Em parte <span class="ponto descanso"></span>Sem treino';
       resumo = '<b>' + cumpridos + '</b> de ' + comMeta + ' dia' + (comMeta === 1 ? '' : 's') + ' de treino cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + nomeMes + '.' +
         (semanasOk ? ' <b>' + semanasOk + '</b> semana' + (semanasOk === 1 ? '' : 's') + ' cumprida' + (semanasOk === 1 ? '' : 's') + ' nas metas semanais.' : '') +
-        SF.plano.progressoSemanal(ctxDia(), hoje).map(function (p) { return '<br>' + esc(p.meta.nome) + ': ' + p.feitos + ' de ' + p.vezes + ' nesta semana'; }).join("");
+        SF.plano.progressoSemanal(ctxDia(), hoje).map(function (p) { return '<br>' + esc(p.meta.nome) + ': ' + esc(p.feitos) + ' de ' + esc(p.vezes) + ' nesta semana'; }).join("");
     } else {
       legenda = '<span class="ponto completo"></span>Dia cumprido (refeições e exercícios) <span class="ponto parcial"></span>Em parte';
       resumo = '<b>' + cumpridos + '</b> dia' + (cumpridos === 1 ? '' : 's') + ' cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + nomeMes + '.';
@@ -1032,26 +1032,26 @@
       var s = sit[r.id], reg = regsHoje[r.id];
       var detalhe = s === "feita" ? (reg ? resumoRegistro(reg) : "Marcada") : r.kcal != null ? r.kcal + " kcal" : "";
       h += '<li class="ref-item s-' + s + '">' +
-        '<a class="ref-linha" href="#refeicao/' + r.id + '">' +
+        '<a class="ref-linha" href="#refeicao/' + esc(r.id) + '">' +
         '<span class="hora">' + esc(rotuloHora(r)) + '</span>' +
         '<span class="flex1"><span class="nome">' + esc(r.nome) +
         ' <span class="tag-sit">' + (s === "feita" ? ICON.check : '') + TEXTO_SITUACAO[s] + '</span></span>' +
         '<span class="detalhes">' + esc(detalhe) + '</span></span>' +
         '<span class="seta-linha" aria-hidden="true">›</span></a>' +
-        (s === "atrasada" || s === "agora" ? '<button class="btn mini marcar" data-registrar="' + r.id + '" data-hoje aria-label="Marcar ' + esc(r.nome) + '">' + ICON.camera + 'Marcar</button>' : '') +
+        (s === "atrasada" || s === "agora" ? '<button class="btn mini marcar" data-registrar="' + esc(r.id) + '" data-hoje aria-label="Marcar ' + esc(r.nome) + '">' + ICON.camera + 'Marcar</button>' : '') +
         '</li>';
     });
     h += '</ul>' +
       (t ? '<div class="resumo" aria-label="Total do dia">' +
-      '<div><b>' + t.kcal + '</b><span>kcal</span></div>' +
-      '<div><b>' + t.proteinas + '</b><span>proteínas</span></div>' +
-      '<div><b>' + t.carboidratos + '</b><span>carboidratos</span></div>' +
-      '<div><b>' + t.lipidios + '</b><span>gorduras</span></div></div>' : '') +
+      '<div><b>' + esc(t.kcal) + '</b><span>kcal</span></div>' +
+      '<div><b>' + esc(t.proteinas) + '</b><span>proteínas</span></div>' +
+      '<div><b>' + esc(t.carboidratos) + '</b><span>carboidratos</span></div>' +
+      '<div><b>' + esc(t.lipidios) + '</b><span>gorduras</span></div></div>' : '') +
       blocoAgenda() +
       (t && nutri.linhas ? '<h3 class="subtitulo">Nutrientes por refeição</h3><div class="tabela-wrap"><table class="nutri">' +
       '<thead><tr><th>Refeição</th><th>Prot.</th><th>Gord.</th><th>Carb.</th><th>Calorias</th></tr></thead><tbody>' +
-      nutri.linhas.map(function (l) { return '<tr>' + l.map(function (c) { return '<td>' + c + '</td>'; }).join("") + '</tr>'; }).join("") +
-      '<tr><td><b>Total</b></td><td><b>' + t.proteinas + '</b></td><td><b>' + t.lipidios + '</b></td><td><b>' + t.carboidratos + '</b></td><td><b>' + t.kcal + ' kcal</b></td></tr>' +
+      nutri.linhas.map(function (l) { return '<tr>' + l.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join("") + '</tr>'; }).join("") +
+      '<tr><td><b>Total</b></td><td><b>' + esc(t.proteinas) + '</b></td><td><b>' + esc(t.lipidios) + '</b></td><td><b>' + esc(t.carboidratos) + '</b></td><td><b>' + esc(t.kcal) + ' kcal</b></td></tr>' +
       '</tbody></table></div>' : '') +
       (planoHoje.prescritoEm ? '<p class="rodape">Plano prescrito em ' + esc(planoHoje.prescritoEm) + '. Siga sempre a orientação da sua nutricionista.</p>' : '') +
       botoesEdicao();
@@ -1066,10 +1066,10 @@
     var refs = refeicoesDe(hojeChave()), i = refs.indexOf(r), ant = refs[i - 1], prox = refs[i + 1];
     var h = '<a class="btn voltar" href="#plano">' + ICON.back + 'Plano do dia</a>' +
       '<article class="detalhe refeicao-detalhe s-' + s + '">' +
-      '<div class="ref-cabeca">' + (rotuloHora(r) ? '<span class="hora">' + rotuloHora(r) + '</span>' : '') + '<h2>' + esc(r.nome) + '</h2></div>' +
-      '<div class="meta">' + (r.kcal != null ? '<span class="chip">' + r.kcal + ' kcal</span>' : '') + '<span class="tag-sit">' + (s === "feita" ? ICON.check : '') + TEXTO_SITUACAO[s] + '</span></div>' +
+      '<div class="ref-cabeca">' + (rotuloHora(r) ? '<span class="hora">' + esc(rotuloHora(r)) + '</span>' : '') + '<h2>' + esc(r.nome) + '</h2></div>' +
+      '<div class="meta">' + (r.kcal != null ? '<span class="chip">' + esc(r.kcal) + ' kcal</span>' : '') + '<span class="tag-sit">' + (s === "feita" ? ICON.check : '') + TEXTO_SITUACAO[s] + '</span></div>' +
       (s === "feita" && reg ? '<p class="descricao">' + esc(resumoRegistro(reg)) + '</p>' : '') +
-      '<div class="acoes"><button class="btn' + (s === "feita" ? '' : ' primario') + '" data-registrar="' + r.id + '" data-hoje>' + ICON.camera +
+      '<div class="acoes"><button class="btn' + (s === "feita" ? '' : ' primario') + '" data-registrar="' + esc(r.id) + '" data-hoje>' + ICON.camera +
       (s === "feita" ? 'Ver o registro' : 'Marcar o que comi') + '</button></div>' +
       '<h3>O que comer</h3>';
     (r.itens || []).forEach(function (it) {
@@ -1088,8 +1088,8 @@
       h += '</div>';
     }
     h += '</article><nav class="ref-nav" aria-label="Outras refeições">' +
-      (ant ? '<a class="btn" href="#refeicao/' + ant.id + '">' + ICON.back + esc(ant.nome) + '</a>' : '<span></span>') +
-      (prox ? '<a class="btn seta-dir" href="#refeicao/' + prox.id + '">' + esc(prox.nome) + ICON.back + '</a>' : '') +
+      (ant ? '<a class="btn" href="#refeicao/' + esc(ant.id) + '">' + ICON.back + esc(ant.nome) + '</a>' : '<span></span>') +
+      (prox ? '<a class="btn seta-dir" href="#refeicao/' + esc(prox.id) + '">' + esc(prox.nome) + ICON.back + '</a>' : '') +
       '</nav>';
     return h;
   }
