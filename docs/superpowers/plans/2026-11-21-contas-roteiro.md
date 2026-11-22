@@ -122,7 +122,7 @@ Sem bloqueio. A revisão final recomendou fechar antes de abrir para usuários r
 - Reinício de prova: feito em 22/11 (Postgres antes das APIs, ~25 s fora, sem falha).
 - O widget Turnstile real só é provado no roteiro manual.
 - Update da stack e reprovisionamento de `368f31b`: aplicados em 21/11, conferidos em 22/11.
-- `principal.js` em `127.0.0.1`: corrigido com teste em 22/11; falta implantar.
+- `principal.js` em `127.0.0.1`: corrigido com teste e implantado em 22/11 (`e1cf853`).
 - `restaurar.sh:154`: `create database` nasce com CONNECT para PUBLIC; acrescentar `revoke connect ... from public`. As duas APIs usam o mesmo usuário `saude`: isolamento teste x produção é de dados de ensaio, não fronteira de segurança.
 - `postgres.sql`: acrescentar `SET log_min_error_statement = panic;` (senha em `ALTER ROLE` falho iria ao log).
 - `server/.env.example` sem `TRUST_PROXY_SALTOS` e `DB_POOL_MAX`.
