@@ -70,7 +70,7 @@ inicio)
   senha="$(openssl rand -hex 12)"
   printf 'EMAIL=%s\nSENHA=%s\n' "$EMAIL" "$senha" > "$ESTADO"
   chmod 600 "$ESTADO" 2>/dev/null || true
-  corpo="$(node -e 'process.stdout.write(JSON.stringify({email:process.argv[1],senha:process.argv[2]}))' "$EMAIL" "$senha")"
+  corpo="$(node -e 'process.stdout.write(JSON.stringify({email:process.argv[1],senha:process.argv[2],aceite:{versao:"1",saude:true,transferencia:true}}))' "$EMAIL" "$senha")"
   req POST /conta/cadastro 202 "$corpo" -H "x-turnstile-token: $TOKEN_TURNSTILE_TESTE"
   ok "POST /conta/cadastro -> 202 (estado em $ESTADO)"
   echo

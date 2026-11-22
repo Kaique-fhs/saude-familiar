@@ -14,6 +14,8 @@ export function configTeste(extra = {}) {
   };
 }
 
+export const ACEITE = { versao: '1', saude: true, transferencia: true };
+
 export function cabecalhos(extra = {}) {
   return { 'x-saude-origem': 'segredo-teste', 'x-turnstile-token': 'token-teste', ...extra };
 }
@@ -161,7 +163,7 @@ export async function contaLogada(app, email, opcoes = {}) {
   const senha = opcoes.senha ?? 'senha-de-teste-123';
   const caixa = emailsDosApps.get(app);
   const h = cabecalhos();
-  await app.inject({ method: 'POST', url: '/conta/cadastro', headers: h, payload: { email, senha } });
+  await app.inject({ method: 'POST', url: '/conta/cadastro', headers: h, payload: { email, senha, aceite: ACEITE } });
   const token = tokenDoEmail(caixa, '#confirmar=');
   await app.inject({ method: 'POST', url: '/conta/confirmar', headers: h, payload: { token } });
   const r = await app.inject({ method: 'POST', url: '/conta/entrar', headers: h, payload: { email, senha } });

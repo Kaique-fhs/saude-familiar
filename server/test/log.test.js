@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Writable } from 'node:stream';
-import { criarAppTeste, cabecalhos, contaLogada, emailFalso } from './ajuda.js';
+import { criarAppTeste, cabecalhos, contaLogada, emailFalso, ACEITE } from './ajuda.js';
 
 function capturaLog() {
   const linhas = [];
@@ -39,7 +39,7 @@ test('falha ao enviar e-mail é registrada no log', async () => {
     method: 'POST',
     url: '/conta/cadastro',
     headers: cabecalhos(),
-    payload: { email: 'a@b.com', senha: 'senha-de-teste-123' },
+    payload: { email: 'a@b.com', senha: 'senha-de-teste-123', aceite: ACEITE },
   });
   assert.equal(r.statusCode, 202);
   await new Promise((ok) => setTimeout(ok, 50));

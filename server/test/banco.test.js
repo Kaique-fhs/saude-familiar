@@ -21,7 +21,7 @@ const inserirItem = (tx, userId, chave) =>
 test('migrar aplica 001 e 002 e na segunda vez não aplica nada', async () => {
   const banco = await criarBancoPglite();
   const primeira = await migrar(banco);
-  assert.deepEqual(primeira, ['001_contas.sql', '002_dados.sql', '003_politica_itens.sql']);
+  assert.deepEqual(primeira, ['001_contas.sql', '002_dados.sql', '003_politica_itens.sql', '004_aceites.sql']);
   assert.deepEqual(await migrar(banco), []);
   await banco.fechar();
 });
@@ -106,7 +106,7 @@ test('criarBancoPglite() sem pasta continua em memória (não guarda nada entre 
   await a.consulta("insert into usuarios (email, senha_hash) values ('m@x.com', 'x')");
   await a.fechar();
   const b = await criarBancoPglite();
-  assert.deepEqual(await migrar(b), ['001_contas.sql', '002_dados.sql', '003_politica_itens.sql']);
+  assert.deepEqual(await migrar(b), ['001_contas.sql', '002_dados.sql', '003_politica_itens.sql', '004_aceites.sql']);
   await b.fechar();
 });
 test('criarBancoPg limita o Pool ao max informado (padrão do pg, 10, sem max)', async () => {
@@ -125,7 +125,7 @@ test('migrar com o papel saude_app já concedido ao dono (sem admin) não falha'
   await banco.consulta('grant saude_app to dono_teste');
   await banco.consulta('grant all on schema public to dono_teste');
   await banco.consulta('set role dono_teste');
-  assert.deepEqual(await migrar(banco), ['001_contas.sql', '002_dados.sql', '003_politica_itens.sql']);
+  assert.deepEqual(await migrar(banco), ['001_contas.sql', '002_dados.sql', '003_politica_itens.sql', '004_aceites.sql']);
   assert.deepEqual(await migrar(banco), []);
   await banco.fechar();
 });

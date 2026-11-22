@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { criarAppTeste, cabecalhos, tokenDoEmail, contaLogada } from './ajuda.js';
+import { criarAppTeste, cabecalhos, tokenDoEmail, contaLogada, ACEITE } from './ajuda.js';
 import { hashToken, hashSenha } from '../src/seguranca.js';
 
 const H = cabecalhos();
@@ -14,7 +14,7 @@ const bearer = (token) => cabecalhos({ authorization: `Bearer ${token}` });
 
 test('cadastro responde 202 e envia e-mail com link #confirmar=', async () => {
   const { app, email } = await criarAppTeste();
-  const r = await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA });
+  const r = await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA, aceite: ACEITE });
   assert.equal(r.statusCode, 202);
   assert.deepEqual(r.json(), { ok: true });
   assert.equal(email.enviados.length, 1);
@@ -26,11 +26,11 @@ test('cadastro responde 202 e envia e-mail com link #confirmar=', async () => {
 test('cadastro valida senha (8 a 128) e e-mail', async () => {
   const { app, email } = await criarAppTeste();
   for (const senha of ['curta', 'x'.repeat(129), undefined]) {
-    const r = await post(app, '/conta/cadastro', { email: 'a@b.com', senha });
+    const r = await post(app, '/conta/cadastro', { email: 'a@b.com', senha, aceite: ACEITE });
     assert.equal(r.statusCode, 400);
     assert.deepEqual(r.json(), { erro: 'senha' });
   }
-  const r = await post(app, '/conta/cadastro', { email: 'sem-arroba', senha: SENHA });
+  const r = await post(app, '/conta/cadastro', { email: 'sem-arroba', senha: SENHA, aceite: ACEITE });
   assert.equal(r.statusCode, 400);
   assert.deepEqual(r.json(), { erro: 'email' });
   assert.equal(email.enviados.length, 0);
@@ -41,7 +41,7 @@ test('cadastro com e-mail já confirmado responde 202 e não envia e-mail', asyn
   const { app, email } = await criarAppTeste();
   await contaLogada(app, 'a@b.com');
   const antes = email.enviados.length;
-  const r = await post(app, '/conta/cadastro', { email: 'a@b.com', senha: 'outra-senha-123' });
+  const r = await post(app, '/conta/cadastro', { email: 'a@b.com', senha: 'outra-senha-123', aceite: ACEITE });
   assert.equal(r.statusCode, 202);
   assert.deepEqual(r.json(), { ok: true });
   assert.equal(email.enviados.length, antes);
@@ -50,8 +50,8 @@ test('cadastro com e-mail já confirmado responde 202 e não envia e-mail', asyn
 
 test('" Rejane@Gmail.com " e "rejane@gmail.com" são a mesma conta', async () => {
   const { app, banco } = await criarAppTeste();
-  await post(app, '/conta/cadastro', { email: ' Rejane@Gmail.com ', senha: SENHA });
-  await post(app, '/conta/cadastro', { email: 'rejane@gmail.com', senha: SENHA });
+  await post(app, '/conta/cadastro', { email: ' Rejane@Gmail.com ', senha: SENHA, aceite: ACEITE });
+  await post(app, '/conta/cadastro', { email: 'rejane@gmail.com', senha: SENHA, aceite: ACEITE });
   const r = await banco.consulta('select count(*)::int as n, min(email) as e from usuarios');
   assert.equal(r.rows[0].n, 1);
   assert.equal(r.rows[0].e, 'rejane@gmail.com');
@@ -60,7 +60,7 @@ test('" Rejane@Gmail.com " e "rejane@gmail.com" são a mesma conta', async () =>
 
 test('entrar antes de confirmar → 403 nao-confirmado; depois de confirmar → 200 com token', async () => {
   const { app, email } = await criarAppTeste();
-  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA });
+  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA, aceite: ACEITE });
   const antes = await post(app, '/conta/entrar', { email: 'a@b.com', senha: SENHA });
   assert.equal(antes.statusCode, 403);
   assert.deepEqual(antes.json(), { erro: 'nao-confirmado' });
@@ -89,14 +89,14 @@ test('entrar com senha errada e com e-mail inexistente → 401 credenciais (mesm
 
 test('confirmar com token usado ou vencido (relógio +25 h) → 400 token', async () => {
   const { app, email, relogio } = await criarAppTeste();
-  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA });
+  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA, aceite: ACEITE });
   const token = tokenDoEmail(email, '#confirmar=');
   assert.equal((await post(app, '/conta/confirmar', { token })).statusCode, 200);
   const usado = await post(app, '/conta/confirmar', { token });
   assert.equal(usado.statusCode, 400);
   assert.deepEqual(usado.json(), { erro: 'token' });
 
-  await post(app, '/conta/cadastro', { email: 'c@d.com', senha: SENHA });
+  await post(app, '/conta/cadastro', { email: 'c@d.com', senha: SENHA, aceite: ACEITE });
   const token2 = tokenDoEmail(email, '#confirmar=');
   relogio.avancar(25 * HORA);
   const vencido = await post(app, '/conta/confirmar', { token: token2 });
@@ -201,7 +201,7 @@ test('token de nova-senha usado duas vezes → a segunda dá 400 token', async (
 
 test('token de confirmação não serve em nova-senha', async () => {
   const { app, email } = await criarAppTeste();
-  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA });
+  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA, aceite: ACEITE });
   const token = tokenDoEmail(email, '#confirmar=');
   const r = await post(app, '/conta/nova-senha', { token, senha: 'senha-nova-456' });
   assert.equal(r.statusCode, 400);
@@ -225,9 +225,9 @@ test('esqueci com e-mail existente envia link #nova-senha=; com inexistente resp
 
 test('recadastro de e-mail não confirmado troca a senha e invalida o link antigo', async () => {
   const { app, email } = await criarAppTeste();
-  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: 'senha-do-invasor-1' });
+  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: 'senha-do-invasor-1', aceite: ACEITE });
   const antigo = tokenDoEmail(email, '#confirmar=');
-  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA });
+  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA, aceite: ACEITE });
   const novo = tokenDoEmail(email, '#confirmar=');
   assert.notEqual(antigo, novo);
   const velho = await post(app, '/conta/confirmar', { token: antigo });
@@ -321,7 +321,7 @@ test('CAMINHO_SITE="/" gera link ${origemSite}/#confirmar= e #nova-senha=', asyn
 
 test('sem CAMINHO_SITE o link continua /saude-familiar/', async () => {
   const { app, email } = await criarAppTeste();
-  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA });
+  await post(app, '/conta/cadastro', { email: 'a@b.com', senha: SENHA, aceite: ACEITE });
   assert.match(email.enviados[0].texto, /https:\/\/kaique-fhs\.github\.io\/saude-familiar\/#confirmar=/);
   await app.close();
 });

@@ -1,3 +1,4 @@
+import { aceiteValido, gravarAceites } from './aceite.js';
 import { hashSenha, conferirSenha, novoToken, hashToken, HASH_FALSO } from './seguranca.js';
 
 import { exigirCaptcha, limitePorEmail, limitePorIp, MINUTO } from './protecao.js';
@@ -82,6 +83,7 @@ export function registrarContas(app, { banco, email, captcha, armazenamento, lim
     const endereco = normalizarEmail(corpo.email);
     if (!senhaValida(corpo.senha)) return reply.code(400).send({ erro: 'senha' });
     if (!endereco.includes('@')) return reply.code(400).send({ erro: 'email' });
+    if (!aceiteValido(corpo.aceite)) return reply.code(400).send({ erro: 'aceite' });
     const agora = app.relogio();
     const hash = await hashSenha(corpo.senha); // sempre, para gastar o mesmo tempo
 
@@ -102,6 +104,7 @@ export function registrarContas(app, { banco, email, captcha, armazenamento, lim
           [agora, userId],
         );
       }
+      await gravarAceites(tx.consulta, userId, agora);
       return criarToken(tx.consulta, userId, 'confirmar', VALIDADE_CONFIRMAR, agora);
     });
 
