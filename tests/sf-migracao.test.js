@@ -153,3 +153,189 @@ test("conferir", () => {
   assert.equal(com({ houveConflito: undefined }).pronto, false);
   assert.equal(com({ houveConflito: 0 }).pronto, false);
 });
+
+// ---- fotos, execução, retomada e conclusão ----
+function fakeStorage(obj) {
+  const ks = Object.keys(obj);
+  return { length: ks.length, key: (i) => ks[i] };
+}
+function estadoComFotos() {
+  return Object.assign(D.estadoVazio(), {
+    diario: { "2026-11-01": ["x"] },
+    registros: { "2026-11-01": { cafe: reg("f1"), almoco: reg("f2") } }
+  });
+}
+function depsExec(extra) {
+  const gravados = [];
+  let marc = null;
+  const d = {
+    userId: "u1",
+    marcador: () => marc,
+    gravarMarcador: (m) => { marc = m; gravados.push(m); },
+    lerAntigo: () => estadoComFotos(),
+    estadoConta: () => conta({}),
+    PLANO: PLANO,
+    copiarFotos: async (ids) => ({ copiadas: ids.slice(), faltando: [] }),
+    gravarEstado: () => true,
+    aoProgresso: () => {}
+  };
+  Object.assign(d, extra || {});
+  d.__marc = () => marc;
+  d.__gravados = gravados;
+  return d;
+}
+
+test("copiarFotos pula as que já estão na conta", async () => {
+  const gravadas = [];
+  const r = await M.copiarFotos(["a", "b"], {
+    lerAntiga: async (id) => "dados-" + id,
+    existeNaConta: async (id) => id === "a",
+    gravarNaConta: async (id, v) => { gravadas.push([id, v]); },
+    aoProgresso: () => {}
+  });
+  assert.deepEqual(gravadas, [["b", "dados-b"]]);
+  assert.deepEqual(r.copiadas.slice().sort(), ["a", "b"]);
+  assert.deepEqual(r.faltando, []);
+});
+
+test("copiarFotos relata as que faltam", async () => {
+  const prog = [];
+  const r = await M.copiarFotos(["a", "b"], {
+    lerAntiga: async (id) => (id === "a" ? null : "x"),
+    existeNaConta: async () => false,
+    gravarNaConta: async () => {},
+    aoProgresso: (f, t) => prog.push([f, t])
+  });
+  assert.deepEqual(r.faltando, ["a"]);
+  assert.deepEqual(r.copiadas, ["b"]);
+  assert.deepEqual(prog, [[1, 2], [2, 2]]);
+});
+
+test("copiarFotos rejeita se gravar falhar", async () => {
+  await assert.rejects(M.copiarFotos(["a"], {
+    lerAntiga: async () => "x",
+    existeNaConta: async () => false,
+    gravarNaConta: async () => { throw new Error("cheio"); },
+    aoProgresso: () => {}
+  }), /cheio/);
+});
+
+test("semFotosFaltando zera só a foto que faltou e não muda o original", () => {
+  const e = estadoComFotos();
+  const r = M.semFotosFaltando(e, ["f1"]);
+  assert.equal(r.registros["2026-11-01"].cafe.foto, null);
+  assert.equal(r.registros["2026-11-01"].almoco.foto, "f2");
+  assert.equal(e.registros["2026-11-01"].cafe.foto, "f1");
+});
+
+test("chavesAntigas não pega sf:", () => {
+  const ch = M.chavesAntigas(fakeStorage({ "mp-fav": 1, "sf:migracao": 1, "mp-diario": 1, outra: 1 }));
+  assert.deepEqual(ch, ["mp-fav", "mp-diario"]);
+});
+
+test("executar: interrompido nas fotos, retoma sem juntar de novo", async () => {
+  let gravarEstadoChamadas = 0;
+  let falha = true;
+  const d = depsExec({
+    gravarEstado: () => { gravarEstadoChamadas++; return true; },
+    copiarFotos: async (ids) => {
+      if (falha) throw new Error("caiu");
+      return { copiadas: ids.slice(), faltando: [] };
+    }
+  });
+  // primeira: cópia falha antes de juntar
+  assert.equal(await M.executar(d), "erro-fotos");
+  assert.equal(gravarEstadoChamadas, 0);
+  assert.notEqual(d.__marc().estado, "concluida");
+  // segunda: copia ok, junta
+  falha = false;
+  assert.equal(await M.executar(d), "migrando");
+  assert.equal(gravarEstadoChamadas, 1);
+  assert.equal(d.__marc().juntado, true);
+  // terceira (retomada): a pessoa apagou item da conta; não junta de novo
+  d.estadoConta = () => conta({});
+  assert.equal(await M.executar(d), "migrando");
+  assert.equal(gravarEstadoChamadas, 1);
+  assert.equal(d.__marc().juntado, true);
+  assert.deepEqual(d.__marc().fotos.slice().sort(), ["f1", "f2"]);
+});
+
+test("executar: sem espaço volta à oferta", async () => {
+  const d = depsExec({ gravarEstado: () => false });
+  assert.equal(await M.executar(d), "sem-espaco");
+  assert.equal(d.__marc().estado, "oferecida");
+  assert.notEqual(d.__marc().juntado, true);
+});
+
+test("executar: foto faltando vira foto null", async () => {
+  let gravado = null;
+  const d = depsExec({
+    copiarFotos: async () => ({ copiadas: ["f2"], faltando: ["f1"] }),
+    gravarEstado: (e) => { gravado = e; return true; }
+  });
+  assert.equal(await M.executar(d), "migrando");
+  assert.equal(gravado.registros["2026-11-01"].cafe.foto, null);
+  assert.equal(gravado.registros["2026-11-01"].almoco.foto, "f2");
+  assert.deepEqual(d.__marc().faltando, ["f1"]);
+  assert.equal(d.__marc().juntado, true);
+});
+
+function depsConcluir(extra) {
+  const log = { copiados: null, apagadas: null, banco: 0, marcadores: [] };
+  const ant = Object.assign(D.estadoVazio(), { diario: { "2026-11-01": ["x"] } });
+  const d = {
+    antigo: ant, conta: Object.assign(D.estadoVazio(), { diario: { "2026-11-01": ["x"] } }),
+    puladas: 0, rejeitados: [], status: "ok", pendentes: 0, houveConflito: false,
+    storage: fakeStorage({ "mp-fav": 1, "mp-ultimo-backup": 1, "sf:migracao": 1 }),
+    copiarParaConta: async (n) => { log.copiados = n; },
+    apagarChaves: async (c) => { log.apagadas = c; },
+    apagarBancoAntigo: async () => { log.banco++; return {}; },
+    gravarMarcador: (m) => log.marcadores.push(m)
+  };
+  Object.assign(d, extra || {});
+  d.__log = log;
+  return d;
+}
+
+test("concluir só apaga com conferir pronto", async () => {
+  const d = depsConcluir({ rejeitados: ["algo"] });
+  const r = await M.concluir(d);
+  assert.equal(r.pronto, false);
+  assert.equal(r.motivo, "rejeitados");
+  assert.equal(d.__log.apagadas, null);
+  assert.equal(d.__log.banco, 0);
+  assert.equal(d.__log.copiados, null);
+  assert.equal(d.__log.marcadores.length, 0);
+  const d2 = depsConcluir({ houveConflito: undefined });
+  assert.equal((await M.concluir(d2)).pronto, false);
+  assert.equal(d2.__log.banco, 0);
+});
+
+test("concluir: pronto apaga chaves mp-, banco e marca concluída", async () => {
+  const d = depsConcluir();
+  const r = await M.concluir(d);
+  assert.equal(r.pronto, true);
+  assert.deepEqual(d.__log.apagadas, ["mp-fav", "mp-ultimo-backup"]);
+  assert.equal(d.__log.banco, 1);
+  assert.equal(d.__log.marcadores.at(-1).estado, "concluida");
+});
+
+test("concluir: banco bloqueado não conclui", async () => {
+  const d = depsConcluir({ apagarBancoAntigo: async () => ({ bloqueado: true }) });
+  const r = await M.concluir(d);
+  assert.equal(r.pronto, true);
+  assert.equal(d.__log.marcadores.length, 0);
+});
+
+test("concluir copia o histórico de cópias para a conta", async () => {
+  const d = depsConcluir();
+  await M.concluir(d);
+  assert.deepEqual(d.__log.copiados, ["mp-ultimo-backup", "mp-backups-mes", "mp-modo-cal"]);
+});
+
+test("concluir: não apaga nada se copiar o histórico falhar", async () => {
+  const d = depsConcluir({ copiarParaConta: async () => { throw new Error("x"); } });
+  await assert.rejects(M.concluir(d));
+  assert.equal(d.__log.apagadas, null);
+  assert.equal(d.__log.banco, 0);
+});

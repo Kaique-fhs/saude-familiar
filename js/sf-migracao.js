@@ -148,7 +148,101 @@
     return { pronto: true, motivo: null };
   }
 
+  // Copia as fotos antigas para a conta. Foto já na conta é pulada; foto ilegível (null) vai para `faltando`.
+  // Erro ao gravar na conta rejeita: quem chama não apaga nada.
+  async function copiarFotos(ids, deps) {
+    var copiadas = [], faltando = [], total = ids.length;
+    for (var i = 0; i < total; i++) {
+      var id = ids[i];
+      if (await deps.existeNaConta(id)) {
+        copiadas.push(id);
+      } else {
+        var dado = await deps.lerAntiga(id);
+        if (dado === null || dado === undefined) {
+          faltando.push(id);
+        } else {
+          await deps.gravarNaConta(id, dado);
+          copiadas.push(id);
+        }
+      }
+      if (deps.aoProgresso) deps.aoProgresso(i + 1, total);
+    }
+    return { copiadas: copiadas, faltando: faltando };
+  }
+
+  function semFotosFaltando(estado, faltando) {
+    var r = copiaProfunda(estado);
+    Object.keys(r.registros || {}).forEach(function (dia) {
+      var d = r.registros[dia] || {};
+      Object.keys(d).forEach(function (ref) {
+        if (d[ref] && faltando.indexOf(d[ref].foto) >= 0) d[ref].foto = null;
+      });
+    });
+    return r;
+  }
+
+  function chavesAntigas(storage) {
+    var r = [];
+    for (var i = 0; i < storage.length; i++) {
+      var k = storage.key(i);
+      if (typeof k === "string" && k.indexOf("mp-") === 0) r.push(k);
+    }
+    return r;
+  }
+
+  function marcadorCom(base, userId, mudanca) {
+    var m = { dono: userId, estado: "migrando", juntado: false, fotos: [], faltando: [], em: Date.now() };
+    [base || {}, mudanca].forEach(function (o) {
+      Object.keys(o).forEach(function (k) { m[k] = o[k]; });
+    });
+    m.em = Date.now();
+    return m;
+  }
+
+  // Marca `migrando`, copia as fotos e (só na primeira vez) junta e grava. Com `juntado: true` só refaz as fotos,
+  // para o que a pessoa apagou depois da junção não voltar.
+  async function executar(deps) {
+    var atual = await deps.marcador();
+    var jaJuntou = !!(atual && atual.juntado === true);
+    await deps.gravarMarcador(marcadorCom(atual, deps.userId, { estado: "migrando", juntado: jaJuntou }));
+    var antigo = await deps.lerAntigo();
+    var ids = fotosDe(antigo);
+    var res;
+    try {
+      res = await deps.copiarFotos(ids, deps.aoProgresso);
+    } catch (e) {
+      return "erro-fotos";
+    }
+    if (!jaJuntou) {
+      var conta = await deps.estadoConta();
+      var final = semFotosFaltando(juntar(conta, antigo, deps.PLANO), res.faltando);
+      var gravou = await deps.gravarEstado(final);
+      if (gravou === false) {
+        await deps.gravarMarcador(marcadorCom(atual, deps.userId, { estado: "oferecida", juntado: false }));
+        return "sem-espaco";
+      }
+    }
+    await deps.gravarMarcador(marcadorCom(atual, deps.userId, { estado: "migrando", juntado: true, fotos: res.copiadas, faltando: res.faltando }));
+    return "migrando";
+  }
+
+  var HISTORICO = ["mp-ultimo-backup", "mp-backups-mes", "mp-modo-cal"];
+
+  // Só apaga o que é antigo se conferir(...).pronto; banco antigo bloqueado (outra aba) não marca concluída.
+  async function concluir(deps) {
+    var c = conferir(deps);
+    if (c.pronto !== true) return c;
+    await deps.copiarParaConta(HISTORICO);
+    await deps.apagarChaves(chavesAntigas(deps.storage));
+    var b = await deps.apagarBancoAntigo();
+    if (b && b.bloqueado) return { pronto: true, motivo: "bloqueado" };
+    var base = deps.marcador ? await deps.marcador() : null;
+    await deps.gravarMarcador(marcadorCom(base, deps.userId, { estado: "concluida" }));
+    return { pronto: true, motivo: null };
+  }
+
   raiz.SF = raiz.SF || {};
-  raiz.SF.migracao = { lerAntigos: lerAntigos, juntar: juntar, fotosDe: fotosDe, podeOferecer: podeOferecer, conferir: conferir };
+  raiz.SF.migracao = { lerAntigos: lerAntigos, juntar: juntar, fotosDe: fotosDe, podeOferecer: podeOferecer, conferir: conferir,
+    copiarFotos: copiarFotos, semFotosFaltando: semFotosFaltando, chavesAntigas: chavesAntigas, executar: executar, concluir: concluir };
   if (typeof module !== "undefined") module.exports = raiz.SF.migracao;
 })(typeof window !== "undefined" ? window : globalThis);
