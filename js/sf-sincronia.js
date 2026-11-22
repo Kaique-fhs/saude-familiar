@@ -10,6 +10,7 @@
   var TAMANHO_LOTE = 200;
   var LIMITE_BAIXAR = 500;
   var ESPERA_TETO_MS = 5 * 60 * 1000;
+  var LIMITE_AVISOS = 50;
   var VERSAO_CURSOR = 2; // sobe quando o cursor do /sync precisa recomeçar do zero uma vez
 
   function classeErroApi(deps) {
@@ -281,6 +282,25 @@
       return pagina();
     }
 
+    // Depois de sincronizar sem erro: fotos-enviadas guarda só fotos citadas em registros do estado atual
+    // (registro restaurado depois volta a enviar a foto, pois registrar a recoloca em fotos-pendentes)
+    // e avisos guarda os LIMITE_AVISOS mais recentes.
+    function podar() {
+      var citadas = {};
+      var regs = (deps.estado() || {}).registros || {};
+      Object.keys(regs).forEach(function (dia) {
+        Object.keys(regs[dia] || {}).forEach(function (r) {
+          var f = regs[dia][r] && regs[dia][r].foto;
+          if (typeof f === "string" && f) citadas[f] = true;
+        });
+      });
+      var env = lerEnv();
+      var mantidas = env.filter(function (id) { return citadas[id] === true; });
+      if (mantidas.length !== env.length) salvar("fotos-enviadas", mantidas);
+      var av = lerAvisos();
+      if (av.length > LIMITE_AVISOS) salvar("avisos", av.slice(av.length - LIMITE_AVISOS));
+    }
+
     function sincronizar() {
       if (emAndamento) return emAndamento;
       ultimoProblema = null;
@@ -288,7 +308,7 @@
       var p = Promise.resolve().then(function () {
         return enviarFotos().then(enviarFila).then(baixarTudo);
       }).then(function () {
-        if (erroBranda) { falhas++; ultimoProblema = "erro"; } else falhas = 0;
+        if (erroBranda) { falhas++; ultimoProblema = "erro"; } else { falhas = 0; podar(); }
       }, function (e) {
         if (e && e.name === "ErroApi" && e.status === 401) { avisarSessao(); return; }
         falhas++;
@@ -311,6 +331,7 @@
       rejeitados: function () { return lerRejeitados(); },
       avisos: function () { return lerAvisos().concat(avisosMem); },
       status: status,
+      houveConflito: function () { return ultimoProblema === "conflito"; },
       pendentes: pendentes,
       esperaMs: esperaMs
     };

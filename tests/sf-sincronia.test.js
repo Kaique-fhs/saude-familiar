@@ -733,3 +733,46 @@ test("plano e meta remotos aplicados; ativos sem valor objeto são ignorados", a
   h.sinc.registrar(VAZIO, h.estado());
   assert.deepEqual(fila(h), []);
 });
+
+test("fotos-enviadas sem registro somem após sincronizar", async () => {
+  const local = localFalso({ "u1:fotos-enviadas": JSON.stringify(["velha", ID_FOTO]) });
+  const h = montar({ local, estado: comFoto() });
+  await h.sinc.sincronizar();
+  assert.deepEqual(local.ler("u1", "fotos-enviadas", []), [ID_FOTO]);
+});
+
+test("registro restaurado depois da poda reenvia a foto", async () => {
+  const h = montar({ estado: comFoto() });
+  h.mudar(comFoto());
+  h.local.gravar("u1", "fotos-enviadas", [ID_FOTO]);
+  h.mudar(VAZIO);                       // registro apagado
+  await h.sinc.sincronizar();           // poda: a foto sai de fotos-enviadas
+  assert.deepEqual(h.local.ler("u1", "fotos-enviadas", []), []);
+  h.mudar(comFoto());                   // restaurado
+  assert.deepEqual(h.local.ler("u1", "fotos-pendentes", []), [ID_FOTO]);
+  await h.sinc.sincronizar();
+  assert.deepEqual(h.reg.fotosEnviadas, [ID_FOTO]);
+});
+
+test("avisos ficam nos 50 mais recentes", async () => {
+  const todos = Array.from({ length: 60 }, (_, i) => ({ codigo: "x", n: i }));
+  const local = localFalso({ "u1:avisos": JSON.stringify(todos) });
+  const h = montar({ local });
+  await h.sinc.sincronizar();
+  const a = local.ler("u1", "avisos", []);
+  assert.equal(a.length, 50);
+  assert.equal(a[0].n, 10);
+  assert.equal(a[49].n, 59);
+});
+
+test("houveConflito", async () => {
+  const h = montar({ enviar: (m) => ({ conflitos: [{ tipo: "fav", chave: m[0].chave, valor: null, ativo: false, em: "2030-01-01T00:00:00.000Z", seq: 1 }] }) });
+  assert.equal(h.sinc.houveConflito(), false);
+  h.mudar(com({ favs: ["a"] }));
+  await h.sinc.sincronizar();
+  assert.equal(h.sinc.status(), "conflito");
+  assert.equal(h.sinc.houveConflito(), true);
+  const h2 = montar();
+  await h2.sinc.sincronizar();
+  assert.equal(h2.sinc.houveConflito(), false);
+});
