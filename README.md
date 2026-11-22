@@ -11,7 +11,7 @@ favoritar e gerar a lista de compras das receitas escolhidas.
 ## Conta e sincronização (em desenvolvimento)
 
 - `config.js` versionado fica com `apiUrl: ""`: assim o site funciona exatamente como antes, só no aparelho, sem tela de entrar nem fila.
-- Com `apiUrl` preenchido, quem entra numa conta tem os dados guardados no aparelho em chaves `sf:<id>:*` (fotos no IndexedDB `saude-familiar-<id>`) e enviados para a conta. Um aparelho que já tem dados antigos (`mp-*`) e ainda não entrou continua como antes, com uma faixa para criar a conta. Os dados antigos não são apagados nem copiados (a cópia é o plano 4).
+- Com `apiUrl` preenchido, quem entra numa conta tem os dados guardados no aparelho em chaves `sf:<id>:*` (fotos no IndexedDB `saude-familiar-<id>`) e enviados para a conta. Um aparelho que já usou o app antigo (qualquer chave `mp-*`) e não tem sessão continua como antes, sem conta nem chamada à API, até existir a migração (plano 4). Os dados antigos não são apagados nem copiados. Com conta, o `PLANO` do `data.js` não aparece: até o plano 3, Plano e Frequência mostram "em breve".
 
 ### Rodar com o servidor de desenvolvimento
 

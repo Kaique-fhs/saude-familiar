@@ -70,3 +70,13 @@ test("temDadosAntigos verdadeiro com conteúdo e falso com vazio", () => {
   assert.equal(SFLocal.criar({ storage: armazenamentoFalso({ "mp-diario": '{"2026-11-01":["a"]}' }) }).temDadosAntigos(), true);
   assert.equal(SFLocal.criar({ storage: armazenamentoFalso({ "mp-favs": "[]", "mp-diario": "{}", "mp-checks": "null" }) }).temDadosAntigos(), false);
 });
+
+test("usouAppAntigo: qualquer chave mp-* conta, mesmo vazia; chaves de conta não", () => {
+  const com = (chaves) => require("../js/sf-local.js").criar({ storage: {
+    length: chaves.length, key: (i) => chaves[i], getItem: () => "[]", setItem() {}, removeItem() {}
+  } }).usouAppAntigo();
+  assert.equal(com([]), false);
+  assert.equal(com(["mp-favs"]), true);
+  assert.equal(com(["mp-ultimo-backup"]), true);
+  assert.equal(com(["sf:u:mp-favs", "sf:sessao", "outra"]), false);
+});

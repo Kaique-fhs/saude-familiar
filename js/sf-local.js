@@ -35,6 +35,13 @@
         }
         apagar.forEach(function (k) { st.removeItem(k); });
       },
+      // Qualquer chave do app antigo, mesmo vazia (quem desmarcou tudo continua sendo quem já usa o app).
+      usouAppAntigo: function () {
+        for (var i = 0; i < st.length; i++) {
+          if (String(st.key(i)).indexOf("mp-") === 0) return true;
+        }
+        return false;
+      },
       temDadosAntigos: function () {
         return SINCRONIZAVEIS.some(function (k) { return !vazio(lerJson(k, null)); });
       }

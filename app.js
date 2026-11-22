@@ -15,7 +15,18 @@
   if (CONFIG.apiUrl && SF.api && SF.local && SF.dados && SF.fotos && SF.sincronia && SF.conta) {
     try { armazem = SF.local.criar({ storage: window.localStorage }); } catch (e) { armazem = null; }
   }
-  if (armazem) iniciarConta();
+  // Duas travas até os planos 3 e 4:
+  // 1) aparelho do app antigo, sem sessão, nem monta a conta: segue igual, tudo local;
+  // 2) com conta, o plano do data.js (que é de uma pessoa só) não aparece.
+  var contaEsperaMigracao = false;
+  if (armazem && !SF.conta.contaDisponivel({ sessao: armazem.sessao(), usouAppAntigo: armazem.usouAppAntigo() })) {
+    contaEsperaMigracao = true;
+    armazem = null;
+  }
+  if (armazem) {
+    PLANO = { refeicoes: [], exercicios: [], compras: [] };
+    iniciarConta();
+  }
 
   // ---------- armazenamento local (no modo conta, no prefixo do usuário) ----------
   function ler(chave, padrao) {
@@ -392,7 +403,8 @@
   function totalDoDia(k) { return TOTAL_REF + exerciciosDoDia(k).length; }
   function feitosDoDia(k) { return feitasNoDia(k).length + treinosFeitos(k).length; }
   // Dia cumprido = as 5 refeições + os exercícios programados para aquele dia.
-  function diaCompleto(k) { return feitosDoDia(k) >= totalDoDia(k); }
+  // Sem nada programado o dia não conta (e a sequência não anda para trás sem fim).
+  function diaCompleto(k) { var t = totalDoDia(k); return t > 0 && feitosDoDia(k) >= t; }
   function juntarNomes(l) { return l.length <= 1 ? l.join("") : l.slice(0, -1).join(", ") + " e " + l[l.length - 1]; }
 
   function sequencia() {
@@ -946,7 +958,14 @@
 
   var TEXTO_SITUACAO = { feita: "Feita", agora: "Agora", proxima: "Próxima", atrasada: "Não marcada", depois: "Mais tarde" };
 
+  function semPlano(titulo) {
+    return '<h2 class="titulo-secao">' + titulo + '</h2>' +
+      '<div class="vazio">O cadastro do seu plano alimentar e das suas metas de exercício chega em breve.<br><br>' +
+      'Por enquanto, use as receitas e a lista de compras.<br><br><a class="btn primario" href="#receitas">Ver receitas</a></div>';
+  }
+
   function telaPlano() {
+    if (!TOTAL_REF) return semPlano("Meu plano");
     var atual = refPorId(refeicaoAtual()), t = PLANO.nutrientes.total, hoje = hojeChave();
     var sit = situacoesHoje(), regsHoje = registros[hoje] || {}, n = feitasNoDia(hoje).length, seq = sequencia();
     var atrasadas = PLANO.refeicoes.filter(function (r) { return sit[r.id] === "atrasada"; });
@@ -993,6 +1012,7 @@
   }
 
   function telaRefeicao(id) {
+    if (!TOTAL_REF) return semPlano("Meu plano");
     var r = refPorId(id);
     if (!r) return '<div class="vazio">Refeição não encontrada. <a href="#plano">Voltar</a></div>';
     var s = situacoesHoje()[r.id], reg = (registros[hojeChave()] || {})[r.id];
@@ -1097,6 +1117,7 @@
 
 
   function telaFrequencia() {
+    if (!TOTAL_REF) return semPlano("Frequência");
     return '<h2 class="titulo-secao">Frequência</h2>' +
       '<p class="descricao">Marque as refeições que você fez e acompanhe no calendário os dias em que cumpriu o plano.</p>' +
       lembreteBackup() + blocoDia() + blocoCalendario() + telaBackup();
@@ -1144,6 +1165,7 @@
         h += '</ul>';
       });
     }
+    if (!PLANO.compras.length) return h;
     h += '<details class="refeicao"><summary><h3>Lista do plano alimentar</h3>' + ICON.chevron + '</summary><div class="corpo">' +
       '<p class="descricao">Lista de compras básica que veio com o plano.</p><ul class="lista">' +
       PLANO.compras.map(function (c) {
@@ -1552,6 +1574,7 @@
   window.addEventListener("hashchange", function () {
     // link de confirmar e-mail ou de nova senha aberto com o app já aberto nesta aba
     if (armazem && SF.conta.lerHash(location.hash).acao) { contaUI.iniciar(); return; }
+    avisarContaIndisponivel();
     render(); window.scrollTo(0, 0);
   });
 
@@ -1599,7 +1622,7 @@
   // Tudo aqui só roda com armazem (apiUrl preenchido).
   var ultimoEstado = null; // cópia do estado como foi gravado ou lido por último (o "antes" da fila)
   var timerSync = null, timerRetry = null;
-  var statusEl = null, caixaContaEl = null, faixaEl = null;
+  var statusEl = null, caixaContaEl = null;
   var MSG_SESSAO = "Sua sessão terminou. Entre de novo: o que você marcou continua guardado neste aparelho.";
 
   function estadoApp() {
@@ -1626,8 +1649,7 @@
     var s = armazem.sessao();
     if (s && s.usuario && s.usuario.id) { modo = "conta"; userId = s.usuario.id; return; }
     if (s) armazem.apagarSessao(); // sessão sem usuário: não serve
-    modo = armazem.temDadosAntigos() ? "antigo" : "entrar";
-    if (modo === "entrar" && (inicio === "conta" || inicio === "antigo")) contaUI.mostrar("entrar");
+    if (inicio === "conta" || inicio === "antigo") contaUI.mostrar("entrar");
   }
 
   function ligarConta() {
@@ -1647,19 +1669,6 @@
     caixaContaEl.appendChild(botao);
     topo.appendChild(caixaContaEl);
 
-    faixaEl = document.createElement("div");
-    faixaEl.className = "faixa-conta";
-    var texto = document.createElement("p");
-    texto.textContent = "Crie sua conta para guardar seus dados";
-    var criar = document.createElement("button");
-    criar.type = "button";
-    criar.className = "btn primario";
-    criar.textContent = "Criar conta";
-    criar.addEventListener("click", function () { contaUI.mostrar("cadastro"); });
-    faixaEl.appendChild(texto);
-    faixaEl.appendChild(criar);
-    main.parentNode.insertBefore(faixaEl, main);
-
     window.addEventListener("online", rodarSync);
     setInterval(function () { if (sincronia && sincronia.pendentes() > 0) rodarSync(); }, 60000);
     if (modo === "conta") comecarSincronia();
@@ -1671,8 +1680,7 @@
   function liberarMain() { main.inert = false; }
 
   function atualizarCabecalhoConta() {
-    if (!faixaEl) return;
-    faixaEl.hidden = modo !== "antigo";
+    if (!caixaContaEl) return;
     caixaContaEl.hidden = modo !== "conta";
     if (modo === "conta" && sincronia) mostrarStatus(sincronia.status(), true);
   }
@@ -1794,8 +1802,10 @@
     trocarBanco();
     recarregarEstado();
     if (dlg && dlg.open) fecharRegistro();
-    if (armazem.temDadosAntigos()) { modo = "antigo"; liberarMain(); render(); }
-    else { modo = "entrar"; esconderDadosDaConta(); contaUI.mostrar("entrar"); }
+    modo = "entrar"; esconderDadosDaConta();
+    // com dados do app antigo, recarrega: volta inteiro ao modo antigo, com o plano dele
+    if (armazem.usouAppAntigo()) { location.reload(); return; }
+    contaUI.mostrar("entrar");
     atualizarCabecalhoConta();
   }
 
@@ -1820,6 +1830,13 @@
     if (modo === "conta") aoSair();
   }
 
+  function avisarContaIndisponivel() {
+    if (contaEsperaMigracao && SF.conta.lerHash(location.hash).acao) {
+      toast("A conta ainda não está disponível neste aparelho. Abra o link em outro aparelho.");
+    }
+  }
+
   if (armazem) ligarConta();
   render();
+  avisarContaIndisponivel();
 })();
