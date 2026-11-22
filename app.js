@@ -26,9 +26,7 @@
     else if (!window.SF_CONFIG || CONFIG.apiUrl) semCarregar = guardado.sessao || !guardado.antigo;
   }
   if (semCarregar) modo = "entrar";
-  // Duas travas até os planos 3 e 4:
-  // 1) aparelho do app antigo, sem sessão, nem monta a conta: segue igual, tudo local;
-  // 2) com conta, o plano do data.js (que é de uma pessoa só) não aparece.
+  // Trava até a migração: aparelho do app antigo, sem sessão, nem monta a conta: segue igual, tudo local.
   var contaEsperaMigracao = false;
   if (armazem && !SF.conta.contaDisponivel({ sessao: armazem.sessao(), usouAppAntigo: armazem.usouAppAntigo() })) {
     contaEsperaMigracao = true;
@@ -475,7 +473,7 @@
           : '<span class="' + (ok ? 'ok' : 'pendente') + '" aria-hidden="true">' + (ok ? ICON.check : ICON.camera) + '</span>';
         var passado = diaSel !== hojeChave();
         var detalhe = reg ? resumoRegistro(reg) : ok ? (passado ? "Marcada sem foto" : "Marcada sem foto · toque para completar") : passado ? "Não registrada" : (r.hora ? r.hora + " · " : "") + "Toque para registrar";
-        return '<li><button class="linha-ref" data-registrar="' + r.id + '" aria-label="' + esc(r.nome) + ': ' + (ok ? "registrada" : "não registrada") + '. ' + esc(detalhe) + '">' + icone +
+        return '<li><button class="linha-ref" data-registrar="' + esc(r.id) + '" aria-label="' + esc(r.nome) + ': ' + (ok ? "registrada" : "não registrada") + '. ' + esc(detalhe) + '">' + icone +
           '<span class="flex1"><span class="nome">' + esc(r.nome) + '</span><span class="detalhes">' + esc(detalhe) + '</span></span>' +
           '<span class="seta-linha" aria-hidden="true">›</span></button></li>';
       }).join("") +
@@ -498,7 +496,7 @@
       var passado = k !== hojeChave();
       var aFazer = e.modo === "semana" ? "Meta da semana · toque para registrar com foto" : "Toque para registrar com foto";
       var detalhe = reg ? (reg.hora ? reg.hora + " · " : "") + (reg.foto ? "Treino registrado" : "sem foto") : ok ? "Marcado sem foto" : passado ? "Não registrado" : aFazer;
-      return '<li><button class="linha-ref" data-registrar="' + e.id + '" aria-label="' + esc(e.nome) + ': ' + (ok ? "registrado" : "não registrado") + '. ' + esc(detalhe) + '">' + icone +
+      return '<li><button class="linha-ref" data-registrar="' + esc(e.id) + '" aria-label="' + esc(e.nome) + ': ' + (ok ? "registrado" : "não registrado") + '. ' + esc(detalhe) + '">' + icone +
         '<span class="flex1"><span class="nome">' + esc(e.nome) + '</span><span class="detalhes">' + esc(detalhe) + '</span></span>' +
         '<span class="seta-linha" aria-hidden="true">›</span></button></li>';
     }).join("") + '</ul></div>';
@@ -508,14 +506,14 @@
   function blocoAgenda() {
     var hoje = hojeChave(), hojeDs = dataDaChave(hoje).getDay(), linhas = [];
     var ativas = SF.plano.metasNoDia(modeloAtual().metas, hoje);
-    function comMinutos(m, extra) { return esc(m.nome) + (extra || "") + (m.minutos ? " (" + m.minutos + " min)" : ""); }
+    function comMinutos(m, extra) { return esc(m.nome) + (extra || "") + (m.minutos ? " (" + esc(m.minutos) + " min)" : ""); }
     for (var ds = 1; ds <= 7; ds++) {
       var d = ds % 7;
       var ex = ativas.filter(function (m) { return m.modo === "dias" && (m.dias || []).indexOf(d) >= 0; }).map(function (m) { return comMinutos(m); });
       if (ex.length) linhas.push('<li' + (d === hojeDs ? ' class="hoje"' : '') + '><b>' + DIAS_LONGOS[d] + (d === hojeDs ? ' (hoje)' : '') + '</b><span>' + juntarNomes(ex) + '</span></li>');
     }
     var semanais = ativas.filter(function (m) { return m.modo === "semana"; }).map(function (m) {
-      return comMinutos(m, " · " + m.vezes + (m.vezes === 1 ? " vez" : " vezes") + " por semana");
+      return comMinutos(m, " · " + esc(m.vezes) + (m.vezes === 1 ? " vez" : " vezes") + " por semana");
     });
     if (semanais.length) linhas.push('<li><b>Na semana</b><span>' + juntarNomes(semanais) + '</span></li>');
     return linhas.length ? '<section class="agenda" aria-labelledby="titulo-agenda"><h3 id="titulo-agenda">' + ICON.peso + 'Exercícios da semana</h3><ul>' + linhas.join("") + '</ul></section>' : '';
@@ -980,7 +978,7 @@
       legenda = '<span class="ponto completo"></span>Treino feito <span class="ponto parcial"></span>Em parte <span class="ponto descanso"></span>Sem treino';
       resumo = '<b>' + cumpridos + '</b> de ' + comMeta + ' dia' + (comMeta === 1 ? '' : 's') + ' de treino cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + nomeMes + '.' +
         (semanasOk ? ' <b>' + semanasOk + '</b> semana' + (semanasOk === 1 ? '' : 's') + ' cumprida' + (semanasOk === 1 ? '' : 's') + ' nas metas semanais.' : '') +
-        SF.plano.progressoSemanal(ctxDia(), hoje).map(function (p) { return '<br>' + esc(p.meta.nome) + ': ' + p.feitos + ' de ' + p.vezes + ' nesta semana'; }).join("");
+        SF.plano.progressoSemanal(ctxDia(), hoje).map(function (p) { return '<br>' + esc(p.meta.nome) + ': ' + esc(p.feitos) + ' de ' + esc(p.vezes) + ' nesta semana'; }).join("");
     } else {
       legenda = '<span class="ponto completo"></span>Dia cumprido (refeições e exercícios) <span class="ponto parcial"></span>Em parte';
       resumo = '<b>' + cumpridos + '</b> dia' + (cumpridos === 1 ? '' : 's') + ' cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + nomeMes + '.';
@@ -990,7 +988,7 @@
   }
 
 
-  function rotuloHora(r) { return r.hora || (r.id === "acordar" ? "Acordar" : "Manhã"); }
+  function rotuloHora(r) { return r.hora || (r.id === "acordar" ? "Acordar" : ""); }
 
   // Situação de cada refeição de hoje em relação ao horário atual:
   // "feita", "agora" (horário atual), "proxima" (a seguinte, quando a atual já foi feita),
@@ -1003,8 +1001,12 @@
 
   function semPlano(titulo) {
     return '<h2 class="titulo-secao">' + titulo + '</h2>' +
-      '<div class="vazio">O cadastro do seu plano alimentar e das suas metas de exercício chega em breve.<br><br>' +
-      'Por enquanto, use as receitas e a lista de compras.<br><br><a class="btn primario" href="#receitas">Ver receitas</a></div>';
+      '<div class="vazio">Você ainda não cadastrou seu plano alimentar.<br><br>' +
+      (modo === "conta" ? '<a class="btn primario" href="#plano/editar">Cadastrar meu plano</a> ' : '') +
+      '<a class="btn' + (modo === "conta" ? '' : ' primario') + '" href="#receitas">Ver receitas</a></div>';
+  }
+  function botoesEdicao() {
+    return modo === "conta" ? '<div class="linha-acoes"><a class="btn" href="#plano/editar">Editar plano</a><a class="btn" href="#metas">Metas de exercício</a></div>' : '';
   }
 
   function telaPlano() {
@@ -1016,7 +1018,7 @@
     var ex = fixasDoDia(hoje), feitosEx = fixasFeitas(hoje);
     var h = '<h2 class="titulo-secao">Meu plano do dia</h2>' +
       '<section class="agora-topo" aria-label="Agora">' +
-      '<p class="agora-hora"><b>' + horaAgora() + '</b> · ' + (!atual ? 'todas as refeições de hoje feitas' : 'hora ' + (atual.id === "acordar" ? 'de acordar' : 'do ' + esc(atual.nome.toLowerCase()))) + '</p>' +
+      '<p class="agora-hora"><b>' + horaAgora() + '</b> · ' + (!atual ? (n >= refs.length ? 'todas as refeições de hoje feitas' : 'nenhuma refeição programada para agora') : 'hora ' + (atual.id === "acordar" ? 'de acordar' : 'do ' + esc(atual.nome.toLowerCase()))) + '</p>' +
       '<p class="agora-progresso">' + n + ' de ' + refs.length + ' refeições feitas hoje' +
       (seq ? ' · ' + seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') : '') + '</p>' +
       '<div class="barra" aria-hidden="true"><span style="width:' + pct(n, refs.length) + '%"></span></div>' +
@@ -1030,28 +1032,29 @@
       var s = sit[r.id], reg = regsHoje[r.id];
       var detalhe = s === "feita" ? (reg ? resumoRegistro(reg) : "Marcada") : r.kcal != null ? r.kcal + " kcal" : "";
       h += '<li class="ref-item s-' + s + '">' +
-        '<a class="ref-linha" href="#refeicao/' + r.id + '">' +
-        '<span class="hora">' + rotuloHora(r) + '</span>' +
+        '<a class="ref-linha" href="#refeicao/' + esc(r.id) + '">' +
+        '<span class="hora">' + esc(rotuloHora(r)) + '</span>' +
         '<span class="flex1"><span class="nome">' + esc(r.nome) +
         ' <span class="tag-sit">' + (s === "feita" ? ICON.check : '') + TEXTO_SITUACAO[s] + '</span></span>' +
         '<span class="detalhes">' + esc(detalhe) + '</span></span>' +
         '<span class="seta-linha" aria-hidden="true">›</span></a>' +
-        (s === "atrasada" || s === "agora" ? '<button class="btn mini marcar" data-registrar="' + r.id + '" data-hoje aria-label="Marcar ' + esc(r.nome) + '">' + ICON.camera + 'Marcar</button>' : '') +
+        (s === "atrasada" || s === "agora" ? '<button class="btn mini marcar" data-registrar="' + esc(r.id) + '" data-hoje aria-label="Marcar ' + esc(r.nome) + '">' + ICON.camera + 'Marcar</button>' : '') +
         '</li>';
     });
     h += '</ul>' +
       (t ? '<div class="resumo" aria-label="Total do dia">' +
-      '<div><b>' + t.kcal + '</b><span>kcal</span></div>' +
-      '<div><b>' + t.proteinas + '</b><span>proteínas</span></div>' +
-      '<div><b>' + t.carboidratos + '</b><span>carboidratos</span></div>' +
-      '<div><b>' + t.lipidios + '</b><span>gorduras</span></div></div>' : '') +
+      '<div><b>' + esc(t.kcal) + '</b><span>kcal</span></div>' +
+      '<div><b>' + esc(t.proteinas) + '</b><span>proteínas</span></div>' +
+      '<div><b>' + esc(t.carboidratos) + '</b><span>carboidratos</span></div>' +
+      '<div><b>' + esc(t.lipidios) + '</b><span>gorduras</span></div></div>' : '') +
       blocoAgenda() +
       (t && nutri.linhas ? '<h3 class="subtitulo">Nutrientes por refeição</h3><div class="tabela-wrap"><table class="nutri">' +
       '<thead><tr><th>Refeição</th><th>Prot.</th><th>Gord.</th><th>Carb.</th><th>Calorias</th></tr></thead><tbody>' +
-      nutri.linhas.map(function (l) { return '<tr>' + l.map(function (c) { return '<td>' + c + '</td>'; }).join("") + '</tr>'; }).join("") +
-      '<tr><td><b>Total</b></td><td><b>' + t.proteinas + '</b></td><td><b>' + t.lipidios + '</b></td><td><b>' + t.carboidratos + '</b></td><td><b>' + t.kcal + ' kcal</b></td></tr>' +
+      nutri.linhas.map(function (l) { return '<tr>' + l.map(function (c) { return '<td>' + esc(c) + '</td>'; }).join("") + '</tr>'; }).join("") +
+      '<tr><td><b>Total</b></td><td><b>' + esc(t.proteinas) + '</b></td><td><b>' + esc(t.lipidios) + '</b></td><td><b>' + esc(t.carboidratos) + '</b></td><td><b>' + esc(t.kcal) + ' kcal</b></td></tr>' +
       '</tbody></table></div>' : '') +
-      (planoHoje.prescritoEm ? '<p class="rodape">Plano prescrito em ' + planoHoje.prescritoEm + '. Siga sempre a orientação da sua nutricionista.</p>' : '');
+      (planoHoje.prescritoEm ? '<p class="rodape">Plano prescrito em ' + esc(planoHoje.prescritoEm) + '. Siga sempre a orientação da sua nutricionista.</p>' : '') +
+      botoesEdicao();
     return h;
   }
 
@@ -1063,10 +1066,10 @@
     var refs = refeicoesDe(hojeChave()), i = refs.indexOf(r), ant = refs[i - 1], prox = refs[i + 1];
     var h = '<a class="btn voltar" href="#plano">' + ICON.back + 'Plano do dia</a>' +
       '<article class="detalhe refeicao-detalhe s-' + s + '">' +
-      '<div class="ref-cabeca"><span class="hora">' + rotuloHora(r) + '</span><h2>' + esc(r.nome) + '</h2></div>' +
-      '<div class="meta">' + (r.kcal != null ? '<span class="chip">' + r.kcal + ' kcal</span>' : '') + '<span class="tag-sit">' + (s === "feita" ? ICON.check : '') + TEXTO_SITUACAO[s] + '</span></div>' +
+      '<div class="ref-cabeca">' + (rotuloHora(r) ? '<span class="hora">' + esc(rotuloHora(r)) + '</span>' : '') + '<h2>' + esc(r.nome) + '</h2></div>' +
+      '<div class="meta">' + (r.kcal != null ? '<span class="chip">' + esc(r.kcal) + ' kcal</span>' : '') + '<span class="tag-sit">' + (s === "feita" ? ICON.check : '') + TEXTO_SITUACAO[s] + '</span></div>' +
       (s === "feita" && reg ? '<p class="descricao">' + esc(resumoRegistro(reg)) + '</p>' : '') +
-      '<div class="acoes"><button class="btn' + (s === "feita" ? '' : ' primario') + '" data-registrar="' + r.id + '" data-hoje>' + ICON.camera +
+      '<div class="acoes"><button class="btn' + (s === "feita" ? '' : ' primario') + '" data-registrar="' + esc(r.id) + '" data-hoje>' + ICON.camera +
       (s === "feita" ? 'Ver o registro' : 'Marcar o que comi') + '</button></div>' +
       '<h3>O que comer</h3>';
     (r.itens || []).forEach(function (it) {
@@ -1085,8 +1088,8 @@
       h += '</div>';
     }
     h += '</article><nav class="ref-nav" aria-label="Outras refeições">' +
-      (ant ? '<a class="btn" href="#refeicao/' + ant.id + '">' + ICON.back + esc(ant.nome) + '</a>' : '<span></span>') +
-      (prox ? '<a class="btn seta-dir" href="#refeicao/' + prox.id + '">' + esc(prox.nome) + ICON.back + '</a>' : '') +
+      (ant ? '<a class="btn" href="#refeicao/' + esc(ant.id) + '">' + ICON.back + esc(ant.nome) + '</a>' : '<span></span>') +
+      (prox ? '<a class="btn seta-dir" href="#refeicao/' + esc(prox.id) + '">' + esc(prox.nome) + ICON.back + '</a>' : '') +
       '</nav>';
     return h;
   }
@@ -1162,7 +1165,6 @@
 
 
   function telaFrequencia() {
-    if (!planoDe(hojeChave())) return semPlano("Frequência");
     return '<h2 class="titulo-secao">Frequência</h2>' +
       '<p class="descricao">Marque as refeições que você fez e acompanhe no calendário os dias em que cumpriu o plano.</p>' +
       lembreteBackup() + blocoDia() + blocoCalendario() + telaBackup();
@@ -1423,12 +1425,14 @@
         checks = d.checks && typeof d.checks === "object" ? d.checks : {};
         checksPlano = d.checksPlano && typeof d.checksPlano === "object" ? d.checksPlano : {};
         despensa = Array.isArray(d.quero) ? d.quero.filter(function (p) { return TODOS_PRODUTOS[p]; }) : [];
+        var diasIgn = {};
         var idsRef = SF.plano.idsDeRefeicao(modeloAtual().planos), idsEx = SF.plano.idsDeMeta(modeloAtual().metas), novoDiario = {};
         if (d.diario && typeof d.diario === "object") {
           Object.keys(d.diario).forEach(function (k) {
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !Array.isArray(d.diario[k])) return;
             var l = d.diario[k].filter(function (id, i, arr) { return idsRef.indexOf(id) >= 0 && arr.indexOf(id) === i; });
             if (l.length) novoDiario[k] = l;
+            if (d.diario[k].some(function (id) { return idsRef.indexOf(id) < 0; })) diasIgn[k] = true;
           });
         }
         var hojeK = hojeChave();
@@ -1442,7 +1446,8 @@
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || typeof d.registros[k] !== "object") return;
             Object.keys(d.registros[k]).forEach(function (ref) {
               var x = d.registros[k][ref];
-              if ((idsRef.indexOf(ref) < 0 && idsEx.indexOf(ref) < 0) || !x || typeof x !== "object") return;
+              if (idsRef.indexOf(ref) < 0 && idsEx.indexOf(ref) < 0) { diasIgn[k] = true; return; }
+              if (!x || typeof x !== "object") return;
               // mantém a referência da foto mesmo se a imagem não veio nesta cópia (vem na cópia do mês dela)
               var foto = typeof x.foto === "string" && /^f-[\w-]+$/.test(x.foto) ? x.foto : null;
               novosReg[k] = novosReg[k] || {};
@@ -1470,6 +1475,7 @@
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !Array.isArray(d.treinos[k])) return;
             var l = d.treinos[k].filter(function (id, i, arr) { return idsEx.indexOf(id) >= 0 && arr.indexOf(id) === i; });
             if (l.length) novosTreinos[k] = l;
+            if (d.treinos[k].some(function (id) { return idsEx.indexOf(id) < 0; })) diasIgn[k] = true;
           });
         }
         Object.keys(novosTreinos).forEach(function (k) { if (k <= hojeK) treinos[k] = unir(treinos[k], novosTreinos[k]); });
@@ -1477,7 +1483,9 @@
           .reduce(function (p, id) {
             return p.then(function () { return fetch(fotosCopia[id]).then(function (r) { return r.blob(); }).then(function (b) { return salvarFoto(id, b); }); });
           }, Promise.resolve());
-        gravarFotos.then(function () { salvarTudo(); render(); toast("Cópia restaurada"); },
+        var nIgn = Object.keys(diasIgn).length;
+        var msgOk = nIgn ? "Cópia restaurada. " + nIgn + " dia" + (nIgn === 1 ? "" : "s") + " de marcações ficaram de fora porque não há plano cadastrado para eles." : "Cópia restaurada";
+        gravarFotos.then(function () { salvarTudo(); render(); toast(msgOk); },
           function () { salvarTudo(); render(); toast("Cópia restaurada, mas algumas fotos não couberam no celular"); });
         return;
       } catch (e) { toast("Esse arquivo não é uma cópia do Saúde Familiar"); }
