@@ -126,14 +126,6 @@ test("textoStatus traduz o status da sincronização para o cabeçalho", () => {
   assert.equal(conta.MSG_CONFLITO, "Esta refeição já foi registrada em outro aparelho");
 });
 
-test("contaDisponivel: aparelho do app antigo fica sem conta até a migração", () => {
-  const s = { token: "t", usuario: { id: "u" } };
-  assert.equal(conta.contaDisponivel({ sessao: null, usouAppAntigo: false }), true);
-  assert.equal(conta.contaDisponivel({ sessao: null, usouAppAntigo: true }), false);
-  assert.equal(conta.contaDisponivel({ sessao: { token: "t" }, usouAppAntigo: true }), false);
-  assert.equal(conta.contaDisponivel({ sessao: s, usouAppAntigo: true }), true);
-});
-
 test("rotuloRejeitado cobre plano e meta", () => {
   assert.equal(conta.rotuloRejeitado({ tipo: "plano", chave: "2026-11-22" }), "Plano alimentar: 2026-11-22");
   assert.equal(conta.rotuloRejeitado({ tipo: "meta", chave: "m-1" }), "Meta de exercício: m-1");

@@ -26,26 +26,28 @@
     else if (!window.SF_CONFIG || CONFIG.apiUrl) semCarregar = guardado.sessao || !guardado.antigo;
   }
   if (semCarregar) modo = "entrar";
-  // Trava até a migração: aparelho do app antigo, sem sessão, nem monta a conta: segue igual, tudo local.
-  var contaEsperaMigracao = false;
-  if (armazem && !SF.conta.contaDisponivel({ sessao: armazem.sessao(), usouAppAntigo: armazem.usouAppAntigo() })) {
-    contaEsperaMigracao = true;
-    armazem = null;
-  }
   if (armazem) {
     iniciarConta();
   }
 
   // ---------- armazenamento local (no modo conta, no prefixo do usuário) ----------
+  // Onde o app lê e grava agora: "conta" (sf:<id>:*), "antigo" (mp-*) ou null (tela de entrar, sem nada por baixo).
+  function destinoAtual() {
+    if (SF.conta && SF.conta.destinoGravacao) return SF.conta.destinoGravacao({ modo: modo, userId: userId, semCarregar: semCarregar });
+    return userId ? "conta" : semCarregar ? null : "antigo";
+  }
   function ler(chave, padrao) {
-    if (userId) return armazem.ler(userId, chave, padrao);
+    var destino = destinoAtual();
+    if (destino === "conta") return armazem.ler(userId, chave, padrao);
+    if (destino !== "antigo") return padrao;
     try { var v = localStorage.getItem(chave); return v ? JSON.parse(v) : padrao; }
     catch (e) { return padrao; }
   }
   function gravar(chave, valor) {
-    if (userId) return armazem.gravar(userId, chave, valor);
-    // com conta montada (ou por carregar), nada vira mp-*: isso prenderia o aparelho no modo antigo
-    if (armazem || semCarregar) return false;
+    var destino = destinoAtual();
+    if (destino === "conta") return armazem.gravar(userId, chave, valor);
+    // só o modo antigo grava mp-*; na tela de entrar nada é gravado
+    if (destino !== "antigo") return false;
     try { localStorage.setItem(chave, JSON.stringify(valor)); return true; } catch (e) { return false; }
   }
   var favs = ler("mp-favs", []);
@@ -168,7 +170,7 @@
       bt.addEventListener("click", function () {
         var f = desfazerAtual; desfazerAtual = null;
         toastEl.classList.remove("show", "com-acao");
-        if (f && dono === userId && (!armazem || modo === "conta")) { f(); salvarTudo(); rerenderMantendoScroll(); toast("Desfeito"); }
+        if (f && dono === userId && destinoAtual() !== null) { f(); salvarTudo(); rerenderMantendoScroll(); toast("Desfeito"); }
       });
       toastEl.appendChild(bt);
     }
@@ -408,7 +410,7 @@
   // Modo antigo: o plano do data.js, convertido uma vez. Com conta: o que está no estado (planos e metas).
   var modeloAntigo = null;
   function modeloAtual() {
-    if (armazem) return { planos: planos, metas: metas };
+    if (userId) return { planos: planos, metas: metas };
     if (!modeloAntigo) modeloAntigo = SF.plano.deDataJs(window.PLANO);
     return modeloAntigo;
   }
@@ -1769,7 +1771,6 @@
   window.addEventListener("hashchange", function () {
     // link de confirmar e-mail ou de nova senha aberto com o app já aberto nesta aba
     if (armazem && SF.conta.lerHash(location.hash).acao) { contaUI.iniciar(); return; }
-    avisarContaIndisponivel();
     render(); window.scrollTo(0, 0);
   });
 
@@ -1817,7 +1818,7 @@
   // Tudo aqui só roda com armazem (apiUrl preenchido).
   var ultimoEstado = null; // cópia do estado como foi gravado ou lido por último (o "antes" da fila)
   var timerSync = null, timerRetry = null;
-  var statusEl = null, caixaContaEl = null;
+  var statusEl = null, caixaContaEl = null, faixaContaEl = null;
   var MSG_SESSAO = "Sua sessão terminou. Entre de novo: o que você marcou continua guardado neste aparelho.";
 
   function estadoApp() {
@@ -1844,7 +1845,9 @@
     var s = armazem.sessao();
     if (s && s.usuario && s.usuario.id) { modo = "conta"; userId = s.usuario.id; return; }
     if (s) armazem.apagarSessao(); // sessão sem usuário: não serve
-    if (inicio === "conta" || inicio === "antigo") contaUI.mostrar("entrar");
+    // sem sessão e com dados do app antigo: o app abre e grava em mp-*, sem tela de entrar por cima
+    if (SF.conta.modoInicial({ sessao: null, temDadosAntigos: armazem.temDadosAntigos() }) === "antigo") modo = "antigo";
+    else if (inicio === "conta") contaUI.mostrar("entrar");
   }
 
   function ligarConta() {
@@ -1864,6 +1867,23 @@
     caixaContaEl.appendChild(botao);
     topo.appendChild(caixaContaEl);
 
+    // Modo antigo (aparelho com dados e sem sessão): o app funciona; a faixa convida a criar a conta.
+    faixaContaEl = document.createElement("div");
+    faixaContaEl.className = "faixa-conta";
+    var textoFaixa = document.createElement("p");
+    textoFaixa.textContent = "Crie sua conta para guardar seus dados";
+    var acoesFaixa = document.createElement("div");
+    acoesFaixa.className = "acoes";
+    [["Criar conta", "cadastro", "btn primario"], ["Entrar", "entrar", "btn"]].forEach(function (d) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = d[2]; b.textContent = d[0];
+      b.addEventListener("click", function () { contaUI.mostrar(d[1]); });
+      acoesFaixa.appendChild(b);
+    });
+    faixaContaEl.appendChild(textoFaixa);
+    faixaContaEl.appendChild(acoesFaixa);
+    topo.parentNode.insertBefore(faixaContaEl, topo.nextSibling);
+
     window.addEventListener("online", rodarSync);
     setInterval(function () { if (sincronia && sincronia.pendentes() > 0) rodarSync(); }, 60000);
     if (modo === "conta") comecarSincronia();
@@ -1877,6 +1897,7 @@
   function atualizarCabecalhoConta() {
     if (!caixaContaEl) return;
     caixaContaEl.hidden = modo !== "conta";
+    if (faixaContaEl) faixaContaEl.hidden = modo !== "antigo";
     if (modo === "conta" && sincronia) mostrarStatus(sincronia.status(), true);
   }
 
@@ -1965,8 +1986,6 @@
     var id = s && s.usuario && s.usuario.id;
     if (!id) return;
     if (id !== userId) {
-      // outra aba usou o app antigo com esta tela de entrar aberta: vale a trava
-      if (!userId && armazem.usouAppAntigo()) { armazem.apagarSessao(); location.reload(); return; }
       // outra conta (ou vindo do modo antigo): começa do que está guardado para ela; os mp-* ficam intactos
       pararSincronia();
       userId = id;
@@ -2030,18 +2049,10 @@
     if (modo === "conta") aoSair();
   }
 
-  function avisarContaIndisponivel() {
-    if (contaEsperaMigracao && SF.conta.lerHash(location.hash).acao) {
-      try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* ignora */ }
-      toastAcao("A conta ainda não está disponível neste aparelho. Abra o link em outro aparelho.", "Entendi", function () {});
-    }
-  }
-
   if (armazem) ligarConta();
   if (semCarregar) {
     main.innerHTML = '<div class="vazio" role="alert">Não deu para carregar o app por inteiro. Confira a internet e recarregue a página.<br><br>' +
       '<a class="btn primario" href="./">Recarregar</a></div>';
   }
   render();
-  avisarContaIndisponivel();
 })();

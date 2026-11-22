@@ -10,12 +10,6 @@
     return "entrar";
   }
 
-  // Trava temporária até a migração (plano 4): aparelho do app antigo, sem sessão, fica sem conta.
-  function contaDisponivel(o) {
-    var s = o && o.sessao;
-    return !!(s && s.usuario && s.usuario.id) || !(o && o.usouAppAntigo);
-  }
-
   // Onde gravar: "conta" com usuário logado; "antigo" no modo antigo (sem conta) fora de semCarregar; senão nada.
   function destinoGravacao(o) {
     o = o || {};
@@ -513,7 +507,7 @@
 
   raiz.SF = raiz.SF || {};
   raiz.SF.conta = {
-    modoInicial: modoInicial, destinoGravacao: destinoGravacao, secoesConta: secoesConta, contaDisponivel: contaDisponivel, montarAceite: montarAceite, VERSAO_AVISO: VERSAO_AVISO, lerHash: lerHash, mensagemErro: mensagemErro,
+    modoInicial: modoInicial, destinoGravacao: destinoGravacao, secoesConta: secoesConta, montarAceite: montarAceite, VERSAO_AVISO: VERSAO_AVISO, lerHash: lerHash, mensagemErro: mensagemErro,
     validarEmail: validarEmail, validarSenha: validarSenha, textoSair: textoSair, apagarConta: apagarConta, sairDaConta: sairDaConta,
     rotuloRejeitado: rotuloRejeitado, confirmacaoApagarOk: confirmacaoApagarOk, montar: montar,
     textoConfirmarSair: textoConfirmarSair, textoStatus: textoStatus, MSG_CONFLITO: MSG_CONFLITO
