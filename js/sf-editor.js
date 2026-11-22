@@ -118,8 +118,11 @@
 
   function aplicarAcao(pares, acao, i, j) {
     var m = modeloDosPares(pares);
+    // dataset.i / dataset.j chegam como string: sem Number(), i + d concatenaria.
+    i = Number(i);
+    var temJ = j !== undefined && j !== null && j !== "" && !isNaN(Number(j));
+    j = temJ ? Number(j) : null;
     var r = m.refeicoes[i];
-    var temJ = j !== undefined && j !== null && !isNaN(j);
     if (acao === "add-refeicao") m.refeicoes.push(refeicaoVazia());
     else if (acao === "del-refeicao") { if (r) m.refeicoes.splice(i, 1); }
     else if (acao === "add-item") { if (r) r.itens.push(itemVazio()); }
@@ -130,6 +133,25 @@
       else if (r) trocar(m.refeicoes, i, i + d);
     }
     return paresDoModelo(m);
+  }
+
+  // Mesma leitura de planoDosCampos, sem validar nem descartar vazios: serve para redesenhar o formulário.
+  function planoBrutoDosPares(pares) {
+    var m = modeloDosPares(pares);
+    var total = {};
+    NUTRIENTES.forEach(function (n) { total[n] = m.nut[n]; });
+    return {
+      refeicoes: m.refeicoes.map(function (r) {
+        return {
+          id: r.id, nome: r.nome, hora: r.hora, kcal: r.kcal,
+          itens: r.itens.map(function (it) { return { principal: it.principal, opcoes: it.opcoes.split("\n") }; }),
+          observacoes: r.obs.split("\n"), receitas: r.rec.slice()
+        };
+      }),
+      nutrientes: { linhas: [], total: total },
+      compras: m.compras.split("\n"),
+      prescritoEm: dataParaBr(m.prescrito)
+    };
   }
 
   function numeroValido(texto) {
@@ -250,6 +272,6 @@
   }
 
   raiz.SF = raiz.SF || {};
-  raiz.SF.editor = { htmlPlano: htmlPlano, planoDosCampos: planoDosCampos, aplicarAcao: aplicarAcao };
+  raiz.SF.editor = { htmlPlano: htmlPlano, planoDosCampos: planoDosCampos, planoBrutoDosPares: planoBrutoDosPares, aplicarAcao: aplicarAcao };
   if (typeof module !== "undefined") module.exports = raiz.SF.editor;
 })(typeof window !== "undefined" ? window : globalThis);

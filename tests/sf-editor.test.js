@@ -120,3 +120,44 @@ test("htmlPlano marca o campo com erro", () => {
   assert.ok(h.slice(i, i + 400).includes("Dê um nome à refeição"));
   assert.equal((h.match(/aria-invalid="true"/g) || []).length, 1);
 });
+
+test("aplicarAcao aceita índices em string e ignora fora do intervalo", () => {
+  const dois = [["r0-id", "a"], ["r0-nome", "A"], ["r0-it0-principal", "p0"], ["r0-it0-opcoes", ""], ["r0-it1-principal", "p1"], ["r0-it1-opcoes", ""],
+    ["r1-id", "b"], ["r1-nome", "B"]];
+  const nomes = (pares) => E.planoDosCampos(pares, null, 1).plano.refeicoes.map((r) => r.nome);
+  assert.deepEqual(nomes(E.aplicarAcao(dois, "subir", "1")), ["B", "A"]);
+  assert.deepEqual(nomes(E.aplicarAcao(dois, "descer", "0")), ["B", "A"]);
+  const it = E.planoDosCampos(E.aplicarAcao(dois, "descer", "0", "0"), null, 1).plano.refeicoes[0].itens.map((x) => x.principal);
+  assert.deepEqual(it, ["p1", "p0"]);
+  assert.deepEqual(E.aplicarAcao(dois, "subir", "0"), E.aplicarAcao(dois, "subir", 5));
+  assert.deepEqual(nomes(E.aplicarAcao(dois, "subir", "0")), ["A", "B"]);
+  assert.deepEqual(nomes(E.aplicarAcao(dois, "descer", "1")), ["A", "B"]);
+  assert.deepEqual(E.aplicarAcao(dois, "descer", "0", "1"), E.aplicarAcao(dois, "descer", 0, 1).map((p) => p));
+  const igual = E.aplicarAcao(dois, "descer", "0", "9");
+  assert.deepEqual(igual, E.aplicarAcao(dois, "subir", "7"));
+});
+
+test("planoBrutoDosPares mantém vazios e alimenta htmlPlano depois de adicionar", () => {
+  const pares = base([["r0-it0-principal", ""], ["r0-it0-opcoes", "a\n\nb"], ["r0-obs", "x\n\ny"]]);
+  const bruto = E.planoBrutoDosPares(pares);
+  assert.equal(bruto.refeicoes[0].id, "");
+  assert.deepEqual(bruto.refeicoes[0].itens, [{ principal: "", opcoes: ["a", "", "b"] }]);
+  assert.deepEqual(bruto.refeicoes[0].observacoes, ["x", "", "y"]);
+  const conta = (h, re) => (h.match(re) || []).length;
+  const reItem = /name="r0-it\d+-principal"/g;
+  const antes = conta(E.htmlPlano(bruto, RECEITAS), reItem);
+  const comItem = E.htmlPlano(E.planoBrutoDosPares(E.aplicarAcao(pares, "add-item", 0)), RECEITAS);
+  assert.equal(conta(comItem, reItem), antes + 1);
+  const reRef = /name="r\d+-nome"/g;
+  const comRef = E.htmlPlano(E.planoBrutoDosPares(E.aplicarAcao(pares, "add-refeicao")), RECEITAS);
+  assert.equal(conta(comRef, reRef), conta(E.htmlPlano(bruto, RECEITAS), reRef) + 1);
+  assert.ok(comRef.includes('name="r1-id" value=""'));
+});
+
+test("htmlPlano escapa id oculto e value de receita", () => {
+  const p = { refeicoes: [{ id: 'a"><x>', nome: "n", hora: null, kcal: null, itens: [], observacoes: [], receitas: ['q"><y>'] }], nutrientes: null, compras: [], prescritoEm: null };
+  const h = E.htmlPlano(p, [{ id: 'q"><y>', nome: "R" }]);
+  assert.ok(!h.includes("<x>") && !h.includes("<y>"));
+  assert.ok(h.includes("a&quot;&gt;&lt;x&gt;"));
+  assert.ok(h.includes('value="q&quot;&gt;&lt;y&gt;" checked'));
+});
