@@ -2,18 +2,23 @@
 (function (raiz) {
   var NOMES = {
     "mp-favs": "favs", "mp-sel": "sel", "mp-checks": "checks", "mp-checks-plano": "checksPlano",
-    "mp-quero": "despensa", "mp-diario": "diario", "mp-treinos": "treinos", "mp-registros": "registros"
+    "mp-quero": "despensa", "mp-diario": "diario", "mp-treinos": "treinos", "mp-registros": "registros",
+    "mp-planos": "planos", "mp-metas": "metas"
   };
   var FORMATO_DATA = /^\d{4}-\d{2}-\d{2}\|[a-z0-9_-]{1,60}$/;
+  var CHAVE_PLANO = /^(inicio|\d{4}-\d{2}-\d{2})$/;
+  var CHAVE_META = /^[a-z0-9_-]{1,60}$/;
   var COM_DATA = { feito: true, treino: true, registro: true };
 
   function estadoVazio() {
-    return { favs: [], sel: [], checks: {}, checksPlano: {}, despensa: [], diario: {}, treinos: {}, registros: {} };
+    return { favs: [], sel: [], checks: {}, checksPlano: {}, despensa: [], diario: {}, treinos: {}, registros: {}, planos: {}, metas: {} };
   }
 
   function chaveValida(tipo, chave) {
     if (typeof chave !== "string" || chave.length < 1 || chave.length > 200) return false;
     if (COM_DATA[tipo] && !FORMATO_DATA.test(chave)) return false;
+    if (tipo === "plano") return CHAVE_PLANO.test(chave);
+    if (tipo === "meta") return CHAVE_META.test(chave);
     return true;
   }
 
@@ -42,6 +47,8 @@
       var d = estado.registros[dia] || {};
       Object.keys(d).forEach(function (ref) { por("registro", dia + "|" + ref, d[ref]); });
     });
+    Object.keys(estado.planos || {}).forEach(function (k) { por("plano", k, estado.planos[k]); });
+    Object.keys(estado.metas || {}).forEach(function (k) { por("meta", k, estado.metas[k]); });
     return itens;
   }
 
@@ -66,6 +73,9 @@
       Object.keys(estado[c] || {}).forEach(function (dia) { e[c][dia] = estado[c][dia].slice(); });
     });
     Object.keys(estado.registros || {}).forEach(function (dia) { e.registros[dia] = Object.assign({}, estado.registros[dia]); });
+    ["planos", "metas"].forEach(function (c) {
+      Object.keys(estado[c] || {}).forEach(function (k) { e[c][k] = JSON.parse(JSON.stringify(estado[c][k])); });
+    });
     return e;
   }
 
@@ -104,6 +114,14 @@
         case "checkplano": mapa("checksPlano", it.chave, ativo); break;
         case "feito": porDia("diario", it.chave, ativo); break;
         case "treino": porDia("treinos", it.chave, ativo); break;
+        case "plano": case "meta": {
+          var campo = it.tipo === "plano" ? "planos" : "metas";
+          if (ativo) {
+            if (it.valor === null || typeof it.valor !== "object" || Array.isArray(it.valor)) break;
+            e[campo][it.chave] = JSON.parse(JSON.stringify(it.valor));
+          } else delete e[campo][it.chave];
+          break;
+        }
         case "registro": {
           var p = dividir(it.chave), dia = p[0], ref = p[1];
           if (ativo) {
