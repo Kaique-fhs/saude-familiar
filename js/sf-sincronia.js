@@ -269,8 +269,10 @@
           if (!res || !Array.isArray(res.itens) || typeof res.cursor !== "number") throw new ErroApi(0, "rede");
           aplicarRemotos(res.itens);
           if (res.cursor > cursor || recomecar) {
-            cursor = res.cursor; salvar("cursor", cursor);
-            if (recomecar) { salvar("cursor-versao", VERSAO_CURSOR); recomecar = false; }
+            cursor = res.cursor;
+            var gravou = salvar("cursor", cursor);
+            // só marca a versão com o cursor novo gravado; senão o histórico antigo seria pulado
+            if (recomecar && gravou) { salvar("cursor-versao", VERSAO_CURSOR); recomecar = false; }
           }
           else if (res.mais) throw new ErroApi(500, "cursor");
           if (res.mais) return pagina();

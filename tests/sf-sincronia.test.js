@@ -695,3 +695,23 @@ test("queda no meio do recomeço retoma do cursor salvo", async () => {
   assert.deepEqual(h.reg.baixadas.map((b) => b[0]), [0, 3, 3]);
   assert.equal(local.ler("u1", "cursor", 0), 8);
 });
+
+test("cursor que não coube no recomeço não grava cursor-versao e a próxima sincronização recomeça do zero", async () => {
+  const local = localFalso();
+  local.gravar("u1", "cursor", 900);
+  const gravar = local.gravar;
+  const falha = { sim: true };
+  local.gravar = (u, n, v) => (n === "cursor" && falha.sim ? false : gravar(u, n, v));
+  const h = montar({
+    local,
+    baixar: async (depois) => (depois === 0
+      ? { itens: [], cursor: 5, mais: false }
+      : { itens: [], cursor: depois, mais: false })
+  });
+  await h.sinc.sincronizar();
+  assert.ok(local.ler("u1", "cursor-versao", 0) < 2, "versão não avança sem o cursor gravado");
+  falha.sim = false;
+  await h.sinc.sincronizar();
+  assert.equal(h.reg.baixadas[1][0], 0);
+  assert.equal(local.ler("u1", "cursor-versao", 0), 2);
+});
