@@ -151,3 +151,29 @@ test('envios simultâneos do mesmo usuário não pulam nem duplicam', async () =
   assert.equal(r.itens.length, 5);
   await app.close();
 });
+
+test('plano e meta: chave e valor validados', async () => {
+  const { app } = await criarAppTeste();
+  const { token } = await contaLogada(app, 'a@b.com');
+  const bons = [
+    m({ tipo: 'plano', chave: '2026-11-22', valor: { refeicoes: [] } }),
+    m({ tipo: 'meta', chave: 'm-abc', valor: { id: 'm-abc' } }),
+    m({ tipo: 'meta', chave: 'm-x', valor: null, ativo: false }),
+  ];
+  for (const b of bons) {
+    const r = await enviar(app, token, [b]);
+    assert.equal(r.statusCode, 200);
+  }
+  const ruins = [
+    m({ tipo: 'plano', chave: 'ontem', valor: { refeicoes: [] } }),
+    m({ tipo: 'meta', chave: 'M A', valor: { id: 'x' } }),
+    m({ tipo: 'plano', chave: 'inicio', valor: 'texto' }),
+    m({ tipo: 'plano', chave: 'inicio', valor: [] }),
+  ];
+  for (const r0 of ruins) {
+    const r = await enviar(app, token, [r0]);
+    assert.equal(r.statusCode, 400);
+    assert.deepEqual(r.json(), { erro: 'sync' });
+  }
+  await app.close();
+});
