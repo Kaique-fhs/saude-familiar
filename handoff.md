@@ -1,24 +1,28 @@
 # Handoff
 
 ## Decisões tomadas
-- Servidor próprio na AWS, com app local primeiro: ADR-001. Login próprio: ADR-002. Região us-east-2: ADR-003. "Sair com pendências": opção A do Kaique, ADR-004 em gravação (em `docs/ams/adr/`).
+- Servidor próprio na AWS, com app local primeiro: ADR-001. Login próprio: ADR-002. Região us-east-2: ADR-003. "Sair com pendências": opção A do Kaique; o ADR-004 ainda não está commitado em nenhum branch.
 - Máquina mantida ligada (~US$ 11,50/mês nos créditos), decisão do Kaique.
-- Rulings e pendências dos planos 1, 2 e 5 estão em `docs/superpowers/plans/2026-11-21-contas-roteiro.md` ("Rulings do plano 5", "Pendências menores do plano 5", "Para o plano 3").
+- 22/11/2026: `REF` do provisionamento é obrigatório, sem padrão (substitui o M1 "padrão main"): o `main` não tem `server/`.
+- Rulings e pendências dos planos 1, 2 e 5: `docs/superpowers/plans/2026-11-21-contas-roteiro.md`.
 
-## Estado atual
-- Planos 1, 2 e 5 concluídos e juntados em `feat/contas-ec2` (a642551, com push): servidor 112 ok / 6 skip, site 100 ok, `validar.sh` ok, `testar_maquina.sh` 194/194. Sem PR.
-- AWS no ar (stack `saude-familiar`, us-east-2), fumaça de ponta a ponta OK. URLs e saídas em `server/infra/README.md`.
-- O site no ar continua sendo o `main` (sem login).
-- E-mail do app: saudefamiliarr@gmail.com (verificação em 2 etapas ligada, senha de app no SSM). Segredos só no SSM `/saude-familiar/{teste,producao}/*`.
-- Turnstile site key (pública): `0x4AAAAAAGMIsSAsmJojK__Y`; vai no `config.js` do site no lançamento.
-- Falta aplicar na AWS o update da stack (lifecycle e versionamento do BucketBackups, `AlarmeTravada`) e reprovisionar a máquina: espera OK do Kaique.
+## Estado atual (22/11/2026, conferido na AWS)
+- Planos 1, 2 e 5 juntados em `feat/contas-ec2`. Sem PR. O site no ar é o `main` (sem login).
+- Stack atualizada em 21/11 20:33 (backups versionados, `AlarmeTravada`); template igual ao do repositório, drift não verificado.
+- Máquina roda `368f31b` (`feat/aws-infra`), provisionada em 21/11 20:34. Reinício de prova em 22/11 10:56 UTC: ~25 s fora, tudo voltou sem falha.
+- Backup automático de 22/11 03:30 UTC gravado nos dois ambientes. Inscrição de e-mail do SNS confirmada (entrega não testada).
+- `/teste/conta` pela URL de produção dá 403 (segredo cruzado).
+- Correção do `REF` e do `127.0.0.1` está no branch local `fix/infra-ref-loopback`: testada, SEM push e NÃO implantada.
+- Plano AWS FREE: expira em 2027-03-23 18:35 UTC; US$ 139,92 de crédito em 22/11.
 
 ## Próximos passos
-- Plano 3 (plano e metas por pessoa): escrever o plano a partir da spec; começa pelo parked `naoGravado` e pelo cursor do `/sync`.
-- Plano 4 (migração do app antigo).
-- Plano 6 (lançamento 2): checklist da Rejane, tirar `PLANO` do `data.js`, remover modo antigo.
+1. Push, pela conta `Kaique-fhs` (a ativa no gh é `triokids`, sem escrita aqui): `git push origin fix/infra-ref-loopback:feat/contas-ec2`.
+2. Na máquina, via SSM: baixar o `provisionar.sh` do SHA enviado e rodar com `REF=feat/contas-ec2` e as saídas de `server/infra/README.md`. Conferir: HEAD igual ao SHA, 3000/3001 só em 127.0.0.1, `/saude` 200 e `/conta` 401 nas duas URLs. Volta: script e REF de `368f31b` (`feat/aws-infra`).
+3. Até lá, não atualizar a máquina com o script de `origin/feat/contas-ec2` sem REF: o padrão dele é `main` e apagaria o servidor do disco.
+4. Planos 3 (metas por pessoa), 4 (migração) e 6 (lançamento 2); ligar `config.js` à API no lançamento (site key pública do Turnstile: `0x4AAAAAAGMIsSAsmJojK__Y`).
 
 ## Dúvidas em aberto
-- OK do Kaique para o update da stack e o reprovisionamento (acima).
-- Alinhar a spec §8.1 ao ADR-004 depois que ele for gravado.
+- Passar ao plano pago antes de 2027-03-23.
+- Orçamento de US$ 20 tem `IncludeCredit: true`: não avisa enquanto os créditos cobrem o gasto. Trocar ou não.
+- Gravar o ADR-004 e alinhar a spec §8.1.
 - Kaique limpar os dados `mp-*` de teste no Chrome (`localhost:5500`).

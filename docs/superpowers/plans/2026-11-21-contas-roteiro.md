@@ -24,10 +24,10 @@ Itens que só se provam com Postgres, S3, Turnstile e SMTP reais, e os que a rev
 - [x] Fumaça com `criarBancoPg`, RLS, `SET ROLE`, advisory lock (push/pull de `/sync`) e cascade de `delete from usuarios` sob FORCE RLS, em Postgres real com usuário que não é superusuário.
 - [x] Rollback de transação, papel que não vaza após `comoUsuario` e concorrência real no push/pull (`test:pg`).
 - [x] `trustProxy`: `TRUST_PROXY_SALTOS=2` com Caddy + CloudFront; `remoteAddress` no journal é o IP real do visitante, nenhum do CloudFront.
-- [ ] `grant saude_app to current_user` no segundo banco (teste x produção): o ledger não registra a conferência explícita.
+- [x] `grant saude_app` nos dois bancos: o provisionamento de 21/11 20:34 confirma os dois donos como membros do papel.
 - [x] Foto órfã (LGPD): revarredura em 48 h, maior que a validade da URL assinada.
-- [ ] `TETO_EMAILS_DIA` inválido vira `NaN` e desliga o teto em silêncio (`config.js`): validar inteiro positivo.
-- [ ] Retenção de logs: o `err` serializado pode trazer e-mail ou host; definir retenção no CloudWatch.
+- [x] `TETO_EMAILS_DIA` inválido: `config.js` recusa o que não for inteiro positivo.
+- [x] Retenção de logs: journald com 30 dias e 500 MB (os logs não vão ao CloudWatch).
 - [x] Assinatura S3 (POST e GET) na AWS real: upload 204 e leitura 200 idênticos, sem versões nem delete markers após apagar a conta.
 - [x] SMTP real (link de confirmação) e Turnstile real em produção e teste. Widget Turnstile no navegador, esqueci-senha e teto diário: só no roteiro manual.
 - [x] `principal.js` em execução de verdade (as duas APIs em systemd).
@@ -99,7 +99,7 @@ Do plano 2, adiadas de propósito (minor deferred não resolvido). Revisão fina
 - Task 1 inclui `contas.js` nos Files; revarredura de fotos em 48 h (24 h com timer diário deixa foto órfã passar). Custo: baixo.
 - AMI fixada `ami-09c4af6de8b9844f6` (tipo `AWS::EC2::Image::Id`), nunca `current`. Se errado: deploy futuro trocaria a instância com o Postgres no disco raiz. Custo: atualizar a AMI à mão.
 - AWS CLI pelo caminho completo no Windows; cfn-lint e shellcheck via uvx; cfn-guard opcional. Custo: baixo.
-- Branch `feat/aws-infra` com `REF=feat/aws-infra`, push permitido sem segredos. Custo: baixo (padrão trocado para `main` no merge, M1).
+- Branch `feat/aws-infra` com `REF=feat/aws-infra`, push permitido sem segredos. Custo: baixo (M1 trocou o padrão para `main`; revogado em 22/11: `REF` obrigatório, porque o `main` não tem `server/`).
 - Trailer `Co-Authored-By: Claude Opus 5.5` conforme a atribuição da sessão. Custo: baixo.
 - P5 Task 1 e P2 Task 1 mexem em `config.js` e `contas.js` em worktrees paralelos; conflitos resolvidos no merge. Custo: merge manual.
 - Task 2: corrigir na raiz com a migração 003 (`nullif(current_setting('app.user_id', true), '')::uuid`: sem `app.user_id`, 0 linhas em vez de erro); não editar a 002. Custo: uma migração a mais.
@@ -119,14 +119,14 @@ Sem bloqueio. A revisão final recomendou fechar antes de abrir para usuários r
 - `testar_maquina.sh` passou a ignorar `CAMINHO_SITE` no merge (padrão `/saude-familiar/` está certo para o Pages).
 - `fumaca.sh` põe o token de sessão em `-H` na linha de comando; `printf` com quebra literal; estado com senha em `~/.saude-fumaca` não é apagado após apagar a conta; `validar.sh` usa `shellcheck.exe`.
 - `OnFailure=saude-alerta@%n.service` gera o nome `saude-alerta@saude-api@producao.service.service`; funciona por desenho do systemd, mas não foi testado disparando. Mais limpo com `%N`.
-- A máquina nunca foi reiniciada para provar a ordem de partida (Postgres antes das APIs); fazer um `sudo reboot` de prova antes do lançamento.
+- Reinício de prova: feito em 22/11 (Postgres antes das APIs, ~25 s fora, sem falha).
 - O widget Turnstile real só é provado no roteiro manual.
-- Update da stack (BucketBackups lifecycle/versionamento + `AlarmeTravada`) e reprovisionamento da máquina dependem do OK do Kaique; conferir no change set só `Modify BucketBackups (Replacement: False)` e `Add AlarmeTravada`.
-- `principal.js:35` escuta em `0.0.0.0` (plano dizia 127.0.0.1); hoje só o security group protege. `host: '127.0.0.1'` ou variável `HOST`.
+- Update da stack e reprovisionamento de `368f31b`: aplicados em 21/11, conferidos em 22/11.
+- `principal.js` em `127.0.0.1`: corrigido com teste em 22/11; falta implantar.
 - `restaurar.sh:154`: `create database` nasce com CONNECT para PUBLIC; acrescentar `revoke connect ... from public`. As duas APIs usam o mesmo usuário `saude`: isolamento teste x produção é de dados de ensaio, não fronteira de segurança.
 - `postgres.sql`: acrescentar `SET log_min_error_statement = panic;` (senha em `ALTER ROLE` falho iria ao log).
 - `server/.env.example` sem `TRUST_PROXY_SALTOS` e `DB_POOL_MAX`.
-- Sem teste de ponta a ponta de `https://<UrlProducao>/teste/conta` = 403 (segredo cruzado); incluir na próxima fumaça.
+- Segredo cruzado (`https://<UrlProducao>/teste/conta`): 403 conferido em 22/11; falta incluir no `fumaca.sh`.
 - README raiz: avisar que `cabecalhoOrigemDev` em `config.js` é só para o servidor de desenvolvimento e nunca recebe o `SEGREDO_ORIGEM` real do teste (site público).
 - `CONNECTION LIMIT 8` de `saude_dono_teste` não foi exercitado na máquina; se `test:pg` falhar por limite, subir para 10. README sem aviso de que `test:pg` usa swap e conexões da máquina de produção; README sem `DB_POOL_MAX`.
 - Do ledger (T1): laço de `apagarFotosPendentes` duplicado (`contas.js:147-160` x `243-260`); 48h repetido em `tarefas.js:175`; conta recém-apagada processada 2x; `trustProxySaltos` sem default em config montada à mão.
