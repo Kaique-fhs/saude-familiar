@@ -16,6 +16,21 @@
     return !!(s && s.usuario && s.usuario.id) || !(o && o.usouAppAntigo);
   }
 
+  // Versão do aviso de privacidade: igual à de server/src/aceite.js e à de privacidade.html.
+  var VERSAO_AVISO = "1";
+  var TEXTO_ACEITE_SAUDE = [
+    "Tenho 18 anos ou mais e ", "concordo que o Saúde Familiar trate meus dados de saúde",
+    " (alimentação, exercícios, fotos e listas) para guardar, sincronizar e me mostrar o meu acompanhamento."
+  ];
+  var TEXTO_ACEITE_TRANSFERENCIA = [
+    "", "Concordo que meus dados sejam enviados e guardados fora do Brasil",
+    ", principalmente nos Estados Unidos, para o app funcionar."
+  ];
+
+  function montarAceite(saude, transferencia) {
+    return saude === true && transferencia === true ? { versao: VERSAO_AVISO, saude: true, transferencia: true } : null;
+  }
+
   function lerHash(hash) {
     var m = /^#(confirmar|nova-senha)=(.+)$/.exec(String(hash || ""));
     if (!m) return { acao: null, token: "" };
@@ -32,6 +47,7 @@
     senha: "A senha precisa ter de 8 a 128 caracteres.",
     email: "Esse e-mail não parece certo. Confira e tente de novo.",
     token: "Esse link não vale mais. Peça um novo.",
+    aceite: "Para criar a conta, marque as duas caixas. Se já marcou, recarregue a página e tente de novo.",
     armazenamento: "Não deu para guardar o acesso neste aparelho. Libere espaço ou saia do modo restrito e tente de novo.",
     rede: "Sem conexão com o servidor. Confira a internet e tente de novo."
   };
@@ -192,6 +208,15 @@
       var input = el("input", Object.assign({ id: id, type: tipo, name: id }, extra || {}));
       return { linha: el("div", { "class": "conta-campo" }, [el("label", { "for": id, texto: rotulo }), input]), input: input };
     }
+    // Caixa de consentimento: nasce desmarcada; o trecho do meio vai em destaque.
+    function caixaAceite(id, partes) {
+      var input = el("input", { id: id, type: "checkbox", name: id, required: "required" });
+      var texto = el("span", {}, [el("span", { texto: partes[0] }), el("strong", { texto: partes[1] }), el("span", { texto: partes[2] })]);
+      return { linha: el("label", { "class": "conta-aceite", "for": id }, [input, texto]), input: input };
+    }
+    function linkAviso() {
+      return el("a", { "class": "conta-link-aviso", href: "privacidade.html", target: "_blank", rel: "noopener", texto: "Aviso de privacidade" });
+    }
     function botao(texto, classe, tipo) { return el("button", { type: tipo || "button", "class": "btn " + (classe || ""), texto: texto }); }
     function link(texto, aoClicar) {
       var b = el("button", { type: "button", "class": "conta-link", texto: texto });
@@ -248,6 +273,7 @@
         link("Esqueci minha senha", mostrarEsqueci),
         link("Criar conta", mostrarCadastro)
       ]));
+      t.caixa.appendChild(linkAviso());
       foco(email.input);
     }
 
@@ -256,12 +282,19 @@
       var email = campo("sf-email", "E-mail", "email", { autocomplete: "email", required: "required", inputmode: "email" });
       var senha = campo("sf-senha", "Senha (8 a 128 caracteres)", "password", { autocomplete: "new-password", required: "required", minlength: "8", maxlength: "128" });
       var caixaCaptcha = el("div", { "class": "conta-captcha" });
-      formulario(t, [email, senha, caixaCaptcha], "Criar conta", function (b) {
+      var saude = caixaAceite("sf-aceite-saude", TEXTO_ACEITE_SAUDE);
+      var fora = caixaAceite("sf-aceite-transferencia", TEXTO_ACEITE_TRANSFERENCIA);
+      var nota = el("p", { "class": "conta-nota" }, [
+        el("span", { texto: "Você pode revogar quando quiser apagando a conta. Leia o " }), linkAviso(), el("span", { texto: "." })
+      ]);
+      formulario(t, [email, senha, saude, fora, nota, caixaCaptcha], "Criar conta", function (b) {
         if (!validarEmail(email.input.value)) { dizerErro(t, "email"); foco(email.input); return; }
         if (!validarSenha(senha.input.value)) { dizerErro(t, "senha"); foco(senha.input); return; }
+        var aceite = montarAceite(saude.input.checked, fora.input.checked);
+        if (!aceite) { dizerErro(t, "aceite"); foco(saude.input.checked ? fora.input : saude.input); return; }
         if (config.turnstileChave && !turnstileToken) { dizerErro(t, "captcha"); return; }
         ocupado(b, true, "Criar conta");
-        return api.cadastro(email.input.value.trim(), senha.input.value, turnstileToken).then(function () {
+        return api.cadastro(email.input.value.trim(), senha.input.value, turnstileToken, aceite).then(function () {
           mostrarNeutra("Confira seu e-mail");
         }, function (e) {
           ocupado(b, false, "Criar conta");
@@ -352,6 +385,7 @@
       if (!s) { mostrarEntrar(); return; }
       var t = tela("Conta", null);
       t.caixa.appendChild(el("p", { "class": "conta-email", texto: s.usuario.email }));
+      t.caixa.appendChild(linkAviso());
 
       function pendentes() {
         if (o.pendentes) return o.pendentes(s.usuario.id);
@@ -463,7 +497,7 @@
 
   raiz.SF = raiz.SF || {};
   raiz.SF.conta = {
-    modoInicial: modoInicial, contaDisponivel: contaDisponivel, lerHash: lerHash, mensagemErro: mensagemErro,
+    modoInicial: modoInicial, contaDisponivel: contaDisponivel, montarAceite: montarAceite, VERSAO_AVISO: VERSAO_AVISO, lerHash: lerHash, mensagemErro: mensagemErro,
     validarEmail: validarEmail, validarSenha: validarSenha, textoSair: textoSair, apagarConta: apagarConta, sairDaConta: sairDaConta,
     rotuloRejeitado: rotuloRejeitado, confirmacaoApagarOk: confirmacaoApagarOk, montar: montar,
     textoConfirmarSair: textoConfirmarSair, textoStatus: textoStatus, MSG_CONFLITO: MSG_CONFLITO

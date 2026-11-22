@@ -6,7 +6,7 @@ const { execFileSync } = require("node:child_process");
 
 const raiz = path.join(__dirname, "..");
 const DO_SITE = new Set([
-  "index.html", "app.js", "config.js", "data.js", "styles.css", "sw.js", "js", "manifest.webmanifest",
+  "index.html", "privacidade.html", "app.js", "config.js", "data.js", "styles.css", "sw.js", "js", "manifest.webmanifest",
   "logo.svg", "icon-192.png", "icon-512.png", "apple-touch-icon.png"
 ]);
 

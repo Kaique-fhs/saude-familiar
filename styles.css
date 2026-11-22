@@ -501,6 +501,31 @@ dialog#registro::backdrop { background: rgba(0,0,0,.55); }
 .conta-campo label { font-weight: 700; font-size: .9rem; }
 .conta-campo input { min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); font: inherit; }
 .conta-campo input:focus-visible, .conta-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.conta-aceite { display: flex; gap: 10px; align-items: flex-start; min-height: 44px; margin-bottom: 12px; font-size: .9rem; line-height: 1.4; cursor: pointer; }
+.conta-aceite input { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--primary); }
+.conta-aceite input:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.conta-nota { margin: 0 0 12px; font-size: .85rem; color: var(--muted); }
+.conta-link-aviso { color: var(--primary-strong); font-weight: 700; text-decoration: underline; }
+.conta-caixa > .conta-link-aviso { display: inline-block; padding: 12px 4px; }
+
+/* Aviso de privacidade (privacidade.html) */
+body.pagina-aviso { padding: 0; }
+.aviso { display: block; max-width: 720px; margin: 0 auto; padding: 16px 16px 48px; line-height: 1.55; overflow-wrap: anywhere; }
+.aviso h1 { font-size: 1.5rem; line-height: 1.25; }
+.aviso h2 { font-size: 1.15rem; margin: 28px 0 8px; }
+.aviso ul { padding-left: 20px; }
+.aviso li { margin-bottom: 4px; }
+.aviso a { color: var(--primary-strong); text-decoration: underline; }
+.aviso table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.aviso th, .aviso td { padding: 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); }
+@media (max-width: 600px) {
+  .aviso thead { display: none; }
+  .aviso table, .aviso tbody, .aviso tr, .aviso td { display: block; width: 100%; }
+  .aviso tr { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .aviso td { padding: 2px 0; border: 0; }
+  .aviso td::before { content: attr(data-rotulo) ": "; font-weight: 700; }
+}
+
 .conta-erro { margin: 0 0 8px; color: var(--heart); font-weight: 700; font-size: .92rem; }
 .conta-erro:empty { display: none; }
 .conta-aviso { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-size: .9rem; font-weight: 700; }

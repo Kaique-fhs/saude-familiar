@@ -45,8 +45,8 @@
     }
 
     return {
-      cadastro: function (email, senha, turnstile) {
-        return pedir("POST", "/conta/cadastro", { corpo: { email: email, senha: senha }, turnstile: turnstile || "" });
+      cadastro: function (email, senha, turnstile, aceite) {
+        return pedir("POST", "/conta/cadastro", { corpo: { email: email, senha: senha, aceite: aceite }, turnstile: turnstile || "" });
       },
       confirmar: function (token) { return pedir("POST", "/conta/confirmar", { corpo: { token: token } }); },
       entrar: function (email, senha) { return pedir("POST", "/conta/entrar", { corpo: { email: email, senha: senha } }); },

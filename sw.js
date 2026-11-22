@@ -5,6 +5,7 @@ var VERSAO = "meu-prato-v36";
 var ARQUIVOS = [
   "./",
   "./index.html",
+  "./privacidade.html",
   "./styles.css?v=36",
   "./config.js?v=36",
   "./data.js?v=36",
@@ -41,17 +42,22 @@ self.addEventListener("fetch", function (e) {
 
   // Página: tenta a rede (para pegar atualizações) e cai no cache sem internet.
   if (req.mode === "navigate") {
+    // Só o app vira o index.html guardado; outra página (o aviso) fica guardada com o próprio endereço.
+    var guardarComo = /(\/|\/index\.html)$/.test(url.pathname) ? "./index.html" : url.origin + url.pathname;
+    var copiaGuardada = function () {
+      return caches.match(guardarComo).then(function (g) { return g || caches.match("./index.html"); });
+    };
     e.respondWith(
       // no-cache: confere com o servidor em vez de usar a cópia do cache HTTP (que o GitHub guarda por 10 min).
       fetch(new Request(req.url, { cache: "no-cache", credentials: "same-origin" })).then(function (res) {
         if (res.ok) {
           var copia = res.clone();
-          caches.open(VERSAO).then(function (c) { c.put("./index.html", copia); });
+          caches.open(VERSAO).then(function (c) { c.put(guardarComo, copia); });
           return res;
         }
         // página de erro do servidor: usa a cópia boa guardada, se houver
-        return caches.match("./index.html").then(function (guardada) { return guardada || res; });
-      }).catch(function () { return caches.match("./index.html"); })
+        return copiaGuardada().then(function (guardada) { return guardada || res; });
+      }).catch(copiaGuardada)
     );
     return;
   }

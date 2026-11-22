@@ -88,13 +88,14 @@ test("baixar monta ?depois=&limite=", async () => {
 
 test("cadastro e esqueci mandam x-turnstile-token", async () => {
   const m = montar({ resposta: resposta(202, { ok: true }) });
-  await m.api.cadastro("a@b.c", "senha1234", "tk");
+  const aceite = { versao: "1", saude: true, transferencia: true };
+  await m.api.cadastro("a@b.c", "senha1234", "tk", aceite);
   await m.api.esqueci("a@b.c", "tk2");
   assert.equal(m.chamadas[0].url, "http://api.teste/conta/cadastro");
   assert.equal(m.chamadas[0].init.headers["x-turnstile-token"], "tk");
   assert.equal(m.chamadas[1].url, "http://api.teste/conta/esqueci");
   assert.equal(m.chamadas[1].init.headers["x-turnstile-token"], "tk2");
-  assert.deepEqual(JSON.parse(m.chamadas[0].init.body), { email: "a@b.c", senha: "senha1234" });
+  assert.deepEqual(JSON.parse(m.chamadas[0].init.body), { email: "a@b.c", senha: "senha1234", aceite });
 });
 
 test("rotas restantes: método, caminho e corpo", async () => {
