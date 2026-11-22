@@ -6,10 +6,11 @@
 - 22/11/2026: `REF` do provisionamento é obrigatório, sem padrão.
 - 22/11/2026: orçamento de US$ 20 mede gasto bruto (`IncludeCredit: false`).
 - 22/11/2026: abrir o cadastro antes dos planos 3 e 4, com 2 travas (ADR-005): conta não vê o `PLANO` do `data.js`; aparelho que já usou o app antigo (`mp-*`) segue local, sem conta.
+- 22/11/2026: cadastro exige aceite versionado do aviso de privacidade (ADR-006); versão nova sobe no servidor antes do site.
 - Rulings e pendências dos planos 1, 2 e 5: `docs/superpowers/plans/2026-11-21-contas-roteiro.md`.
 
 ## Estado atual (22/11/2026)
-- Máquina roda `e1cf853` de `feat/contas-ec2`; `server/` não mudou depois, não precisa de deploy.
+- Máquina roda `e1cf853` de `feat/contas-ec2`; `feat/aceite` muda `server/` e precisa de deploy depois do push.
 - E-mail de alerta disparado pelo caminho real às 15:32 UTC: SNS registrou entrega; recebimento na caixa não confirmado.
 - `feat/aceite`: travas, site ligado à API, `_config.yml` e aceite no servidor (migração 004). Push só para `feat/contas-ec2`, depois deploy; nunca para o `main` (a tela dele não manda o aceite).
 - `feat/aceite-site` (local): em cima do anterior, aviso e caixas. Vai ao `main` depois do deploy e de preencher o aviso (teste TRAVA DE PUBLICAÇÃO verde). Rascunhos em `docs/privacidade/`, sem commit.
@@ -26,7 +27,6 @@
 - Sem "Restaurar cópia" para aparelho sem dados até o plano 4 (troca de celular da Rejane).
 - Aviso de privacidade: faltam responsável, encarregado, contato, acessos, prazo do Gmail e a base da transferência.
 - Logs além de 30 dias (syslog ~5 semanas, Postgres ~11): ajuste de rotação aguarda OK.
-- ADR-006 (aceite) em rascunho, aguardando aprovação.
 - Passar ao plano pago antes de 2027-03-23.
 - Gravar o ADR-004; alinhar a spec §8.1 e §8.5.
 - Menores da revisão: "Nova senha" com sessão não tem voltar; `sair` sem timeout; `sw.js` apaga caches de outros sites da mesma origem; token em `localStorage` de origem compartilhada (domínio próprio resolve).
