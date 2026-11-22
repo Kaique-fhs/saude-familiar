@@ -10,7 +10,7 @@ Resumo para revisao. Nada aqui roda sozinho: cada passo com a AWS exige o OK do 
 - Caddy na 443 com certificado Let's Encrypt para `<ip>.sslip.io`; a 80 so atende o desafio ACME (resto: 404). So o CloudFront alcanca a 443 (security group). `/teste/*` vai para a 3001, o resto para a 3000.
 - Swap de 2 GB, journald com 500 MB e 30 dias, alerta de disco acima de 80% (SNS, no maximo 1 por dia), timer diario de limpeza de fotos por ambiente.
 
-## Parametros no SSM (SecureString)
+## Parametros no SSM (SecureString; `SMTP_USER` e `EMAIL_REMETENTE` sao String)
 
 Em `/saude-familiar/<teste|producao>/`: `DB_SENHA`, `SEGREDO_ORIGEM`, `TURNSTILE_SECRET`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_REMETENTE`.
 `DB_SENHA` e `SEGREDO_ORIGEM` sao gerados com `openssl rand -hex 32` direto no `put-parameter`, sem eco. Os demais o Kaique grava. Nada disso vai para o repositorio ou para log.
@@ -18,9 +18,11 @@ Em `/saude-familiar/<teste|producao>/`: `DB_SENHA`, `SEGREDO_ORIGEM`, `TURNSTILE
 ## Provisionar (na maquina, como root, via Session Manager)
 
 ```
-sudo bash /opt/saude-familiar/server/infra/maquina/provisionar.sh <ip>.sslip.io <bucket-fotos> <bucket-backups> <arn-topico-alertas>
+sudo REF=feat/contas-ec2 bash /opt/saude-familiar/server/infra/maquina/provisionar.sh <ip>.sslip.io <bucket-fotos> <bucket-backups> <arn-topico-alertas>
 ```
-Primeira vez: `sudo git clone --branch main https://github.com/Kaique-fhs/saude-familiar /opt/saude-familiar` e rodar o script a partir dai (ele reaproveita o clone). Pode rodar de novo: cada passo confere o estado antes de agir. Para atualizar a API, rode de novo (faz `git fetch`, `npm ci` e reinicia os servicos).
+Primeira vez: `sudo git clone --branch feat/contas-ec2 https://github.com/Kaique-fhs/saude-familiar /opt/saude-familiar` e rodar o script a partir dai (ele reaproveita o clone). Pode rodar de novo: cada passo confere o estado antes de agir. Para atualizar a API, rode de novo (faz `git fetch`, `npm ci` e reinicia os servicos).
+
+`REF` e obrigatorio e o script recusa branch sem `server/`. Hoje o branch de producao e `feat/contas-ec2`: o `main` ainda e so o site. No dia em que `server/` entrar no `main`, troque os dois comandos acima.
 
 ## Operacao
 
@@ -48,7 +50,7 @@ Backups: `s3://<BucketBackups>/<ambiente>/<AAAA-MM-DD>.dump` (e `contas_apagadas
 ## Refazer tudo do zero (maquina perdida)
 
 1. Se a stack e a maquina ainda existem mas a instancia morreu: o alarme de recuperacao/reinicio cuida de falhas de hardware e travas. Se a instancia foi terminada, o volume ficou retido (ver abaixo): da para anexa-lo ou seguir os passos seguintes e restaurar do backup.
-2. Parametros no SSM (`/saude-familiar/<teste|producao>/`, SecureString) **antes** de tudo: `DB_SENHA` e `SEGREDO_ORIGEM` com `openssl rand -hex 32` direto no `put-parameter` (sem eco); `TURNSTILE_SECRET`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_REMETENTE` o Kaique grava. Se os parametros ainda existem, nao regrave: as distribuicoes e a maquina usam os mesmos valores.
+2. Parametros no SSM (`/saude-familiar/<teste|producao>/`, tipos na secao acima) **antes** de tudo: `DB_SENHA` e `SEGREDO_ORIGEM` com `openssl rand -hex 32` direto no `put-parameter` (sem eco); `TURNSTILE_SECRET`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_REMETENTE` o Kaique grava. Se os parametros ainda existem, nao regrave: as distribuicoes e a maquina usam os mesmos valores.
 3. Stack: o comando de deploy acima (sem `--no-execute-changeset`, apos o OK). Se a stack antiga ainda existe com a maquina retida, remova a maquina e o volume antigos a mao antes, para nao pagar em dobro.
 4. Anote as saidas (`IpPublico`, `NomeOrigem`, `BucketFotos`, `BucketBackups`, `TopicoAlertas`) e provisione a maquina nova (secao "Provisionar"). O provisionamento cria os bancos vazios.
 5. Restaure cada ambiente: `restaurar.sh <ambiente> <data> saude_<ambiente> --substituir` (o banco vivo e o vazio criado no passo 4). Fotos ja estao no bucket de fotos (versionado), nao dependem da maquina.

@@ -24,7 +24,7 @@ node --env-file=.env src/principal.js     # ou: npm start com as variáveis expo
 ```
 
 Ao iniciar, o servidor aplica as migrações, tenta apagar as fotos de contas já
-apagadas que ficaram pendentes e escuta em `0.0.0.0:PORT`.
+apagadas que ficaram pendentes e escuta em `127.0.0.1:PORT` (quem atende de fora é o Caddy).
 `AMBIENTE=teste` também libera CORS para `http://localhost:*`.
 
 Toda rota, exceto `GET /saude`, exige o cabeçalho `x-saude-origem` com o valor de

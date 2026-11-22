@@ -394,6 +394,34 @@ verifica "Node 24 com sha256 conferido" bash -c "grep -q 'sha256sum -c' '$P' && 
 verifica "AWS CLI v2 aarch64" grep -q "awscli-exe-linux-aarch64.zip" "$P"
 verifica "uso sem argumentos falha" bash -c "! bash '$P' >/dev/null 2>&1"
 
+# REF: repositorio git de verdade em pasta temporaria; so o npm e falso.
+R="$TMP/ref"; mkdir -p "$R/bin"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$R/bin/npm"; chmod +x "$R/bin/npm"
+g() { git -c user.name=teste -c user.email=teste@example.com -c commit.gpgsign=false -c core.autocrlf=false "$@"; }
+g init -q -b sem-server "$R/origem"
+g -C "$R/origem" commit -q --allow-empty -m vazio
+g -C "$R/origem" switch -q -c com-server
+mkdir -p "$R/origem/server/infra/maquina"
+echo '{}' > "$R/origem/server/package.json"
+echo '#!/bin/sh' > "$R/origem/server/infra/maquina/provisionar.sh"
+g -C "$R/origem" add server; g -C "$R/origem" commit -q -m server
+baixar() { # ref destino
+  # shellcheck disable=SC2016
+  REF="$1" PATH="$R/bin:$PATH" bash -c 'source "$1"; REPO_URL="$2"; DESTINO="$3"; MAQ="$3/server/infra/maquina"; baixar_codigo' _ "$P" "$R/origem" "$2" 2>&1
+}
+SAIDA_P="$(unset REF; bash "$P" a b c d 2>&1)"; RC=$?
+if [ "$RC" -ne 0 ] && [[ "$SAIDA_P" == *"REF obrigatorio"* ]]; then ok "REF ausente e recusado"; else falha "REF ausente e recusado"; fi
+baixar com-server "$R/destino" >/dev/null; RC=$?
+if [ "$RC" -eq 0 ] && [ -f "$R/destino/server/package.json" ]; then ok "REF com server/ instala"; else falha "REF com server/ instala"; fi
+baixar com-server "$R/destino" >/dev/null; RC=$?
+if [ "$RC" -eq 0 ]; then ok "REF com server/ atualiza clone existente"; else falha "REF com server/ atualiza clone existente"; fi
+SAIDA_P="$(baixar sem-server "$R/destino")"; RC=$?
+if [ "$RC" -ne 0 ] && [[ "$SAIDA_P" == *"nao tem server/"* ]]; then ok "REF sem server/ e recusado"; else falha "REF sem server/ e recusado"; fi
+verifica "REF sem server/ deixa os arquivos no lugar" test -f "$R/destino/server/package.json"
+verifica "REF sem server/ nao troca de branch" test "$(git -C "$R/destino" branch --show-current)" = com-server
+SAIDA_P="$(baixar sem-server "$R/novo")"; RC=$?
+if [ "$RC" -ne 0 ] && [[ "$SAIDA_P" == *"nao tem server/"* ]]; then ok "clone novo de REF sem server/ e recusado"; else falha "clone novo de REF sem server/ e recusado"; fi
+
 echo
 echo "$((TOTAL - FALHAS))/$TOTAL ok"
 [ "$FALHAS" -eq 0 ]

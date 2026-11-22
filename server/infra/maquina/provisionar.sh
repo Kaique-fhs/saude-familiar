@@ -3,13 +3,14 @@
 # Uso (root): provisionar.sh <nome-origem> <bucket-fotos> <bucket-backups> <topico-alertas>
 #   nome-origem:     <ip>.sslip.io (certificado Let's Encrypt pelo Caddy)
 #   topico-alertas:  ARN do topico SNS (alerta de disco)
-# Variavel opcional: REF (branch do repositorio; padrao main).
+# Variavel obrigatoria: REF (branch do repositorio que contem server/; sem padrao,
+# porque um branch sem server/ apagaria a API do disco).
 # Pre-requisito: os parametros /saude-familiar/{teste,producao}/* ja existem no SSM
 # (ver server/infra/RUNBOOK.md) e a instancia tem o papel que os le.
 set -euo pipefail
 
 REPO_URL="https://github.com/Kaique-fhs/saude-familiar"
-REF="${REF:-main}"
+REF="${REF:-}"
 DESTINO="/opt/saude-familiar"
 NODE_VERSAO="v24.22.3"
 NODE_SHA256="6e51a2ada00f0011cc266f65d98922b403d7ad88f809ca2aa615a5fe1ce6e86c"
@@ -83,13 +84,26 @@ criar_usuario() {
   id saude >/dev/null 2>&1 || useradd --system --home-dir "$DESTINO" --no-create-home --shell /usr/sbin/nologin saude
 }
 
+# Confere no branch remoto, antes de qualquer checkout.
+exigir_server() {
+  local arq
+  for arq in server/package.json server/infra/maquina/provisionar.sh; do
+    if ! git -C "$DESTINO" cat-file -e "origin/$REF:$arq" 2>/dev/null; then
+      echo "o branch $REF nao tem server/ ($arq): nada foi trocado" >&2
+      exit 1
+    fi
+  done
+}
+
 baixar_codigo() {
   log "codigo ($REF)"
   if [ -d "$DESTINO/.git" ]; then
     git -C "$DESTINO" fetch --quiet origin "$REF"
+    exigir_server
     git -C "$DESTINO" checkout --quiet -B "$REF" "origin/$REF"
   else
     git clone --quiet --branch "$REF" "$REPO_URL" "$DESTINO"
+    exigir_server
   fi
   (cd "$DESTINO/server" && PATH="/opt/node/bin:$PATH" npm ci --omit=dev --no-audit --no-fund)
   chmod +x "$MAQ"/*.sh
@@ -167,6 +181,7 @@ principal() {
     echo "uso: $0 <nome-origem> <bucket-fotos> <bucket-backups> <topico-alertas>" >&2
     exit 2
   fi
+  [ -n "$REF" ] || { echo "REF obrigatorio: branch que contem server/ (ex.: REF=feat/contas-ec2)" >&2; exit 2; }
   [ "$(id -u)" -eq 0 ] || { echo "rode como root" >&2; exit 1; }
   NOME_ORIGEM="$1"; BUCKET_FOTOS="$2"; BUCKET_BACKUPS="$3"; TOPICO="$4"
 

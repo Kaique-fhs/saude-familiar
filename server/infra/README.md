@@ -16,11 +16,11 @@ Roteiro de operacao: `RUNBOOK.md`. Nenhum segredo mora aqui: ficam no SSM Parame
 | UrlTeste | https://d14fl8kow5jdsd.cloudfront.net |
 | UrlProducao | https://d24j5hln30wud.cloudfront.net |
 
-Parametros SSM (SecureString) existentes nos dois ambientes: `DB_SENHA`, `SEGREDO_ORIGEM`, `TURNSTILE_SECRET`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_REMETENTE`.
+Parametros SSM (SecureString, menos `SMTP_USER` e `EMAIL_REMETENTE`, que sao String) existentes nos dois ambientes: `DB_SENHA`, `SEGREDO_ORIGEM`, `TURNSTILE_SECRET`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_REMETENTE`.
 
 ## Provisionamento (Task 7, 2026-11-21)
 
-Via SSM `AWS-RunShellScript` na `IdMaquina`: baixa `provisionar.sh` do branch `feat/aws-infra` (na epoca; o padrao do `REF` agora e `main`) e roda com as saidas acima (`REF=feat/aws-infra`). Rodou com sucesso duas vezes (idempotente).
+Via SSM `AWS-RunShellScript` na `IdMaquina`: baixa `provisionar.sh` do branch `feat/aws-infra` (na epoca; hoje o `REF` e obrigatorio, ver `RUNBOOK.md`) e roda com as saidas acima (`REF=feat/aws-infra`). Rodou com sucesso duas vezes (idempotente).
 
 Conferido na maquina: `saude-api@teste`, `saude-api@producao`, `caddy` e `postgresql` ativos; swap de 2 GB; `curl --resolve <NomeOrigem>:443:127.0.0.1 https://<NomeOrigem>/saude` responde `{"ok":true}`; certificado Let's Encrypt emitido; Postgres so em `127.0.0.1:5432`; `/etc/saude/*.env` com modo 600 root; 3 familias de timers ativas (disco, backup, fotos por ambiente). De fora: as duas URLs do CloudFront em `/saude` respondem `{"ok":true}` e `http://<NomeOrigem>/qualquer` responde 404.
 
@@ -49,9 +49,9 @@ Obs.: o primeiro resultado foi 44 de 47 (`remaining connection slots are reserve
 - `DELETE /conta` 204; `list-object-versions --prefix teste/<id>/` no bucket de fotos: sem versões nem delete markers. `restaurar.sh teste 2026-11-21`: o dump tinha a conta (`COPY 1`), a restauração reaplicou `contas_apagadas` e removeu a conta (`usuarios|0`, `contas_apagadas|1`). Banco `saude_restauro_teste` apagado.
 - Origem barrada: de fora, `curl --connect-timeout 5 https://<NomeOrigem>/conta` expira (exit 28); de dentro, sem o cabeçalho, `/conta` 403 e `/saude` 200.
 
-## Correcoes da revisao final (pendentes de aplicar na stack)
+## Correcoes da revisao final (stack e maquina atualizadas em 2026-11-21)
 
 - Bucket de backups versionado (objeto expira em 23 dias e a versao antiga em mais 7: some em 30, como a politica de privacidade promete): a maquina continua sem `DeleteObject`.
-- `AlarmeTravada` (`StatusCheckFailed_Instance`, reinicia e avisa). API com limite de reinicios, aviso por SNS (`saude-alerta@.service`) e dependencia de `postgresql@16-main.service`: entram no proximo provisionamento.
+- `AlarmeTravada` (`StatusCheckFailed_Instance`, reinicia e avisa). API com limite de reinicios, aviso por SNS (`saude-alerta@.service`) e dependencia de `postgresql@16-main.service`: aplicados no provisionamento de 2026-11-21 (368f31b).
 - `test:pg` na maquina roda com `--test-concurrency=1` e o dono de teste tem `CONNECTION LIMIT 8` (nao esgota as 20 conexoes da producao). Ainda assim, evite rodar na maquina em horario de uso.
 - Decisao: maquina fica ligada (~US$ 11,50/mes nos creditos). Restaurar e refazer do zero: `RUNBOOK.md`.
