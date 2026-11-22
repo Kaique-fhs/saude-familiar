@@ -11,7 +11,7 @@ favoritar e gerar a lista de compras das receitas escolhidas.
 ## Conta e sincronização (em desenvolvimento)
 
 - `config.js` versionado aponta para a API de produção (só valores públicos; `cabecalhoOrigemDev` fica sempre vazio). Com `apiUrl: ""` o site funciona só no aparelho, sem tela de entrar nem fila.
-- Com `apiUrl` preenchido, quem entra numa conta tem os dados guardados no aparelho em chaves `sf:<id>:*` (fotos no IndexedDB `saude-familiar-<id>`) e enviados para a conta. Um aparelho que já usou o app antigo (qualquer chave `mp-*`) e não tem sessão continua como antes, sem conta nem chamada à API, até existir a migração (plano 4). Os dados antigos não são apagados nem copiados.
+- Com `apiUrl` preenchido, quem entra numa conta tem os dados guardados no aparelho em chaves `sf:<id>:*` (fotos no IndexedDB `saude-familiar-<id>`) e enviados para a conta. Um aparelho que já usou o app antigo (qualquer chave `mp-*`) e não tem sessão abre no modo antigo: grava em `mp-*`, sem chamada à API, com a faixa "Crie sua conta para guardar seus dados". Ao criar a conta, nada é copiado sozinho (ver "Migração do app antigo").
 
 ### Plano alimentar e metas por pessoa (plano 3)
 
@@ -20,8 +20,18 @@ favoritar e gerar a lista de compras das receitas escolhidas.
 - Metas de exercício: rota `#metas` (botão "Metas de exercício"). Só com conta. O treino marcado vale pela origem da meta: editar uma meta não perde a marca do dia nem o progresso da semana.
 - Mudança no modo antigo (aparelho com `mp-*`, sem conta): refeição sem horário não aparece mais como "atrasada". Aparece como "a fazer". Só refeição com horário vence.
 - O cliente guarda `plano` e `meta` e os sincroniza pelo `/sync`. O cursor do `/sync` zera uma vez (versão `cursor-versao`) para os aparelhos receberem esses tipos.
-- Cache do service worker na versão 37 (`meu-prato-v37`).
-- Estado: implementado no branch `feat/aceite-site`, sem push. Não está implantado nem publicado. A trava 2 do ADR-005 (aparelho com `mp-*` segue local) continua até o plano 4.
+- Cache do service worker na versão 38 (`meu-prato-v38`, subiu no plano 4).
+- Estado: implementado no branch `feat/aceite-site`, sem push. Não está implantado nem publicado.
+
+### Migração do app antigo (plano 4)
+
+- Remove a trava 2 do ADR-005. Aparelho com dados antigos e sem sessão abre no modo antigo, gravando em `mp-*`, com a faixa "Crie sua conta para guardar seus dados".
+- Só a primeira conta do aparelho, depois da primeira sincronização, recebe a oferta "Levar o que está salvo neste aparelho para a sua conta?". Outra conta no mesmo aparelho nunca vê a oferta.
+- A migração envia registros e fotos, retoma se for interrompida e guarda o andamento num marcador.
+- Os dados antigos só são apagados depois de o servidor confirmar tudo. Se a conferência não fechar, a limpeza automática para e a tela Conta explica o motivo. Dá para apagar à mão em "Apagar dados antigos" (pede um segundo toque).
+- Estado: implementado no branch `feat/aceite-site`, sem push e sem deploy. Site 209 testes ok; servidor 125 ok e 6 pulados (só rodam em Postgres real).
+
+Servidor e infraestrutura (planos 3 e 4): limpeza diária de cadastros não confirmados (commit f7e68f2) e segundo e-mail opcional de alerta (commit b9b2b8e, ainda não aplicado na stack).
 
 ### Rodar com o servidor de desenvolvimento
 

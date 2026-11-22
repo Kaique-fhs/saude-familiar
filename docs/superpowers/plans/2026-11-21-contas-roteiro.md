@@ -9,7 +9,7 @@ Cada plano entrega algo que funciona e se testa sozinho. Ordem:
 | 1 | `2026-11-21-servidor-local.md` | **Concluído** (commits f6c8c37..b01ed23, 87 testes passando, branch `feat/contas-ec2`, sem PR). API Node + Postgres rodando no computador: login, proteção, sincronização, fotos, apagar conta | — |
 | 2 | `2026-11-21-app-conta-sync.md` | **Concluído** (branch `feat/app-conta-sync`, commits e285582..a93c407, 100 testes do site e 103 do servidor, roteiro de navegador headless 47/47, sem PR). Telas de conta, armazenamento por usuário, fila de envio, baixar no login, modo antigo até o primeiro login | 1 |
 | 3 | `2026-11-22-plano-e-metas.md` | **Concluído** (11 tasks, branch `feat/aceite-site`, sem push; site 207 testes ok, servidor 125 ok e 6 pulados, que só rodam em Postgres real). Formulário do plano com versões, metas de exercício, novo "dia cumprido" e calendário. Remove a trava 1 do ADR-005 | 2 |
-| 4 | `2026-11-22-migracao-app-antigo.md` (em execução) App: migração do app antigo | Oferta à primeira conta, envio com fotos, retomada, mover dados locais | 2, 3 |
+| 4 | `2026-11-22-migracao-app-antigo.md` | **Concluído** (branch `feat/aceite-site`, sem push e sem deploy; site 209 testes ok, servidor 125 ok e 6 pulados; cache na versão 38). Remove a trava 2 do ADR-005: modo antigo grava em `mp-*` com faixa para criar conta; oferta só à primeira conta do aparelho, depois da primeira sincronização; envio com fotos, retomada; dados antigos só apagados depois de o servidor confirmar tudo, ou por "Apagar dados antigos" na Conta | 2, 3 |
 | 5 | `2026-11-21-aws-lancamento-1.md` | **Concluído**. Stack `saude-familiar` em us-east-2 no ar (commits do branch `feat/aws-infra` até 368f31b), fumaça de ponta a ponta OK. Máquina mantida ligada por decisão do Kaique (~US$ 11,50/mês nos créditos). EC2, Postgres, CloudFront, S3, backup com restauração, alertas, roteiro para o irmão | 1–4; conta AWS do Kaique |
 | 6 | (a escrever) Lançamento 2 | Checklist da Rejane, tirar `PLANO` do `data.js`, remover modo antigo | 5 + confirmação |
 
@@ -69,13 +69,28 @@ Do plano 2, adiadas de propósito (minor deferred não resolvido). Revisão fina
 - `sf-api.js`: `res.text()` falhando vira TypeError cru; 2xx não-JSON devolve null; `baixar(undefined)`; Authorization enviado em entrar/cadastro com token vencido; regex duplicada no `sw.js`.
 - `sf-dados.js`: `copiar` é raso (a sincronia usa cópia profunda).
 - `sf-fotos.js`: `fotoId` não validado localmente; sem timeout em `garantir`/baixar (prende só a exibição daquela foto); 403 do S3 tratado como permanente (política vale 300 s, envio expira em 60 s); classificação de erro duplicada; timeout de foto de 60 s curto.
-- `sf-sincronia.js`: `rejeitar` deduplica sem atualizar o código; `fotos-enviadas` e avisos sem poda (aproximam o armazenamento cheio; tratar no plano 4); aviso duplicado; status "erro" de armazenamento zera a cada sincronizar; `avisosMem` sem limpeza; timeout só solta a fila, não aborta o fetch; conflito de registro não chama `fotos.garantir`.
+- `sf-sincronia.js`: `rejeitar` deduplica sem atualizar o código; `fotos-enviadas` e avisos sem poda (resolvido no plano 4, commit de9e711); aviso duplicado; status "erro" de armazenamento zera a cada sincronizar; `avisosMem` sem limpeza; timeout só solta a fila, não aborta o fetch; conflito de registro não chama `fotos.garantir`.
 - `sf-conta.js`: widget Turnstile não removido e sem saída se o script falha offline; `#confirmar=` com sessão ativa vai para Entrar; "Um instante..." fora de `aria-live`; sem teste de DOM.
 - `app.js`: 401 de outra aba chama `aoSair` em vez de `sessaoVencida`; foto offline sem classe `sem-foto` e cópia mensal baixa fotos pela rede (registrar no README); 8 eventos `storage` por atualização remota; pendentes de outro usuário sem fotos pendentes (inalcançável hoje); duas abas: foto baixada só quando aparece.
-- `app.js` (Minor da revisão final): `aoEntrar` com o mesmo usuário não chama `recarregarEstado()`; `sessaoMudouEmOutraAba` sem sessão deveria chamar `sessaoVencida()`; "Sair" sem pendências apaga `rejeitados` e avisos sem mencionar; restauração de cópia sobe registro com foto ausente como `foto:null` (plano 4).
+- `app.js` (Minor da revisão final): `aoEntrar` com o mesmo usuário não chama `recarregarEstado()`; `sessaoMudouEmOutraAba` sem sessão deveria chamar `sessaoVencida()`; "Sair" sem pendências apaga `rejeitados` e avisos sem mencionar; restauração de cópia sobe registro com foto ausente como `foto:null` (comportamento aceito: sem foto, o registro sobe com foto null).
 - `server/src/app.js`: `x-saude-origem` no CORS depende de `AMBIENTE=teste`, e o feat/aws-infra também roda `AMBIENTE=teste` na EC2 (efeito de segurança nulo, mas "só no dev" não é literal; alternativa: opção de `criarApp` passada só pelo `dev.js`).
 - Testes que faltam: contrato cliente x servidor (`sf-api.js` com `app.inject` como fetch); 400 `foto-id` e 403 foto-envio permanentes; 2º teste novo da fila não confere aplicação/não-reenvio do remoto.
 - Limpeza do Kaique: dados `mp-*` de teste no Chrome dele em `localhost:5500`.
+
+## Pendências do plano 4
+
+Falta: revisão final do branch, push, deploy e a Rejane migrar no celular dela; depois a sessão confere no banco de produção, só por contagens, que a conta dela tem plano, registros e fotos.
+
+Menores adiados, para a revisão final:
+
+- Aparelho com `mp-*` vazios abre no Entrar (aceito no ADR-005).
+- Aba com a versão 37 aberta pode recriar `mp-*` depois da conclusão (o `sw.js` não usa `client.navigate`).
+- Banco antigo bloqueado completa a remoção depois e o aviso engana; `bloqueioMotivo` só em memória (depois de recarregar, texto genérico até nova tentativa).
+- Fotos do banco antigo sem registro que as cite não migram (o app já apaga órfãs).
+- Planos e metas ficam fora da checagem "faltando" da conferência.
+- Se `apagarBancoAntigo` der certo e `apagarChaves` lançar, `mp-*` ficam com marcador "migrando" e o banco já foi.
+- Sem teste de poda com status "conflito"; falha ao gravar a poda não incrementa falhas.
+- `apagarConta` do dono apaga o marcador: depois de a dona apagar a conta, a próxima conta no aparelho pode levar os dados antigos dela.
 
 ## Para o plano 3
 
