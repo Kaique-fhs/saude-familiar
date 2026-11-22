@@ -24,9 +24,18 @@
       sessao: function () { return lerJson("sf:sessao", null); },
       gravarSessao: function (s) { return gravarJson("sf:sessao", s); },
       apagarSessao: function () { try { st.removeItem("sf:sessao"); } catch (e) { /* ignora */ } },
+      // Chaves globais (fora de qualquer conta): sf:<nome>, ex.: sf:migracao.
+      lerGlobal: function (nome, padrao) { return lerJson("sf:" + nome, padrao); },
+      gravarGlobal: function (nome, valor) { return gravarJson("sf:" + nome, valor); },
+      apagarGlobal: function (nome) { try { st.removeItem("sf:" + nome); } catch (e) { /* ignora */ } },
       ler: function (userId, nome, padrao) { return lerJson(chave(userId, nome), padrao); },
       gravar: function (userId, nome, valor) { return gravarJson(chave(userId, nome), valor); },
       apagarUsuario: function (userId) {
+        // O marcador da migração é global; sai junto com a conta que o criou.
+        var marcador = lerJson("sf:migracao", null);
+        if (marcador && marcador.dono === userId) {
+          try { st.removeItem("sf:migracao"); } catch (e) { /* ignora */ }
+        }
         var prefixo = "sf:" + userId + ":";
         var apagar = [];
         for (var i = 0; i < st.length; i++) {
