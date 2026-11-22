@@ -1018,6 +1018,9 @@
       '<div class="linha-acoes"><button type="button" class="btn primario" data-plano-salvar>Salvar plano</button>' +
       '<button type="button" class="btn" data-plano-cancelar>Cancelar</button></div></div>';
   }
+  // Há um formulário de edição aberto (plano; a Task 10 acrescenta o das metas)? Re-render automático não pode apagá-lo.
+  function formEmEdicao() { return !!(main && main.querySelector("#form-plano")); }
+  var editorInicial = "", cancelarArmado = false;
   function paresDoEditor() {
     var f = document.getElementById("form-plano");
     return f ? Array.from(new FormData(f)) : [];
@@ -1551,6 +1554,8 @@
     else if (aba === "quero" || aba === "despensa") { html = telaDespensa(); aba = "quero"; }
     else { html = telaPlano(); aba = "plano"; }
     main.innerHTML = html;
+    cancelarArmado = false;
+    if (formEmEdicao()) editorInicial = JSON.stringify(paresDoEditor());
     preencherFotos(main);
     document.querySelectorAll(".abas a").forEach(function (a) {
       if (a.dataset.aba === aba) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
@@ -1565,6 +1570,7 @@
   }
 
   function rerenderMantendoScroll() {
+    if (formEmEdicao()) return; // visibilitychange, storage, virada do dia, relógio: o digitado fica
     var y = window.scrollY;
     // Lembra qual botão estava em foco para devolver o foco a ele depois de redesenhar.
     var ativo = document.activeElement, seletor = null;
@@ -1590,7 +1596,11 @@
     if (!b) return;
     if (b.dataset.acao && b.closest("#form-plano")) acaoEditor(b);
     else if (b.dataset.planoSalvar !== undefined) salvarEditorPlano();
-    else if (b.dataset.planoCancelar !== undefined) location.hash = "#plano";
+    else if (b.dataset.planoCancelar !== undefined) {
+      if (!cancelarArmado && JSON.stringify(paresDoEditor()) !== editorInicial) {
+        cancelarArmado = true; b.textContent = "Toque de novo para descartar";
+      } else location.hash = "#plano";
+    }
     else if (b.dataset.fav) {
       var ok = alternar(favs, b.dataset.fav); salvarTudo();
       toast(ok ? "Adicionada às favoritas" : "Removida das favoritas");
