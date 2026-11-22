@@ -420,6 +420,20 @@
   function refeicoesFeitas(k) { return refeicoesDe(k).filter(function (r) { return feitasNoDia(k).indexOf(r.id) >= 0; }); }
   // Metas de exercício com dia fixo na semana daquela data, e quais delas foram feitas.
   function fixasDoDia(k) { return SF.plano.metasFixasDoDia(modeloAtual().metas, k); }
+  // Treino marcado vale pela origem da meta: editar a meta hoje cria id novo, e a marca do id antigo continua valendo.
+  function treinoFeitoApp(k, id) { return SF.plano.treinoFeito(ctxDia(), k, id); }
+  function idsDaOrigem(id) {
+    var m = modeloAtual().metas, o = SF.plano.origemDe(m, id), r = [id];
+    Object.keys(m).forEach(function (k) { if (r.indexOf(k) < 0 && SF.plano.origemDe(m, k) === o) r.push(k); });
+    return r;
+  }
+  // Registro do dia para a meta, mesmo guardado sob outro id da mesma origem. Devolve { chave, reg } ou null.
+  function registroDaMeta(dia, id) {
+    var regs = registros[dia] || {}, ids = idsDaOrigem(id);
+    if (regs[id]) return { chave: id, reg: regs[id] };
+    for (var i = 0; i < ids.length; i++) if (regs[ids[i]]) return { chave: ids[i], reg: regs[ids[i]] };
+    return null;
+  }
   function fixasFeitas(k) {
     var feitos = SF.plano.treinosDoDia(ctxDia(), k);
     return fixasDoDia(k).filter(function (m) { return feitos.indexOf(m.id) >= 0; });
@@ -489,7 +503,7 @@
       (fixas.length ? ' <span class="contagem">' + fixasFeitas(k).length + ' de ' + fixas.length + '</span>' : '') + '</h4>';
     if (!ex.length) return '<div class="exercicios">' + titulo + '<p class="sem-exercicio">Sem exercício programado ' + (k === hojeChave() ? 'hoje' : 'nesse dia') + '. Descanso!</p></div>';
     return '<div class="exercicios">' + titulo + '<ul class="lista refeicoes-dia">' + ex.map(function (e) {
-      var ok = feitos.indexOf(e.id) >= 0, reg = regsDia[e.id];
+      var ok = feitos.indexOf(e.id) >= 0, rm = registroDaMeta(k, e.id), reg = rm && rm.reg;
       var icone = reg && reg.foto
         ? '<img class="mini-foto" data-foto="' + esc(reg.foto) + '" alt="">'
         : '<span class="' + (ok ? 'ok' : 'pendente') + '" aria-hidden="true">' + (ok ? ICON.check : ICON.camera) + '</span>';
@@ -650,7 +664,7 @@
     if (ex.length) {
       linhas.push("", "Exercícios: " + ex.filter(function (e) { return feitosEx.indexOf(e.id) >= 0; }).length + " de " + ex.length);
       ex.forEach(function (e) {
-        var ok = feitosEx.indexOf(e.id) >= 0, reg = regs[e.id];
+        var ok = feitosEx.indexOf(e.id) >= 0, rm = registroDaMeta(k, e.id), reg = rm && rm.reg;
         linhas.push((ok ? "✅ " : "❌ ") + e.nome + (reg && reg.hora ? " (" + reg.hora + ")" : ""));
       });
     }
@@ -676,7 +690,7 @@
   // Precisa ser chamada direto no toque (o celular só abre o menu de compartilhar logo após um toque),
   // por isso a foto já chega pronta em "blob".
   function compartilharEntrega(dia, ref, blob) {
-    var reg = (registros[dia] || {})[ref];
+    var rm = registroDaMeta(dia, ref), reg = rm ? rm.reg : (registros[dia] || {})[ref];
     if (!reg) return;
     if (dia !== hojeChave()) { toast("De dias passados, só dá para compartilhar o resultado do dia."); return; }
     var texto = textoEntrega(dia, ref, reg), arquivo = null;
@@ -717,7 +731,8 @@
     var ex = exPorId(refId, diaSel);
     var r = ex ? { id: ex.id, nome: ex.nome, itens: [] } : refPorId(refId, diaSel);
     if (!r) return;
-    var ant = (registros[diaSel] || {})[refId] || null;
+    var rmAnt = ex ? registroDaMeta(diaSel, refId) : null;
+    var ant = rmAnt ? rmAnt.reg : (registros[diaSel] || {})[refId] || null;
     var leitura = diaSel !== hojeChave();
     if (leitura && !ant) { toast("Só dá para registrar no próprio dia."); return; }
     var escolhidas = ant ? ant.escolhas || [] : null;
@@ -757,7 +772,7 @@
       '</div>' +
       '<input type="file" id="reg-arq-camera" accept="image/*" capture="environment" class="sr" tabindex="-1" aria-hidden="true">' +
       '<p class="detalhes reg-regra">A foto precisa ser tirada agora, pela câmera.</p></div>' +
-      '<div class="reg-rodape">' + (ant || marcadosDe(refId, diaSel)[diaSel] && marcadosDe(refId, diaSel)[diaSel].indexOf(refId) >= 0 ? '<button type="button" class="btn" id="reg-apagar">Apagar registro</button>' : '') +
+      '<div class="reg-rodape">' + (ant || (ex ? treinoFeitoApp(diaSel, refId) : marcadosDe(refId, diaSel)[diaSel] && marcadosDe(refId, diaSel)[diaSel].indexOf(refId) >= 0) ? '<button type="button" class="btn" id="reg-apagar">Apagar registro</button>' : '') +
       '<button type="submit" class="btn primario" id="reg-salvar">Salvar registro</button></div>' +
       (ant && !leitura ? '<button type="button" class="btn whats" id="reg-compartilhar">' + ICON.whats + 'Compartilhar no WhatsApp</button>' : '') +
       '</form>';
@@ -853,12 +868,15 @@
       passo = salvarFoto(novoId, blob).then(function () { pedirPersistencia(); return novoId; });
     }
     passo.then(function (fotoId) {
-      var antes = (registros[dia] || {})[ref];
+      var exSalvar = exPorId(ref, dia);
+      var rmAntes = exSalvar ? registroDaMeta(dia, ref) : null;
+      var antes = rmAntes ? rmAntes.reg : (registros[dia] || {})[ref];
       registros[dia] = registros[dia] || {};
+      if (exSalvar) idsDaOrigem(ref).forEach(function (o) { if (o !== ref) delete registros[dia][o]; });
       registros[dia][ref] = { escolhas: escolhas, receita: receita, foto: fotoId || null, hora: (antes && antes.hora) || horaAgora() };
       var marcados = marcadosDe(ref, dia);
       var l = (marcados[dia] || []).slice();
-      var novo = l.indexOf(ref) < 0;
+      var novo = exSalvar ? !treinoFeitoApp(dia, ref) : l.indexOf(ref) < 0;
       if (novo) l.push(ref);
       marcados[dia] = l;
       salvarTudo();
@@ -880,17 +898,21 @@
     var dia = regAtual.dia, ref = regAtual.ref;
     if (regAtual.fotoAntiga) { toast("Registro com foto não pode ser apagado."); return; }
     if (dia !== hojeChave()) { fecharRegistro(); toast("Dias passados ficam só para consulta."); rerenderMantendoScroll(); return; }
-    var antesReg = (registros[dia] || {})[ref] || null;
+    var exApagar = exPorId(ref, dia);
+    var ids = exApagar ? idsDaOrigem(ref) : [ref]; // exercício: apaga a marca de todos os ids da mesma origem
+    var rmReg = exApagar ? registroDaMeta(dia, ref) : null;
+    var antesReg = rmReg ? rmReg.reg : (registros[dia] || {})[ref] || null;
+    var chaveReg = rmReg ? rmReg.chave : ref;
     var marcados = marcadosDe(ref, dia);
     var antesDia = (marcados[dia] || []).slice();
-    if (registros[dia]) { delete registros[dia][ref]; if (!Object.keys(registros[dia]).length) delete registros[dia]; }
-    var l = antesDia.filter(function (x) { return x !== ref; });
+    if (registros[dia]) { ids.forEach(function (o) { delete registros[dia][o]; }); if (!Object.keys(registros[dia]).length) delete registros[dia]; }
+    var l = antesDia.filter(function (x) { return ids.indexOf(x) < 0; });
     if (l.length) marcados[dia] = l; else delete marcados[dia];
     salvarTudo();
     fecharRegistro();
     rerenderMantendoScroll();
     toast("Registro apagado", function () {
-      if (antesReg) { registros[dia] = registros[dia] || {}; registros[dia][ref] = antesReg; }
+      if (antesReg) { registros[dia] = registros[dia] || {}; registros[dia][chaveReg] = antesReg; }
       if (antesDia.length) marcadosDe(ref, dia)[dia] = antesDia;
     });
     // a foto só é apagada de vez depois que o "Desfazer" some
@@ -1039,6 +1061,7 @@
     var pares = paresDoEditor();
     var r = SF.editor.planoDosCampos(pares, planoDe(hojeChave()), Date.now());
     if (r.erros.length) {
+      desarmarCancelar();
       redesenharEditor(SF.editor.planoBrutoDosPares(pares), r.erros);
       var primeiro = document.querySelector('#form-plano [name="' + r.erros[0].campo + '"]') || document.getElementById("form-plano");
       if (primeiro) { if (!primeiro.hasAttribute("tabindex") && primeiro.tagName === "FORM") primeiro.setAttribute("tabindex", "-1"); primeiro.focus(); }
@@ -1066,10 +1089,22 @@
       '<div class="linha-acoes"><button type="button" class="btn primario" data-meta-salvar>Salvar meta</button>' +
       '<button type="button" class="btn" data-meta-cancelar>Cancelar</button></div></div>';
   }
+  function desarmarCancelar() {
+    cancelarArmado = false;
+    var bc = document.querySelector("[data-meta-cancelar], [data-plano-cancelar]");
+    if (bc) bc.textContent = "Cancelar";
+  }
+  function desarmarEncerrar() {
+    if (metaArmada === null) return;
+    var be = document.querySelector('[data-meta-encerrar="' + CSS.escape(metaArmada) + '"]');
+    if (be) be.textContent = "Encerrar";
+    metaArmada = null;
+  }
   function salvarEditorMeta() {
     var pares = paresDoEditor();
     var r = SF.editor.metaDosCampos(pares, metaEmEdicao);
     if (r.erros.length) {
+      desarmarCancelar();
       var c = document.getElementById("editor-meta");
       if (c) c.innerHTML = SF.editor.htmlMeta(r.meta, r.erros);
       var campo = r.erros[0].campo;
@@ -1590,7 +1625,7 @@
     else if (aba === "quero" || aba === "despensa") { html = telaDespensa(); aba = "quero"; }
     else { html = telaPlano(); aba = "plano"; }
     main.innerHTML = html;
-    cancelarArmado = false;
+    cancelarArmado = false; metaArmada = null;
     if (formEmEdicao()) editorInicial = JSON.stringify(paresDoEditor());
     preencherFotos(main);
     document.querySelectorAll(".abas a").forEach(function (a) {
@@ -1629,6 +1664,7 @@
   main.addEventListener("submit", function (e) { if (e.target.id === "form-plano" || e.target.id === "form-meta") e.preventDefault(); });
   main.addEventListener("click", function (e) {
     var b = e.target.closest("button");
+    if (metaArmada !== null && !(b && b.dataset.metaEncerrar === metaArmada)) desarmarEncerrar();
     if (!b) return;
     if (b.dataset.acao && b.closest("#form-plano")) acaoEditor(b);
     else if (b.dataset.planoSalvar !== undefined) salvarEditorPlano();

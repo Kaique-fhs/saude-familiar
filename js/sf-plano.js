@@ -137,13 +137,23 @@
     return (x.plano ? x.plano.refeicoes.length : 0) + x.fixas.length;
   }
 
+  // Origem de uma meta; id desconhecido conta como origem dele mesmo.
+  function origemDe(metas, id) {
+    var m = (metas || {})[id];
+    return m ? (m.origem || m.id) : id;
+  }
+  // Editar uma meta cria id novo com a mesma origem: o treino marcado vale pela origem.
+  function treinoFeito(ctx, dia, metaId) {
+    var o = origemDe(ctx.metas, metaId);
+    return ((ctx.treinos || {})[dia] || []).some(function (id) { return origemDe(ctx.metas, id) === o; });
+  }
+
   function feitosDoDia(ctx, dia) {
     var x = planoEMetasDoDia(ctx, dia);
-    var comidas = {}, treinos = {}, n = 0;
+    var comidas = {}, n = 0;
     ((ctx.diario || {})[dia] || []).forEach(function (id) { comidas[id] = true; });
-    ((ctx.treinos || {})[dia] || []).forEach(function (id) { treinos[id] = true; });
     if (x.plano) x.plano.refeicoes.forEach(function (r) { if (comidas[r.id]) n++; });
-    x.fixas.forEach(function (m) { if (treinos[m.id]) n++; });
+    x.fixas.forEach(function (m) { if (treinoFeito(ctx, dia, m.id)) n++; });
     return n;
   }
 
@@ -160,10 +170,7 @@
   }
 
   function treinosDoDia(ctx, dia) {
-    var marcados = (ctx.treinos || {})[dia] || [];
-    var ativos = {};
-    ativasNoDiaSemana(ctx.metas, dia).forEach(function (m) { ativos[m.id] = true; });
-    return marcados.filter(function (id) { return ativos[id]; });
+    return ativasNoDiaSemana(ctx.metas, dia).filter(function (m) { return treinoFeito(ctx, dia, m.id); }).map(function (m) { return m.id; });
   }
 
   function sequencia(ctx, hoje) {
@@ -249,7 +256,7 @@
     deDataJs: deDataJs, planoNoDia: planoNoDia, idsDeRefeicao: idsDeRefeicao, idsDeMeta: idsDeMeta,
     salvarPlano: salvarPlano, metasNoDia: metasNoDia, metasFixasDoDia: metasFixasDoDia,
     salvarMeta: salvarMeta, encerrarMeta: encerrarMeta,
-    totalDoDia: totalDoDia, feitosDoDia: feitosDoDia, diaCompleto: diaCompleto, treinosDoDia: treinosDoDia,
+    totalDoDia: totalDoDia, feitosDoDia: feitosDoDia, diaCompleto: diaCompleto, treinosDoDia: treinosDoDia, treinoFeito: treinoFeito, origemDe: origemDe,
     sequencia: sequencia, progressoSemanal: progressoSemanal, semanaCumprida: semanaCumprida,
     situacoes: situacoes, refeicaoAtual: refeicaoAtual
   };

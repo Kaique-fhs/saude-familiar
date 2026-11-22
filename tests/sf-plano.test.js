@@ -296,3 +296,30 @@ test("sem plano, situacoes vazio e refeicaoAtual null", () => {
   assert.deepEqual(P.situacoes(null, [], "10:00"), {});
   assert.equal(P.refeicaoAtual(null, [], "10:00"), null);
 });
+
+// ---- Task 10, correção 1: treino vale pela origem da meta ----
+test("treinoFeito casa por origem; id desconhecido vale por ele mesmo", () => {
+  const metas = { a: meta({ id: "a", origem: "o1", dias: [2] }), b: meta({ id: "b", origem: "o1", dias: [2] }), c: meta({ id: "c", origem: "o2", dias: [2] }) };
+  const ctx = { planos: {}, metas, diario: {}, treinos: { "2026-11-24": ["a", "zz"] } };
+  assert.equal(P.treinoFeito(ctx, "2026-11-24", "b"), true);
+  assert.equal(P.treinoFeito(ctx, "2026-11-24", "c"), false);
+  assert.equal(P.treinoFeito(ctx, "2026-11-24", "zz"), true);
+  assert.equal(P.treinoFeito(ctx, "2026-11-24", "yy"), false);
+  assert.equal(P.treinoFeito(ctx, "2026-11-25", "a"), false);
+});
+
+test("meta fixa marcada hoje e editada hoje: dia continua completo", () => {
+  const hoje = "2026-11-24"; // terça
+  let metas = { "m-1": meta({ id: "m-1", origem: "m-1", desde: "2026-11-01", dias: [2] }) };
+  const treinos = { [hoje]: ["m-1"] };
+  const antes = { planos: {}, metas, diario: {}, treinos };
+  assert.equal(P.diaCompleto(antes, hoje), true);
+  metas = P.salvarMeta(metas, Object.assign({}, metas["m-1"], { nome: "Outra" }), hoje, 5000);
+  const ctx = { planos: {}, metas, diario: {}, treinos };
+  const ativa = P.metasFixasDoDia(metas, hoje)[0];
+  assert.notEqual(ativa.id, "m-1");
+  assert.equal(P.totalDoDia(ctx, hoje), 1);
+  assert.equal(P.feitosDoDia(ctx, hoje), 1);
+  assert.equal(P.diaCompleto(ctx, hoje), true);
+  assert.deepEqual(P.treinosDoDia(ctx, hoje), [ativa.id]);
+});
