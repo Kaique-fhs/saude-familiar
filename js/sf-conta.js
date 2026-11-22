@@ -18,6 +18,15 @@
     return null;
   }
 
+  // Texto da seção "Dados antigos" para cada motivo em que a conclusão da migração fica parada.
+  function textoMigracao(motivo) {
+    if (motivo === "rejeitados" || motivo === "conflito") return "Alguns itens antigos não foram aceitos pela conta. Os dados antigos continuam neste aparelho.";
+    if (motivo === "faltando") return "Alguns itens que vieram deste aparelho não estão mais na sua conta (talvez você os tenha apagado). Os dados antigos continuam aqui; apague-os quando quiser.";
+    if (motivo === "puladas") return "Alguns dados antigos deste aparelho não puderam ser lidos. Eles continuam aqui; apague-os quando quiser.";
+    if (motivo === "bloqueado") return "Feche as outras abas do app para terminar de limpar este aparelho.";
+    return "";
+  }
+
   // Seções extras da tela Conta: "antigos" aparece com dados antigos e oferta possível (inclui migrando, para o progresso).
   function secoesConta(o) {
     o = o || {};
@@ -134,7 +143,13 @@
       // Sair não apaga dados antigos não migrados: o marcador da migração (global) continua com o dono.
       var marcador = typeof o.local.lerGlobal === "function" ? o.local.lerGlobal("migracao", null) : null;
       o.local.apagarUsuario(o.userId);
-      if (marcador && typeof o.local.gravarGlobal === "function") o.local.gravarGlobal("migracao", marcador);
+      if (marcador && typeof o.local.gravarGlobal === "function") {
+        // saiu no meio da migração: a próxima entrada oferece de novo (a junção é união, nada se perde)
+        if (marcador.estado === "migrando") {
+          marcador = Object.assign({}, marcador, { estado: "oferecida", juntado: false });
+        }
+        o.local.gravarGlobal("migracao", marcador);
+      }
       return limpar(o.aoApagar, o.userId).then(function (falhou) { return { limpezaFalhou: falhou }; });
     });
   }
@@ -445,11 +460,10 @@
       if (mig && secoesConta(mig).indexOf("antigos") >= 0) {
         var antigos = el("section", { "class": "conta-bloco", "aria-labelledby": "sf-ant-t" }, [
           el("h3", { id: "sf-ant-t", texto: "Dados antigos deste aparelho" }),
-          el("p", { "class": "conta-sub", texto: mig.migrando
+          el("p", { "class": "conta-sub", texto: textoMigracao(mig.motivo) || (mig.migrando
             ? "Seus dados antigos estão sendo levados para a conta. Eles só saem deste aparelho quando tudo estiver guardado."
-            : "Este aparelho ainda tem dados do app antigo (refeições, favoritas, fotos). Leve para a sua conta para guardá-los." })
+            : "Este aparelho ainda tem dados do app antigo (refeições, favoritas, fotos). Leve para a sua conta para guardá-los.") })
         ]);
-        if (mig.aviso) antigos.appendChild(el("p", { "class": "conta-aviso", texto: mig.aviso }));
         var levar = botao("Levar para a conta", "primario flex");
         levar.addEventListener("click", function () { esconder(); if (mig.aoLevar) mig.aoLevar(); });
         antigos.appendChild(levar);
@@ -537,7 +551,7 @@
 
   raiz.SF = raiz.SF || {};
   raiz.SF.conta = {
-    modoInicial: modoInicial, destinoGravacao: destinoGravacao, secoesConta: secoesConta, montarAceite: montarAceite, VERSAO_AVISO: VERSAO_AVISO, lerHash: lerHash, mensagemErro: mensagemErro,
+    modoInicial: modoInicial, destinoGravacao: destinoGravacao, secoesConta: secoesConta, textoMigracao: textoMigracao, montarAceite: montarAceite, VERSAO_AVISO: VERSAO_AVISO, lerHash: lerHash, mensagemErro: mensagemErro,
     validarEmail: validarEmail, validarSenha: validarSenha, textoSair: textoSair, apagarConta: apagarConta, sairDaConta: sairDaConta,
     rotuloRejeitado: rotuloRejeitado, confirmacaoApagarOk: confirmacaoApagarOk, montar: montar,
     textoConfirmarSair: textoConfirmarSair, textoStatus: textoStatus, MSG_CONFLITO: MSG_CONFLITO

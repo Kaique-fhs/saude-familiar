@@ -169,3 +169,26 @@ test("sairDaConta mantém o marcador da migração; apagarConta do dono o apaga"
   await conta.apagarConta({ api, local: l2, userId: "u1", senha: "x", aoApagar: async () => {} });
   assert.equal(l2.lerGlobal("migracao", null), null, "apagar a conta apaga o marcador do dono");
 });
+
+test("textoMigracao: um texto por motivo de bloqueio, vazio sem motivo", () => {
+  assert.equal(conta.textoMigracao("rejeitados"), "Alguns itens antigos não foram aceitos pela conta. Os dados antigos continuam neste aparelho.");
+  assert.equal(conta.textoMigracao("conflito"), conta.textoMigracao("rejeitados"));
+  assert.match(conta.textoMigracao("faltando"), /^Alguns itens que vieram deste aparelho não estão mais na sua conta \(talvez você os tenha apagado\)\. Os dados antigos continuam aqui; apague-os quando quiser\.$/);
+  assert.equal(conta.textoMigracao("puladas"), "Alguns dados antigos deste aparelho não puderam ser lidos. Eles continuam aqui; apague-os quando quiser.");
+  assert.equal(conta.textoMigracao("bloqueado"), "Feche as outras abas do app para terminar de limpar este aparelho.");
+  assert.equal(conta.textoMigracao(null), "");
+  assert.equal(conta.textoMigracao("enviando"), "");
+});
+
+test("sairDaConta no meio da migração devolve o marcador a 'oferecida' sem juntado", async () => {
+  const mapa = new Map();
+  const st = { get length() { return mapa.size; }, key: (i) => [...mapa.keys()][i] ?? null, getItem: (k) => (mapa.has(k) ? mapa.get(k) : null), setItem: (k, v) => mapa.set(k, String(v)), removeItem: (k) => mapa.delete(k) };
+  const l = require("../js/sf-local.js").criar({ storage: st });
+  l.gravarGlobal("migracao", { dono: "u1", estado: "migrando", juntado: true, fotos: ["f1"], faltando: [] });
+  await conta.sairDaConta({ api: { sair: async () => {} }, local: l, userId: "u1", pendentes: 0, aoApagar: async () => {} });
+  const m = l.lerGlobal("migracao", null);
+  assert.equal(m.dono, "u1");
+  assert.equal(m.estado, "oferecida");
+  assert.equal(m.juntado, false);
+  assert.deepEqual(m.fotos, ["f1"]);
+});

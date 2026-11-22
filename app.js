@@ -1905,7 +1905,8 @@
   // semAviso: só atualiza o texto (o aviso de conflito aparece uma vez, quando o status muda para ele)
   function mostrarStatus(s, semAviso) {
     if (!statusEl) return;
-    statusEl.textContent = SF.conta.textoStatus(s);
+    // "Levando fotos: N de M" fica até a cópia terminar
+    if (!copiandoFotos) statusEl.textContent = SF.conta.textoStatus(s);
     statusEl.setAttribute("data-status", s);
     if (s === "conflito" && !semAviso) toast(SF.conta.MSG_CONFLITO);
   }
@@ -2056,19 +2057,13 @@
   // ---------- migração do app antigo para a conta (js/sf-migracao.js) ----------
   // Marcador global sf:migracao: {dono, estado: oferecida | recusada | migrando | concluida, juntado, fotos, faltando}.
   // Nada de mp-* nem do banco meu-prato é apagado fora de SF.migracao.concluir e do "Apagar dados antigos" confirmado.
-  var migracaoAvaliada = false, migracaoEmCurso = false, migracaoConcluindo = false;
+  var migracaoAvaliada = false, migracaoEmCurso = false, migracaoConcluindo = false, copiandoFotos = false;
   var bloqueioMotivo = null, avisoBloqueioDado = false, dlgOferta = null;
   var BANCO_ANTIGO = "meu-prato";
 
   function marcadorMigracao() { return armazem.lerGlobal("migracao", null); }
   function podeOferecerMigracao() {
     return !!(userId && SF.migracao && SF.migracao.podeOferecer(marcadorMigracao(), userId, armazem.temDadosAntigos()));
-  }
-  function textoBloqueio(motivo) {
-    if (motivo === "rejeitados") return "Alguns itens antigos não foram aceitos pela conta. Os dados antigos continuam neste aparelho.";
-    if (motivo === "conflito") return "Houve um conflito ao guardar na conta. Os dados antigos continuam neste aparelho.";
-    if (motivo === "puladas") return "Alguns dados antigos não puderam ser lidos. Os dados antigos continuam neste aparelho.";
-    return "";
   }
   function dadosMigracao() {
     var m = userId ? marcadorMigracao() : null;
@@ -2077,7 +2072,6 @@
       podeOferecer: podeOferecerMigracao(),
       migrando: !!(m && m.dono === userId && m.estado === "migrando"),
       motivo: bloqueioMotivo,
-      aviso: textoBloqueio(bloqueioMotivo),
       aoLevar: levarParaConta,
       aoApagarAntigos: apagarDadosAntigos
     };
@@ -2143,19 +2137,19 @@
   function levarParaConta() {
     if (migracaoEmCurso || modo !== "conta" || !sincronia) return Promise.resolve();
     var id = userId, s = sincronia;
-    migracaoEmCurso = true;
+    migracaoEmCurso = true; copiandoFotos = true;
     return SF.migracao.executar(depsMigracao(id)).then(function (r) {
-      migracaoEmCurso = false;
+      migracaoEmCurso = false; copiandoFotos = false;
       if (id !== userId || s !== sincronia) return;
       mostrarStatus(s.status(), true);
       if (r === "sem-espaco") { toastAcao("Não coube no aparelho. Libere espaço e tente de novo pela Conta.", "Entendi", function () {}); return; }
       if (r === "erro-fotos") { toastAcao("Não deu para copiar as fotos antigas. Tente de novo pela Conta.", "Entendi", function () {}); return; }
       var m = marcadorMigracao(), n = m && Array.isArray(m.faltando) ? m.faltando.length : 0;
-      if (n > 0) toastAcao(n === 1 ? "1 foto antiga não estava no aparelho" : n + " fotos antigas não estavam no aparelho", "Entendi", function () {});
+      if (n > 0) toastAcao(n + " fotos antigas não estavam no aparelho", "Entendi", function () {});
       else toast("Seus dados antigos foram enviados. Falta conferir tudo na conta.");
       rodarSync();
     }, function () {
-      migracaoEmCurso = false;
+      migracaoEmCurso = false; copiandoFotos = false;
       if (id === userId) { mostrarStatus(s.status(), true); toast("Não deu para levar os dados agora. Tente de novo pela Conta."); }
     });
   }
@@ -2200,7 +2194,7 @@
     bloqueioMotivo = motivo;
     if (avisoBloqueioDado) return;
     avisoBloqueioDado = true;
-    toastAcao(textoBloqueio(motivo) + " Veja em Conta.", "Entendi", function () {});
+    toastAcao(SF.conta.textoMigracao(motivo) + " Veja em Conta.", "Entendi", function () {});
   }
 
   // Com `migrando` e `juntado`: confere e, só se tudo estiver na conta, apaga o antigo.
@@ -2235,7 +2229,7 @@
       if (r.pronto) {
         bloqueioMotivo = null;
         toast("Pronto: tudo o que estava neste aparelho está na sua conta.");
-      } else if (r.motivo === "rejeitados" || r.motivo === "conflito" || r.motivo === "puladas") avisarBloqueio(r.motivo);
+      } else if (/^(rejeitados|conflito|puladas|faltando|bloqueado)$/.test(r.motivo)) avisarBloqueio(r.motivo);
       else bloqueioMotivo = null;
     }, function () { migracaoConcluindo = false; });
   }
