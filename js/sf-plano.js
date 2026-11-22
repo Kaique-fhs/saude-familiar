@@ -26,19 +26,21 @@
     return r;
   }
 
+  function profundo(v) { return v === undefined ? v : JSON.parse(JSON.stringify(v)); }
+
   function deDataJs(PLANO) {
     if (!PLANO) return { planos: {}, metas: {} };
     var plano = {
       refeicoes: (PLANO.refeicoes || []).map(function (r) {
-        return { id: r.id, nome: r.nome, hora: r.hora, kcal: r.kcal, itens: r.itens, observacoes: r.observacoes, receitas: r.receitas || [] };
+        return { id: r.id, nome: r.nome, hora: r.hora, kcal: r.kcal, itens: profundo(r.itens), observacoes: profundo(r.observacoes), receitas: profundo(r.receitas || []) };
       }),
-      nutrientes: PLANO.nutrientes || null,
-      compras: PLANO.compras || [],
+      nutrientes: profundo(PLANO.nutrientes || null),
+      compras: profundo(PLANO.compras || []),
       prescritoEm: PLANO.prescritoEm || null
     };
     var metas = {};
     (PLANO.exercicios || []).forEach(function (e) {
-      metas[e.id] = { id: e.id, origem: e.id, nome: e.nome, modo: "dias", dias: e.dias, vezes: null, minutos: null, desde: e.desde, ate: e.ate || null };
+      metas[e.id] = { id: e.id, origem: e.id, nome: e.nome, modo: "dias", dias: profundo(e.dias), vezes: null, minutos: null, desde: e.desde, ate: e.ate || null };
     });
     return { planos: { inicio: plano }, metas: metas };
   }
@@ -100,16 +102,17 @@
     var antiga = r[meta.id];
     if (!antiga || antiga.desde === hoje || antiga.desde > hoje) {
       nova.desde = hoje;
+      if (nova.origem == null) nova.origem = antiga ? (antiga.origem || antiga.id) : meta.id;
       r[meta.id] = nova;
       return r;
     }
     var encerrada = copiar(antiga);
-    encerrada.ate = ontem(hoje);
+    if (antiga.ate == null || antiga.ate > ontem(hoje)) encerrada.ate = ontem(hoje);
     r[meta.id] = encerrada;
     nova.id = novoId("m", agoraMs);
     nova.origem = antiga.origem || antiga.id;
     nova.desde = hoje;
-    nova.ate = meta.ate == null ? null : meta.ate;
+    nova.ate = meta.ate == null ? (antiga.ate == null ? null : antiga.ate) : meta.ate;
     r[nova.id] = nova;
     return r;
   }
@@ -125,12 +128,130 @@
     return r;
   }
 
+  function planoEMetasDoDia(ctx, dia) {
+    return { plano: planoNoDia(ctx.planos, dia), fixas: metasFixasDoDia(ctx.metas, dia) };
+  }
+
+  function totalDoDia(ctx, dia) {
+    var x = planoEMetasDoDia(ctx, dia);
+    return (x.plano ? x.plano.refeicoes.length : 0) + x.fixas.length;
+  }
+
+  function feitosDoDia(ctx, dia) {
+    var x = planoEMetasDoDia(ctx, dia);
+    var comidas = {}, treinos = {}, n = 0;
+    ((ctx.diario || {})[dia] || []).forEach(function (id) { comidas[id] = true; });
+    ((ctx.treinos || {})[dia] || []).forEach(function (id) { treinos[id] = true; });
+    if (x.plano) x.plano.refeicoes.forEach(function (r) { if (comidas[r.id]) n++; });
+    x.fixas.forEach(function (m) { if (treinos[m.id]) n++; });
+    return n;
+  }
+
+  function diaCompleto(ctx, dia) {
+    var t = totalDoDia(ctx, dia);
+    return t > 0 && feitosDoDia(ctx, dia) >= t;
+  }
+
+  function ativasNoDiaSemana(metas, dia) {
+    var dow = diaDaSemana(dia);
+    return metasNoDia(metas, dia).filter(function (m) {
+      return m.modo === "semana" || (m.modo === "dias" && (m.dias || []).indexOf(dow) !== -1);
+    });
+  }
+
+  function treinosDoDia(ctx, dia) {
+    var marcados = (ctx.treinos || {})[dia] || [];
+    var ativos = {};
+    ativasNoDiaSemana(ctx.metas, dia).forEach(function (m) { ativos[m.id] = true; });
+    return marcados.filter(function (id) { return ativos[id]; });
+  }
+
+  function sequencia(ctx, hoje) {
+    var d = diaCompleto(ctx, hoje) ? hoje : ontem(hoje);
+    var n = 0;
+    for (var i = 0; i < 400; i++) {
+      if (totalDoDia(ctx, d) > 0) {
+        if (!diaCompleto(ctx, d)) break;
+        n++;
+      }
+      d = ontem(d);
+    }
+    return n;
+  }
+
+  function progressoSemanal(ctx, dia) {
+    var seg = segundaDaSemana(dia), dias = [], porOrigem = {}, ordem = [];
+    for (var i = 0; i < 7; i++) dias.push(deMs(paraMs(seg) + i * DIA_MS));
+    dias.forEach(function (d) {
+      metasNoDia(ctx.metas, d).forEach(function (m) {
+        if (m.modo !== "semana") return;
+        var o = m.origem || m.id;
+        if (!porOrigem[o]) ordem.push(o);
+        if (!porOrigem[o] || m.desde >= porOrigem[o].desde) porOrigem[o] = m;
+      });
+    });
+    return ordem.map(function (o) {
+      var meta = porOrigem[o], feitos = 0;
+      dias.forEach(function (d) {
+        var ids = (ctx.treinos || {})[d] || [];
+        var algum = ids.some(function (id) {
+          var m = (ctx.metas || {})[id];
+          return m && (m.origem || m.id) === o;
+        });
+        if (algum) feitos++;
+      });
+      return { meta: meta, feitos: feitos, vezes: meta.vezes, cumprida: feitos >= meta.vezes };
+    });
+  }
+
+  function semanaCumprida(ctx, dia) {
+    var p = progressoSemanal(ctx, dia);
+    if (!p.length) return null;
+    return p.every(function (x) { return x.cumprida; });
+  }
+
+  function situacoes(plano, feitosHoje, horaAtual) {
+    var out = {};
+    if (!plano || !plano.refeicoes) return out;
+    var refs = plano.refeicoes, feitos = {};
+    (feitosHoje || []).forEach(function (id) { feitos[id] = true; });
+    var atual = -1, i;
+    refs.forEach(function (r, k) {
+      if (!feitos[r.id] && r.hora && r.hora <= horaAtual && (atual === -1 || r.hora >= refs[atual].hora)) atual = k;
+    });
+    if (atual === -1) {
+      for (i = 0; i < refs.length; i++) {
+        if (!feitos[refs[i].id] && (!refs[i].hora || refs[i].hora > horaAtual)) { atual = i; break; }
+      }
+    }
+    var proximaDada = false;
+    refs.forEach(function (r, k) {
+      if (feitos[r.id]) out[r.id] = "feita";
+      else if (k === atual) out[r.id] = "agora";
+      else if (r.hora && r.hora <= horaAtual) out[r.id] = "atrasada";
+      else if (atual === -1 || k < atual) out[r.id] = "pendente";
+      else if (!proximaDada) { out[r.id] = "proxima"; proximaDada = true; }
+      else out[r.id] = "depois";
+    });
+    return out;
+  }
+
+  function refeicaoAtual(plano, feitosHoje, horaAtual) {
+    var s = situacoes(plano, feitosHoje, horaAtual);
+    var achada = null;
+    ((plano && plano.refeicoes) || []).forEach(function (r) { if (s[r.id] === "agora") achada = r; });
+    return achada;
+  }
+
   raiz.SF = raiz.SF || {};
   raiz.SF.plano = {
     novoId: novoId, ontem: ontem, diaDaSemana: diaDaSemana, segundaDaSemana: segundaDaSemana,
     deDataJs: deDataJs, planoNoDia: planoNoDia, idsDeRefeicao: idsDeRefeicao, idsDeMeta: idsDeMeta,
     salvarPlano: salvarPlano, metasNoDia: metasNoDia, metasFixasDoDia: metasFixasDoDia,
-    salvarMeta: salvarMeta, encerrarMeta: encerrarMeta
+    salvarMeta: salvarMeta, encerrarMeta: encerrarMeta,
+    totalDoDia: totalDoDia, feitosDoDia: feitosDoDia, diaCompleto: diaCompleto, treinosDoDia: treinosDoDia,
+    sequencia: sequencia, progressoSemanal: progressoSemanal, semanaCumprida: semanaCumprida,
+    situacoes: situacoes, refeicaoAtual: refeicaoAtual
   };
   if (typeof module !== "undefined") module.exports = raiz.SF.plano;
 })(typeof window !== "undefined" ? window : globalThis);
