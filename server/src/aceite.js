@@ -8,6 +8,12 @@ export function aceiteValido(aceite) {
   return !!aceite && aceite.versao === VERSAO_AVISO && TIPOS.every((t) => aceite[t] === true);
 }
 
+// Usada ao confirmar: link emitido antes da 004 (ou de uma versão nova do aviso) não vira conta.
+export async function temAceites(consulta, userId) {
+  const r = await consulta('select count(*)::int as n from aceites where user_id = $1 and versao = $2', [userId, VERSAO_AVISO]);
+  return r.rows[0].n === TIPOS.length;
+}
+
 // A data é a do servidor, nunca a do corpo do pedido.
 export async function gravarAceites(consulta, userId, agora) {
   for (const tipo of TIPOS) {

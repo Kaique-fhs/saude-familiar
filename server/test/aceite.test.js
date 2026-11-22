@@ -72,3 +72,17 @@ test('apagar a conta apaga os aceites', async () => {
   assert.equal((await aceites(banco)).length, 0);
   await app.close();
 });
+
+test('link de confirmação de cadastro sem aceite da versão atual não vira conta', async () => {
+  for (const preparo of ['delete from aceites', "update aceites set versao = '0'", "delete from aceites where tipo = 'saude'"]) {
+    const { app, banco, email } = await criarAppTeste();
+    await cadastrar(app, 'a@b.com', OK);
+    await banco.consulta(preparo);
+    const token = tokenDoEmail(email, '#confirmar=');
+    const r = await app.inject({ method: 'POST', url: '/conta/confirmar', headers: cabecalhos(), payload: { token } });
+    assert.equal(r.statusCode, 400, preparo);
+    assert.deepEqual(r.json(), { erro: 'token' });
+    assert.equal((await banco.consulta('select confirmado_em from usuarios')).rows[0].confirmado_em, null);
+    await app.close();
+  }
+});

@@ -1,4 +1,4 @@
-import { aceiteValido, gravarAceites } from './aceite.js';
+import { aceiteValido, gravarAceites, temAceites } from './aceite.js';
 import { hashSenha, conferirSenha, novoToken, hashToken, HASH_FALSO } from './seguranca.js';
 
 import { exigirCaptcha, limitePorEmail, limitePorIp, MINUTO } from './protecao.js';
@@ -131,6 +131,7 @@ export function registrarContas(app, { banco, email, captcha, armazenamento, lim
       );
       if (!r.rows[0]) return false;
       const userId = r.rows[0].user_id;
+      if (!(await temAceites(tx.consulta, userId))) return false;
       await tx.consulta('update usuarios set confirmado_em = $1 where id = $2', [agora, userId]);
       await tx.consulta('delete from sessoes where user_id = $1', [userId]);
       return true;

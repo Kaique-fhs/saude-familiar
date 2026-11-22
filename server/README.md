@@ -64,7 +64,7 @@ e `CAMINHO_SITE="/"` (o site abre na raiz, sem `/saude-familiar/`).
 | --- | --- | --- |
 | `GET /saude` | - | `200 {ok:true}` |
 | `POST /conta/cadastro` | `{email, senha, aceite:{versao, saude:true, transferencia:true}}` (senha 8 a 128; `versao` igual a `VERSAO_AVISO` de `src/aceite.js`); cabeçalho `x-turnstile-token` | `202 {ok:true}` sempre (exista ou não o e-mail); `400 senha` / `400 email` / `400 aceite` / `400 captcha`; `429 limite` |
-| `POST /conta/confirmar` | `{token}` | `200 {ok:true}`; `400 token` |
+| `POST /conta/confirmar` | `{token}` | `200 {ok:true}`; `400 token` (inclui cadastro sem aceite da versão atual) |
 | `POST /conta/entrar` | `{email, senha}` | `200 {token, usuario:{id,email}}`; `401 credenciais`; `403 nao-confirmado`; `429 limite` |
 | `POST /conta/sair` (sessão) | - | `204` |
 | `GET /conta` (sessão) | - | `200 {id, email}` |
