@@ -154,7 +154,8 @@ instalar_units() {
   install -m 0644 "$MAQ"/saude-api@.service "$MAQ"/saude-fotos@.service "$MAQ"/saude-fotos@.timer \
     "$MAQ"/saude-disco.service "$MAQ"/saude-disco.timer "$MAQ"/saude-alerta@.service \
     "$MAQ"/saude-backup.service "$MAQ"/saude-backup.timer \
-    "$MAQ"/saude-logs.service "$MAQ"/saude-logs.timer /etc/systemd/system/
+    "$MAQ"/saude-logs.service "$MAQ"/saude-logs.timer \
+    "$MAQ"/saude-limpeza@.service "$MAQ"/saude-limpeza@.timer /etc/systemd/system/
 
   install -m 0644 "$MAQ/Caddyfile" /etc/caddy/Caddyfile
   mkdir -p /etc/systemd/system/caddy.service.d
@@ -172,6 +173,7 @@ instalar_units() {
     systemctl enable --now "saude-api@$amb.service"
     systemctl restart "saude-api@$amb.service"
     systemctl enable --now "saude-fotos@$amb.timer"
+    systemctl enable --now "saude-limpeza@$amb.timer"
   done
   systemctl enable --now saude-disco.timer
   systemctl enable --now saude-backup.timer

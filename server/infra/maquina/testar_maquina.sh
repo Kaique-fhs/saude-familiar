@@ -149,6 +149,13 @@ verifica "package.json: test:pg com --test-concurrency=1" grep -q '"test:pg": "n
 verifica "fotos@.service: apagar-fotos" grep -q "tarefas.js apagar-fotos" "$AQUI/saude-fotos@.service"
 verifica "fotos@.service: EnvironmentFile do ambiente" grep -qx "EnvironmentFile=/etc/saude/%i.env" "$AQUI/saude-fotos@.service"
 verifica "fotos@.timer: diario" grep -qx "OnCalendar=daily" "$AQUI/saude-fotos@.timer"
+verifica "limpeza@.service: tarefa limpar-contas" grep -qx "ExecStart=/opt/node/bin/node src/tarefas.js limpar-contas" "$AQUI/saude-limpeza@.service"
+verifica "limpeza@.service: EnvironmentFile do ambiente" grep -qx "EnvironmentFile=/etc/saude/%i.env" "$AQUI/saude-limpeza@.service"
+verifica "limpeza@.service: User=saude" grep -qx "User=saude" "$AQUI/saude-limpeza@.service"
+verifica "limpeza@.service: depois do Postgres" grep -qx "After=network-online.target postgresql@16-main.service" "$AQUI/saude-limpeza@.service"
+verifica "limpeza@.timer: diario" grep -qx "OnCalendar=daily" "$AQUI/saude-limpeza@.timer"
+verifica "limpeza@.timer: Persistent=true" grep -qx "Persistent=true" "$AQUI/saude-limpeza@.timer"
+verifica "provisionar.sh instala e habilita a limpeza nos dois ambientes" bash -c "grep -q 'saude-limpeza@.service' '$AQUI/provisionar.sh' && grep -q 'enable --now \"saude-limpeza@\$amb.timer\"' '$AQUI/provisionar.sh'"
 verifica "disco.timer: de hora em hora" grep -qx "OnCalendar=hourly" "$AQUI/saude-disco.timer"
 verifica "disco.service chama disco.sh" grep -q "ExecStart=/opt/saude-familiar/server/infra/maquina/disco.sh" "$AQUI/saude-disco.service"
 

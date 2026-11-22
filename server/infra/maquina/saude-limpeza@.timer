@@ -1,0 +1,10 @@
+[Unit]
+Description=Saude Familiar: limpeza diaria de cadastros nao confirmados (%i)
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target
