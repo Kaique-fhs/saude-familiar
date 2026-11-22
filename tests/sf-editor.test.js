@@ -19,7 +19,7 @@ function paresDoHtml(html) {
     const a = area ? m[4] : m[2];
     const nome = attr(a, "name");
     if (!nome) continue;
-    if (!area && attr(a, "type") === "checkbox") { if (/\bchecked\b/.test(a)) pares.push([nome, attr(a, "value")]); continue; }
+    if (!area && (attr(a, "type") === "checkbox" || attr(a, "type") === "radio")) { if (/\bchecked\b/.test(a)) pares.push([nome, attr(a, "value")]); continue; }
     pares.push([nome, area ? des(m[5]) : (attr(a, "value") || "")]);
   }
   return pares;
@@ -160,4 +160,72 @@ test("htmlPlano escapa id oculto e value de receita", () => {
   assert.ok(!h.includes("<x>") && !h.includes("<y>"));
   assert.ok(h.includes("a&quot;&gt;&lt;x&gt;"));
   assert.ok(h.includes('value="q&quot;&gt;&lt;y&gt;" checked'));
+});
+
+// ---- Metas de exercício ----
+const META_DIAS = { id: "m1", origem: "m0", nome: "Caminhada", modo: "dias", dias: [1, 3], vezes: null, minutos: 30, desde: "2026-11-01", ate: null };
+
+test("metaDosCampos modo dias", () => {
+  const r = E.metaDosCampos([["nome", " Caminhada "], ["modo", "dias"], ["dia-1", "on"], ["dia-5", "on"], ["vezes", "3"], ["minutos", "40"]], null);
+  assert.deepEqual(r.erros, []);
+  assert.deepEqual(r.meta, { nome: "Caminhada", modo: "dias", dias: [1, 5], vezes: null, minutos: 40 });
+  assert.equal("id" in r.meta, false);
+});
+
+test("metaDosCampos modo semana", () => {
+  const r = E.metaDosCampos([["nome", "Musculação"], ["modo", "semana"], ["dia-2", "on"], ["vezes", "4"], ["minutos", ""]], null);
+  assert.deepEqual(r.erros, []);
+  assert.deepEqual(r.meta.dias, []);
+  assert.equal(r.meta.vezes, 4);
+  assert.equal(r.meta.minutos, null);
+});
+
+test("metaDosCampos preserva id e origem ao editar", () => {
+  const ant = Object.assign({}, META_DIAS, { ate: "2026-12-31" });
+  const r = E.metaDosCampos([["nome", "Caminhada leve"], ["modo", "dias"], ["dia-0", "on"], ["minutos", "20"]], ant);
+  assert.equal(r.meta.id, "m1");
+  assert.equal(r.meta.origem, "m0");
+  assert.equal(r.meta.desde, "2026-11-01");
+  assert.equal(r.meta.ate, "2026-12-31");
+  assert.equal(r.meta.nome, "Caminhada leve");
+});
+
+test("metaDosCampos: erros com texto exato", () => {
+  const msg = (pares) => E.metaDosCampos(pares, null).erros.map((e) => e.msg);
+  assert.deepEqual(msg([["nome", "  "], ["modo", "semana"], ["vezes", "2"]]), ["Dê um nome à atividade"]);
+  assert.deepEqual(msg([["nome", "A"], ["modo", "dias"]]), ["Escolha ao menos um dia"]);
+  assert.deepEqual(msg([["nome", "A"], ["modo", "semana"], ["vezes", "8"]]), ["De 1 a 7 vezes por semana"]);
+  assert.deepEqual(msg([["nome", "A"], ["modo", "semana"], ["vezes", ""]]), ["De 1 a 7 vezes por semana"]);
+  assert.deepEqual(msg([["nome", "A"], ["modo", "semana"], ["vezes", "2"], ["minutos", "0"]]), ["Use minutos maiores que zero"]);
+});
+
+test("htmlMetas mostra só as ativas hoje", () => {
+  const metas = {
+    m1: META_DIAS,
+    m2: Object.assign({}, META_DIAS, { id: "m2", nome: "Yoga", ate: "2026-11-10" }),
+    m3: Object.assign({}, META_DIAS, { id: "m3", nome: "Futura", desde: "2026-12-01" })
+  };
+  const h = E.htmlMetas(metas, "2026-11-22");
+  assert.match(h, /Caminhada/);
+  assert.doesNotMatch(h, /Yoga/);
+  assert.doesNotMatch(h, /Futura/);
+  assert.match(h, /data-meta-editar="m1"/);
+  assert.match(h, /data-meta-encerrar="m1"/);
+  assert.match(h, /Nova meta/);
+});
+
+test("htmlMeta escapa o nome", () => {
+  const h = E.htmlMeta(Object.assign({}, META_DIAS, { nome: '"><script>x</script>' }));
+  assert.doesNotMatch(h, /<script>/);
+  assert.match(h, /id="form-meta"/);
+});
+
+test("htmlMeta marca erro e roda de ida e volta", () => {
+  const h = E.htmlMeta(META_DIAS, [{ campo: "nome", msg: "Dê um nome à atividade" }]);
+  assert.match(h, /aria-invalid="true"/);
+  const r = E.metaDosCampos(paresDoHtml(E.htmlMeta(META_DIAS)), META_DIAS);
+  assert.deepEqual(r.erros, []);
+  assert.equal(r.meta.nome, "Caminhada");
+  assert.deepEqual(r.meta.dias, [1, 3]);
+  assert.equal(r.meta.minutos, 30);
 });
