@@ -8,7 +8,7 @@ Resumo para revisao. Nada aqui roda sozinho: cada passo com a AWS exige o OK do 
 - Postgres 16 local (so `localhost`), bancos `saude_teste` e `saude_producao`, cada um com dono proprio (LOGIN, nao superusuario). Papel `saude_app` (NOLOGIN). `pg_hba`: so `scram-sha-256`.
 - Duas APIs Node 24 (systemd `saude-api@teste` na porta 3001, `saude-api@producao` na 3000), cada uma com o seu arquivo `/etc/saude/<ambiente>.env` (root, 0600) e o seu segredo de origem.
 - Caddy na 443 com certificado Let's Encrypt para `<ip>.sslip.io`; a 80 so atende o desafio ACME (resto: 404). So o CloudFront alcanca a 443 (security group). `/teste/*` vai para a 3001, o resto para a 3000.
-- Swap de 2 GB, journald com 500 MB e 30 dias, alerta de disco acima de 80% (SNS, no maximo 1 por dia), timer diario de limpeza de fotos por ambiente.
+- Swap de 2 GB, journald com 500 MB e 30 dias, copias rotacionadas do syslog e do Postgres apagadas apos 22 dias (`saude-logs.timer`, diario: nenhum registro passa de ~30 dias), alerta de disco acima de 80% (SNS, no maximo 1 por dia), timer diario de limpeza de fotos por ambiente.
 
 ## Parametros no SSM (SecureString; `SMTP_USER` e `EMAIL_REMETENTE` sao String)
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Saude Familiar: apaga copias de log com mais de ~30 dias
+
+[Service]
+Type=oneshot
+ExecStart=/opt/saude-familiar/server/infra/maquina/logs.sh
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/var/log
+ProtectHome=true
+PrivateTmp=true

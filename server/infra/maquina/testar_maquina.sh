@@ -153,6 +153,29 @@ verifica "disco.timer: de hora em hora" grep -qx "OnCalendar=hourly" "$AQUI/saud
 verifica "disco.service chama disco.sh" grep -q "ExecStart=/opt/saude-familiar/server/infra/maquina/disco.sh" "$AQUI/saude-disco.service"
 
 
+echo "== logs.sh (copias de log com mais de ~30 dias) =="
+L="$TMP/varlog"; mkdir -p "$L/postgresql"
+velho() { : > "$1"; touch -d '23 days ago' "$1"; }
+novo() { : > "$1"; touch -d '20 days ago' "$1"; }
+velho "$L/syslog"; velho "$L/postgresql/postgresql-16-main.log"
+velho "$L/syslog.1"; velho "$L/syslog.2.gz"; novo "$L/syslog.3.gz"
+velho "$L/postgresql/postgresql-16-main.log.1"; velho "$L/postgresql/postgresql-16-main.log.4.gz"; novo "$L/postgresql/postgresql-16-main.log.2.gz"
+velho "$L/auth.log.1"
+DIR_LOG="$L" bash "$AQUI/logs.sh"; RC=$?
+if [ "$RC" -eq 0 ]; then ok "logs.sh: sai com 0"; else falha "logs.sh: sai com 0 (rc=$RC)"; fi
+verifica "logs.sh: apaga syslog rotacionado com mais de 22 dias" bash -c "! ls '$L/syslog.1' '$L/syslog.2.gz' 2>/dev/null"
+verifica "logs.sh: apaga log do Postgres rotacionado com mais de 22 dias" bash -c "! ls '$L/postgresql/postgresql-16-main.log.1' '$L/postgresql/postgresql-16-main.log.4.gz' 2>/dev/null"
+verifica "logs.sh: mantem os rotacionados mais novos" bash -c "test -f '$L/syslog.3.gz' && test -f '$L/postgresql/postgresql-16-main.log.2.gz'"
+verifica "logs.sh: nunca apaga o arquivo em uso" bash -c "test -f '$L/syslog' && test -f '$L/postgresql/postgresql-16-main.log'"
+verifica "logs.sh: nao mexe em outros logs" test -f "$L/auth.log.1"
+verifica "logs.sh: sem pasta do Postgres nao falha" bash -c "mkdir -p '$TMP/vazio' && DIR_LOG='$TMP/vazio' bash '$AQUI/logs.sh'"
+verifica "logs.timer: diario" grep -qx "OnCalendar=daily" "$AQUI/saude-logs.timer"
+verifica "logs.timer: Persistent=true" grep -qx "Persistent=true" "$AQUI/saude-logs.timer"
+for k in "Type=oneshot" "ExecStart=/opt/saude-familiar/server/infra/maquina/logs.sh" "ProtectSystem=strict" "ReadWritePaths=/var/log" "PrivateTmp=true" "NoNewPrivileges=true"; do
+  verifica "saude-logs.service: $k" grep -qx "$k" "$AQUI/saude-logs.service"
+done
+verifica "provisionar.sh instala e habilita o timer dos logs" bash -c "grep -q 'saude-logs.service' '$AQUI/provisionar.sh' && grep -q 'enable --now saude-logs.timer' '$AQUI/provisionar.sh'"
+
 echo "== backup.sh e restaurar.sh (fakes de aws, pg_dump, psql, pg_restore, runuser) =="
 FAKE_S3="$TMP/s3"; export FAKE_S3
 FAKE_PG_LOG="$TMP/pg.log"; export FAKE_PG_LOG

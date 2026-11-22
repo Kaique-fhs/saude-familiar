@@ -1,0 +1,9 @@
+[Unit]
+Description=Saude Familiar: limpeza diaria de copias de log
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
