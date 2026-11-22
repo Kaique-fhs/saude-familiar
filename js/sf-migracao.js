@@ -12,61 +12,54 @@
 
   function ehObjeto(v) { return v !== null && typeof v === "object" && !Array.isArray(v); }
 
+  // Devolve {ok, valor}: ok=false se o JSON não pôde ser lido; chave ausente conta como ok com valor null.
   function lerJson(lerChave, nome) {
     var cru;
-    try { cru = lerChave(nome); } catch (e) { return null; }
-    if (cru === null || cru === undefined) return null;
-    if (typeof cru !== "string") return cru;
-    try { return JSON.parse(cru); } catch (e) { return null; }
+    try { cru = lerChave(nome); } catch (e) { return { ok: false }; }
+    if (cru === null || cru === undefined) return { ok: true, valor: null };
+    if (typeof cru !== "string") return { ok: true, valor: cru };
+    try { return { ok: true, valor: JSON.parse(cru) }; } catch (e) { return { ok: false }; }
   }
 
-  // chaves que paraItens montaria, sem avisar: [tipo, chave]
-  function chavesDe(estado) {
-    var r = [];
-    (estado.favs || []).forEach(function (id) { r.push(["fav", id]); });
-    (estado.sel || []).forEach(function (id) { r.push(["sel", id]); });
-    Object.keys(estado.checks || {}).forEach(function (k) { if (estado.checks[k]) r.push(["check", k]); });
-    Object.keys(estado.checksPlano || {}).forEach(function (k) { if (estado.checksPlano[k]) r.push(["checkplano", k]); });
-    (estado.despensa || []).forEach(function (n) { r.push(["quero", n]); });
-    Object.keys(estado.diario || {}).forEach(function (dia) {
-      (estado.diario[dia] || []).forEach(function (ref) { r.push(["feito", dia + "|" + ref]); });
-    });
-    Object.keys(estado.treinos || {}).forEach(function (dia) {
-      (estado.treinos[dia] || []).forEach(function (ex) { r.push(["treino", dia + "|" + ex]); });
-    });
-    Object.keys(estado.registros || {}).forEach(function (dia) {
-      Object.keys(estado.registros[dia] || {}).forEach(function (ref) { r.push(["registro", dia + "|" + ref]); });
-    });
-    return r;
-  }
+  function ehString(x) { return typeof x === "string"; }
 
+  // Dado antigo que não dá para ler não some em silêncio: cada descarte conta em `puladas`.
   function lerAntigos(lerChave) {
     var D = dadosModulo();
     var estado = D.estadoVazio();
+    var puladas = 0;
     Object.keys(D.NOMES).forEach(function (nome) {
       var campo = D.NOMES[nome];
       if (!(campo in estado)) return;
-      var v = lerJson(lerChave, nome);
+      var l = lerJson(lerChave, nome);
+      if (!l.ok) { puladas++; return; }
+      var v = l.valor;
+      if (v === null) return;
       if (Array.isArray(estado[campo])) {
-        if (Array.isArray(v)) estado[campo] = v.filter(function (x) { return typeof x === "string"; });
+        if (!Array.isArray(v)) { puladas++; return; }
+        estado[campo] = v.filter(function (x) { if (ehString(x)) return true; puladas++; return false; });
       } else if (ehObjeto(v)) {
         estado[campo] = v;
+      } else {
+        puladas++;
       }
     });
     ["diario", "treinos"].forEach(function (c) {
       Object.keys(estado[c]).forEach(function (dia) {
-        if (!Array.isArray(estado[c][dia])) delete estado[c][dia];
+        var l = estado[c][dia];
+        if (!Array.isArray(l)) { puladas++; delete estado[c][dia]; return; }
+        estado[c][dia] = l.filter(function (x) { if (ehString(x)) return true; puladas++; return false; });
       });
     });
     Object.keys(estado.registros).forEach(function (dia) {
-      if (!ehObjeto(estado.registros[dia])) delete estado.registros[dia];
+      if (!ehObjeto(estado.registros[dia])) { puladas++; delete estado.registros[dia]; }
     });
-    var vistas = {}, puladas = 0;
-    chavesDe(estado).forEach(function (p) {
-      var id = p[0] + "|" + p[1];
+    var vistas = {};
+    D.enumerar(estado).forEach(function (it) {
+      var id = it.tipo + "|" + it.chave;
       if (vistas[id]) return;
       vistas[id] = true;
-      if (!D.chaveValida(p[0], p[1])) puladas++;
+      if (!D.chaveValida(it.tipo, it.chave)) puladas++;
     });
     return { estado: estado, puladas: puladas };
   }
@@ -106,11 +99,11 @@
     r.diario = uniaoPorDia(conta.diario, antigo.diario);
     r.treinos = uniaoPorDia(conta.treinos, antigo.treinos);
     var regs = {};
-    Object.keys(conta.registros || {}).forEach(function (d) { regs[d] = Object.assign({}, conta.registros[d]); });
+    Object.keys(conta.registros || {}).forEach(function (d) { regs[d] = copiaProfunda(conta.registros[d]); });
     Object.keys(antigo.registros || {}).forEach(function (d) {
       regs[d] = regs[d] || {};
       Object.keys(antigo.registros[d] || {}).forEach(function (ref) {
-        if (!(ref in regs[d])) regs[d][ref] = antigo.registros[d][ref];
+        if (!(ref in regs[d])) regs[d][ref] = copiaProfunda(antigo.registros[d][ref]);
       });
     });
     r.registros = regs;
@@ -145,8 +138,8 @@
   function conferir(p) {
     function nao(motivo) { return { pronto: false, motivo: motivo }; }
     if (p.puladas !== 0) return nao("puladas");
-    if ((p.rejeitados || []).length !== 0) return nao("rejeitados");
-    if (p.houveConflito) return nao("conflito");
+    if (!Array.isArray(p.rejeitados) || p.rejeitados.length !== 0) return nao("rejeitados");
+    if (p.houveConflito !== false) return nao("conflito");
     if (p.status !== "ok" || p.pendentes !== 0) return nao("enviando");
     var D = dadosModulo();
     var daConta = D.paraItens(p.conta);

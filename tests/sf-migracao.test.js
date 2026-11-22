@@ -90,7 +90,8 @@ test("lerAntigos com JSON quebrado vira vazio", () => {
   assert.deepEqual(r.estado.checks, {});
   assert.deepEqual(r.estado.diario, { "2026-11-01": ["x"] });
   assert.deepEqual(r.estado.registros, {});
-  assert.equal(r.puladas, 0);
+  assert.equal(r.puladas, 2);
+  assert.equal(M.conferir({ antigo: r.estado, conta: r.estado, puladas: r.puladas, rejeitados: [], status: "ok", pendentes: 0, houveConflito: false }).motivo, "puladas");
   assert.deepEqual(Object.keys(r.estado).sort(), Object.keys(D.estadoVazio()).sort());
 });
 
@@ -100,10 +101,33 @@ test("lerAntigos conta chaves puladas", () => {
     "mp-diario": '{"2026-11-01":["x"],"dia-ruim":["y"]}',
     "mp-registros": '{"2026-11-01":{"cafe":{"foto":null}},"ruim":{"cafe":{}}}'
   };
-  const w = console.warn; console.warn = () => {};
-  let r;
-  try { r = M.lerAntigos((n) => dados[n] || null); } finally { console.warn = w; }
+  const r = M.lerAntigos((n) => dados[n] || null);
   assert.equal(r.puladas, 3);
+});
+
+test("lerAntigos conta tudo que descarta", () => {
+  const dados = {
+    "mp-favs": '["a", 5, null]',
+    "mp-sel": '{"x":1}',
+    "mp-diario": '{"2026-11-01":"x","2026-11-02":["ok",7]}',
+    "mp-treinos": '{"2026-11-01":{"a":1}}',
+    "mp-registros": '{"2026-11-01":["a"]}'
+  };
+  const r = M.lerAntigos((n) => dados[n] || null);
+  assert.deepEqual(r.estado.favs, ["a"]);
+  assert.deepEqual(r.estado.diario, { "2026-11-02": ["ok"] });
+  // favs 2 + sel 1 + diario 1 dia + 1 item + treinos 1 + registros 1
+  assert.equal(r.puladas, 7);
+  const r2 = M.lerAntigos((n) => { if (n === "mp-quero") throw new Error("x"); return null; });
+  assert.equal(r2.puladas, 1);
+});
+
+test("juntar não compartilha registros com as entradas", () => {
+  const c = conta({ registros: { "2026-11-01": { a: reg("c") } } });
+  const a = Object.assign(D.estadoVazio(), { registros: { "2026-11-02": { b: reg("a") } } });
+  const r = M.juntar(c, a, undefined);
+  assert.notEqual(r.registros["2026-11-01"].a, c.registros["2026-11-01"].a);
+  assert.notEqual(r.registros["2026-11-02"].b, a.registros["2026-11-02"].b);
 });
 
 test("conferir", () => {
@@ -121,4 +145,11 @@ test("conferir", () => {
   assert.equal(f.pronto, false);
   assert.equal(f.motivo, "faltando");
   assert.equal(com({ puladas: 1 }).pronto, false);
+  const antD = Object.assign(D.estadoVazio(), { diario: { "2026-11-01": ["x"] }, checks: { k: true } });
+  assert.equal(com({ antigo: antD, conta: D.estadoVazio() }).motivo, "faltando");
+  assert.equal(com({ antigo: Object.assign(D.estadoVazio(), { diario: { "2026-11-01": ["x"] } }), conta: Object.assign(D.estadoVazio(), { diario: { "2026-11-01": ["x"] } }) }).pronto, true);
+  assert.equal(com({ antigo: Object.assign(D.estadoVazio(), { checks: { k: true } }), conta: D.estadoVazio() }).motivo, "faltando");
+  assert.equal(com({ rejeitados: undefined }).pronto, false);
+  assert.equal(com({ houveConflito: undefined }).pronto, false);
+  assert.equal(com({ houveConflito: 0 }).pronto, false);
 });
