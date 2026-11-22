@@ -52,10 +52,30 @@ class Template(unittest.TestCase):
         self.assertEqual(str(p["LimiteOrcamentoUSD"]["Default"]), "20")
         self.assertIn("EmailAlerta", p)
 
+    def test_email_pessoal_opcional(self):
+        p = T["Parameters"]["EmailAlertaPessoal"]
+        self.assertEqual(p["Default"], "")
+        self.assertRegex("", p["AllowedPattern"])
+        self.assertRegex("a@b.com", p["AllowedPattern"])
+        self.assertNotRegex("sem-arroba", p["AllowedPattern"])
+        self.assertEqual(T["Conditions"]["TemEmailPessoal"],
+                         {"Fn::Not": [{"Fn::Equals": [{"Ref": "EmailAlertaPessoal"}, ""]}]})
+        a = R["AssinaturaAlertasPessoal"]
+        self.assertEqual(a["Condition"], "TemEmailPessoal")
+        self.assertEqual(a["Properties"], {"TopicArn": {"Ref": "TopicoAlertas"}, "Protocol": "email",
+                                           "Endpoint": {"Ref": "EmailAlertaPessoal"}})
+        self.assertEqual(props("AssinaturaAlertas")["Endpoint"], {"Ref": "EmailAlerta"})
+        pessoal = {"Fn::If": ["TemEmailPessoal",
+                              {"SubscriptionType": "EMAIL", "Address": {"Ref": "EmailAlertaPessoal"}},
+                              {"Ref": "AWS::NoValue"}]}
+        for n in props("Orcamento")["NotificationsWithSubscribers"]:
+            self.assertEqual(n["Subscribers"],
+                             [{"SubscriptionType": "EMAIL", "Address": {"Ref": "EmailAlerta"}}, pessoal])
+
     def test_recursos_esperados(self):
         esperados = {"GrupoSeguranca", "PapelMaquina", "PerfilMaquina", "Maquina", "IpFixo",
                      "AssociacaoIp", "BucketFotos", "BucketBackups", "TopicoAlertas",
-                     "AssinaturaAlertas", "Orcamento", "AlarmeRecuperacao", "AlarmeTravada",
+                     "AssinaturaAlertas", "AssinaturaAlertasPessoal", "Orcamento", "AlarmeRecuperacao", "AlarmeTravada",
                      "CloudFrontTeste", "CloudFrontProducao"}
         self.assertEqual(set(R), esperados)
 

@@ -16,6 +16,13 @@ Parameters:
     Type: String
     Description: E-mail que recebe alarmes e avisos de orcamento.
     AllowedPattern: "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+  EmailAlertaPessoal:
+    Type: String
+    Default: ""
+    Description: >-
+      Segundo e-mail (opcional) que tambem recebe alarmes e avisos de orcamento:
+      o EmailAlerta e a caixa do app, que nem sempre alguem abre.
+    AllowedPattern: "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
   TipoInstancia:
     Type: String
     Default: t4g.micro
@@ -42,6 +49,9 @@ Parameters:
     Default: 20
     MinValue: 1
     Description: Limite mensal de custo, em dolares.
+
+Conditions:
+  TemEmailPessoal: !Not [!Equals [!Ref EmailAlertaPessoal, ""]]
 
 Resources:
   GrupoSeguranca:
@@ -250,6 +260,14 @@ Resources:
       Protocol: email
       Endpoint: !Ref EmailAlerta
 
+  AssinaturaAlertasPessoal:
+    Type: AWS::SNS::Subscription
+    Condition: TemEmailPessoal
+    Properties:
+      TopicArn: !Ref TopicoAlertas
+      Protocol: email
+      Endpoint: !Ref EmailAlertaPessoal
+
   Orcamento:
     Type: AWS::Budgets::Budget
     Properties:
@@ -273,6 +291,11 @@ Resources:
           Subscribers:
             - SubscriptionType: EMAIL
               Address: !Ref EmailAlerta
+            - !If
+              - TemEmailPessoal
+              - SubscriptionType: EMAIL
+                Address: !Ref EmailAlertaPessoal
+              - !Ref AWS::NoValue
         - Notification:
             NotificationType: FORECASTED
             ComparisonOperator: GREATER_THAN
@@ -281,6 +304,11 @@ Resources:
           Subscribers:
             - SubscriptionType: EMAIL
               Address: !Ref EmailAlerta
+            - !If
+              - TemEmailPessoal
+              - SubscriptionType: EMAIL
+                Address: !Ref EmailAlertaPessoal
+              - !Ref AWS::NoValue
 
   AlarmeRecuperacao:
     Type: AWS::CloudWatch::Alarm
