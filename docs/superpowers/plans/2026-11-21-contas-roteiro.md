@@ -8,8 +8,8 @@ Cada plano entrega algo que funciona e se testa sozinho. Ordem:
 |---|---|---|---|
 | 1 | `2026-11-21-servidor-local.md` | **Concluído** (commits f6c8c37..b01ed23, 87 testes passando, branch `feat/contas-ec2`, sem PR). API Node + Postgres rodando no computador: login, proteção, sincronização, fotos, apagar conta | — |
 | 2 | `2026-11-21-app-conta-sync.md` | **Concluído** (branch `feat/app-conta-sync`, commits e285582..a93c407, 100 testes do site e 103 do servidor, roteiro de navegador headless 47/47, sem PR). Telas de conta, armazenamento por usuário, fila de envio, baixar no login, modo antigo até o primeiro login | 1 |
-| 3 | (a escrever) App: plano e metas por pessoa | Formulário do plano com versões, metas de exercício, novo "dia cumprido" e calendário | 2 |
-| 4 | (a escrever) App: migração do app antigo | Oferta à primeira conta, envio com fotos, retomada, mover dados locais | 2, 3 |
+| 3 | `2026-11-22-plano-e-metas.md` | **Concluído** (11 tasks, branch `feat/aceite-site`, sem push; site 207 testes ok, servidor 125 ok e 6 pulados, que só rodam em Postgres real). Formulário do plano com versões, metas de exercício, novo "dia cumprido" e calendário. Remove a trava 1 do ADR-005 | 2 |
+| 4 | `2026-11-22-migracao-app-antigo.md` (em execução) App: migração do app antigo | Oferta à primeira conta, envio com fotos, retomada, mover dados locais | 2, 3 |
 | 5 | `2026-11-21-aws-lancamento-1.md` | **Concluído**. Stack `saude-familiar` em us-east-2 no ar (commits do branch `feat/aws-infra` até 368f31b), fumaça de ponta a ponta OK. Máquina mantida ligada por decisão do Kaique (~US$ 11,50/mês nos créditos). EC2, Postgres, CloudFront, S3, backup com restauração, alertas, roteiro para o irmão | 1–4; conta AWS do Kaique |
 | 6 | (a escrever) Lançamento 2 | Checklist da Rejane, tirar `PLANO` do `data.js`, remover modo antigo | 5 + confirmação |
 
@@ -63,7 +63,7 @@ Do plano 1, adiadas de propósito (a revisão final marcou como "pode ficar"). C
 
 Do plano 2, adiadas de propósito (minor deferred não resolvido). Revisão final: 3 Important corrigidos (commits 235690b..a93c407); 1 residual abaixo.
 
-- Parked: `naoGravado` não desliga quando a mudança não gravada é desfeita (`sf-sincronia.js:243`). Falso alarme (status "erro", pendentes >= 1 até a próxima gravação), nenhum dado se perde. Corrigir no início do plano 3, com teste.
+- Resolvido no plano 3 (commit 298f3dd): `naoGravado` desliga quando a mudança não gravada é desfeita.
 - `dev.js`: baseUrl `localhost` x listen `127.0.0.1`; fallback redundante em `contas.js`; `dev.js` sem teste próprio; comentário da ordem key/file no multipart.
 - `dev.js`: sem realpath (symlink) nem allowlist de extensões; teste grava `fora-sf.txt` no tmp pai; imports fora de ordem.
 - `sf-api.js`: `res.text()` falhando vira TypeError cru; 2xx não-JSON devolve null; `baixar(undefined)`; Authorization enviado em entrar/cadastro com token vencido; regex duplicada no `sw.js`.
@@ -79,9 +79,9 @@ Do plano 2, adiadas de propósito (minor deferred não resolvido). Revisão fina
 
 ## Para o plano 3
 
-- Zerar o cursor do `/sync` ao passar a tratar `plano`/`meta`. Hoje o cliente os ignora mas o cursor anda; sem zerar, os aparelhos atuais nunca recebem esses tipos.
-- Corrigir o parked `naoGravado` (acima) no início, com teste.
-- "Sair com pendências": decidido pela opção A do Kaique, registrada no ADR-004 (em gravação). Alinhar a spec §8.1 ao ADR.
+- Resolvido (commits 298f3dd e 5987e1d): o cursor do `/sync` zera uma vez (`cursor-versao`) e só avança com o cursor gravado.
+- Resolvido (commit 298f3dd): `naoGravado` corrigido, com teste.
+- Pendente: "Sair com pendências" foi decidido pela opção A do Kaique, mas o ADR-004 continua sem gravar. Alinhar a spec §8.1 ao ADR.
 
 ## Rulings do plano 5
 
