@@ -16,6 +16,7 @@ var ARQUIVOS = [
   "./js/sf-sincronia.js?v=37",
   "./js/sf-conta.js?v=37",
   "./js/sf-plano.js?v=37",
+  "./js/sf-editor.js?v=37",
   "./app.js?v=37",
   "./logo.svg",
   "./icon-192.png",

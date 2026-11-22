@@ -1009,6 +1009,47 @@
     return modo === "conta" ? '<div class="linha-acoes"><a class="btn" href="#plano/editar">Editar plano</a><a class="btn" href="#metas">Metas de exercício</a></div>' : '';
   }
 
+  // ---------- editor do plano (#plano/editar, só com conta) ----------
+  function telaPlanoEditar() {
+    var inicial = planoDe(hojeChave());
+    return '<div class="editor-plano"><h2>' + (inicial ? "Editar meu plano" : "Cadastrar meu plano") + '</h2>' +
+      '<p class="editor-aviso">O que você salvar vale a partir de hoje. Os dias anteriores continuam com o plano que valia neles.</p>' +
+      '<div id="editor-plano">' + SF.editor.htmlPlano(inicial, window.RECEITAS || []) + '</div>' +
+      '<div class="linha-acoes"><button type="button" class="btn primario" data-plano-salvar>Salvar plano</button>' +
+      '<button type="button" class="btn" data-plano-cancelar>Cancelar</button></div></div>';
+  }
+  // Há um formulário de edição aberto (plano; a Task 10 acrescenta o das metas)? Re-render automático não pode apagá-lo.
+  function formEmEdicao() { return !!(main && main.querySelector("#form-plano")); }
+  var editorInicial = "", cancelarArmado = false;
+  function paresDoEditor() {
+    var f = document.getElementById("form-plano");
+    return f ? Array.from(new FormData(f)) : [];
+  }
+  function redesenharEditor(plano, erros) {
+    var c = document.getElementById("editor-plano");
+    if (c) c.innerHTML = SF.editor.htmlPlano(plano, window.RECEITAS || [], erros);
+  }
+  function acaoEditor(b) {
+    var pares = SF.editor.aplicarAcao(paresDoEditor(), b.dataset.acao, b.dataset.i, b.dataset.j);
+    var y = window.scrollY;
+    redesenharEditor(SF.editor.planoBrutoDosPares(pares));
+    window.scrollTo(0, y);
+  }
+  function salvarEditorPlano() {
+    var pares = paresDoEditor();
+    var r = SF.editor.planoDosCampos(pares, planoDe(hojeChave()), Date.now());
+    if (r.erros.length) {
+      redesenharEditor(SF.editor.planoBrutoDosPares(pares), r.erros);
+      var primeiro = document.querySelector('#form-plano [name="' + r.erros[0].campo + '"]') || document.getElementById("form-plano");
+      if (primeiro) { if (!primeiro.hasAttribute("tabindex") && primeiro.tagName === "FORM") primeiro.setAttribute("tabindex", "-1"); primeiro.focus(); }
+      return;
+    }
+    planos = SF.plano.salvarPlano(planos, r.plano, hojeChave());
+    salvarTudo();
+    location.hash = "#plano";
+    toast("Plano salvo. Vale a partir de hoje.");
+  }
+
   function telaPlano() {
     var hoje = hojeChave(), planoHoje = planoDe(hoje);
     if (!planoHoje) return semPlano("Meu plano");
@@ -1505,6 +1546,7 @@
     var html;
     if (aba === "receita") { html = telaReceita(partes[1]); aba = "receitas"; }
     else if (aba === "refeicao") { html = telaRefeicao(partes[1]); aba = "plano"; }
+    else if (aba === "plano" && partes[1] === "editar" && modo === "conta") html = telaPlanoEditar();
     else if (aba === "receitas") html = telaReceitas();
     else if (aba === "favoritas") { filtro = "favoritas"; html = telaReceitas(); aba = "receitas"; }
     else if (aba === "frequencia") html = telaFrequencia();
@@ -1512,6 +1554,8 @@
     else if (aba === "quero" || aba === "despensa") { html = telaDespensa(); aba = "quero"; }
     else { html = telaPlano(); aba = "plano"; }
     main.innerHTML = html;
+    cancelarArmado = false;
+    if (formEmEdicao()) editorInicial = JSON.stringify(paresDoEditor());
     preencherFotos(main);
     document.querySelectorAll(".abas a").forEach(function (a) {
       if (a.dataset.aba === aba) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
@@ -1526,6 +1570,7 @@
   }
 
   function rerenderMantendoScroll() {
+    if (formEmEdicao()) return; // visibilitychange, storage, virada do dia, relógio: o digitado fica
     var y = window.scrollY;
     // Lembra qual botão estava em foco para devolver o foco a ele depois de redesenhar.
     var ativo = document.activeElement, seletor = null;
@@ -1545,10 +1590,18 @@
   }
 
   // ---------- eventos ----------
+  main.addEventListener("submit", function (e) { if (e.target.id === "form-plano") e.preventDefault(); });
   main.addEventListener("click", function (e) {
     var b = e.target.closest("button");
     if (!b) return;
-    if (b.dataset.fav) {
+    if (b.dataset.acao && b.closest("#form-plano")) acaoEditor(b);
+    else if (b.dataset.planoSalvar !== undefined) salvarEditorPlano();
+    else if (b.dataset.planoCancelar !== undefined) {
+      if (!cancelarArmado && JSON.stringify(paresDoEditor()) !== editorInicial) {
+        cancelarArmado = true; b.textContent = "Toque de novo para descartar";
+      } else location.hash = "#plano";
+    }
+    else if (b.dataset.fav) {
       var ok = alternar(favs, b.dataset.fav); salvarTudo();
       toast(ok ? "Adicionada às favoritas" : "Removida das favoritas");
       rerenderMantendoScroll();

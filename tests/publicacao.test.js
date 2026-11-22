@@ -40,6 +40,8 @@ test("scripts do site no index e no cache, na mesma versão", () => {
   const ordem = scripts.map((s) => s.src);
   assert.ok(ordem.includes("js/sf-plano.js"), "sf-plano.js no index");
   assert.ok(ordem.indexOf("js/sf-plano.js") < ordem.indexOf("app.js"), "sf-plano antes de app.js");
+  assert.ok(ordem.includes("js/sf-editor.js"), "sf-editor.js no index");
+  assert.ok(ordem.indexOf("js/sf-editor.js") < ordem.indexOf("app.js"), "sf-editor antes de app.js");
 });
 
 test("versão de cache 37", () => {
