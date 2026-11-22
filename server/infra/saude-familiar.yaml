@@ -260,6 +260,10 @@ Resources:
         BudgetLimit:
           Amount: !Ref LimiteOrcamentoUSD
           Unit: USD
+        # Gasto bruto: com credito incluido o custo fica em zero e o aviso so
+        # chegaria depois que os creditos da conta acabassem.
+        CostTypes:
+          IncludeCredit: false
       NotificationsWithSubscribers:
         - Notification:
             NotificationType: ACTUAL

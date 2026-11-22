@@ -191,6 +191,8 @@ class Template(unittest.TestCase):
         b = props("Orcamento")["Budget"]
         self.assertEqual(b["BudgetType"], "COST")
         self.assertEqual(b["TimeUnit"], "MONTHLY")
+        self.assertIs(b.get("CostTypes", {}).get("IncludeCredit"), False,
+                      "com credito incluido o alerta nao dispara enquanto houver credito")
         ns = {(n["Notification"]["NotificationType"], n["Notification"]["Threshold"])
               for n in props("Orcamento")["NotificationsWithSubscribers"]}
         self.assertEqual(ns, {("ACTUAL", 80), ("FORECASTED", 100)})
