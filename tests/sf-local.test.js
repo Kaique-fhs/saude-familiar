@@ -80,3 +80,9 @@ test("usouAppAntigo: qualquer chave mp-* conta, mesmo vazia; chaves de conta nã
   assert.equal(com(["mp-ultimo-backup"]), true);
   assert.equal(com(["sf:u:mp-favs", "sf:sessao", "outra"]), false);
 });
+
+test("usouAppAntigo: storage nulo ou que lança não derruba o app", () => {
+  const criar = require("../js/sf-local.js").criar;
+  assert.equal(criar({ storage: null }).usouAppAntigo(), false);
+  assert.equal(criar({ storage: { get length() { throw new Error("x"); } } }).usouAppAntigo(), false);
+});

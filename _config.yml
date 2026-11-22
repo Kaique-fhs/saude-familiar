@@ -1,0 +1,9 @@
+# GitHub Pages: só o site é servido. Documentos internos, servidor e testes ficam fora.
+# Arquivo novo na raiz que não é do site entra aqui (tests/publicacao.test.js confere).
+exclude:
+  - docs
+  - server
+  - tests
+  - handoff.md
+  - CLAUDE.md
+  - README.md

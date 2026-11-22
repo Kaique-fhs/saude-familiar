@@ -12,9 +12,21 @@
   var armazem = null, apiSF = null, contaUI = null, sincronia = null, sincroniaLigada = null, fotosSF = null;
   var modo = "antigo"; // "antigo": mp-* sem prefixo | "conta": sf:<id>:* | "entrar": só a tela de conta
   var userId = null;
-  if (CONFIG.apiUrl && SF.api && SF.local && SF.dados && SF.fotos && SF.sincronia && SF.conta) {
-    try { armazem = SF.local.criar({ storage: window.localStorage }); } catch (e) { armazem = null; }
+  // Sem armazenamento legível não existe conta (nem onde guardar a sessão): o app abre como sempre abriu.
+  var semCarregar = false, guardado = null;
+  try {
+    var st = window.localStorage, temMp = false;
+    var temSessao = !!st.getItem("sf:sessao");
+    for (var i = 0; i < st.length; i++) if (String(st.key(i)).indexOf("mp-") === 0) temMp = true;
+    guardado = { storage: st, sessao: temSessao, antigo: temMp };
+  } catch (e) { guardado = null; }
+  if (guardado) {
+    var completo = !!(SF.api && SF.local && SF.dados && SF.fotos && SF.sincronia && SF.conta);
+    if (CONFIG.apiUrl && completo) armazem = SF.local.criar({ storage: guardado.storage });
+    // config.js ou um script não carregou: só quem é do app antigo, sem sessão, segue sem conta.
+    else if (!window.SF_CONFIG || CONFIG.apiUrl) semCarregar = guardado.sessao || !guardado.antigo;
   }
+  if (semCarregar) modo = "entrar";
   // Duas travas até os planos 3 e 4:
   // 1) aparelho do app antigo, sem sessão, nem monta a conta: segue igual, tudo local;
   // 2) com conta, o plano do data.js (que é de uma pessoa só) não aparece.
@@ -36,6 +48,8 @@
   }
   function gravar(chave, valor) {
     if (userId) return armazem.gravar(userId, chave, valor);
+    // com conta montada (ou por carregar), nada vira mp-*: isso prenderia o aparelho no modo antigo
+    if (armazem || semCarregar) return false;
     try { localStorage.setItem(chave, JSON.stringify(valor)); return true; } catch (e) { return false; }
   }
   var favs = ler("mp-favs", []);
@@ -117,20 +131,29 @@
 
   var toastEl = document.getElementById("toast"), toastT;
   var desfazerAtual = null;
+  // Troca de conta ou fim de sessão: a ação pendente era da conta anterior.
+  function descartarToast() {
+    clearTimeout(toastT);
+    desfazerAtual = null;
+    toastEl.classList.remove("show", "com-acao");
+    toastEl.innerHTML = "";
+  }
   function toastAcao(msg, rotulo, acao) {
+    var dono = userId;
     clearTimeout(toastT);
     desfazerAtual = null;
     toastEl.innerHTML = "";
     toastEl.appendChild(document.createTextNode(msg));
     var bt = document.createElement("button");
     bt.type = "button"; bt.className = "desfazer"; bt.textContent = rotulo;
-    bt.addEventListener("click", function () { toastEl.classList.remove("show", "com-acao"); acao(); });
+    bt.addEventListener("click", function () { toastEl.classList.remove("show", "com-acao"); if (dono === userId) acao(); });
     toastEl.appendChild(bt);
     toastEl.classList.add("com-acao", "show");
     toastT = setTimeout(function () { toastEl.classList.remove("show", "com-acao"); }, 8000);
   }
 
   function toast(msg, desfazer) {
+    var dono = userId;
     clearTimeout(toastT);
     desfazerAtual = desfazer || null;
     toastEl.innerHTML = "";
@@ -141,7 +164,7 @@
       bt.addEventListener("click", function () {
         var f = desfazerAtual; desfazerAtual = null;
         toastEl.classList.remove("show", "com-acao");
-        if (f) { f(); salvarTudo(); rerenderMantendoScroll(); toast("Desfeito"); }
+        if (f && dono === userId && (!armazem || modo === "conta")) { f(); salvarTudo(); rerenderMantendoScroll(); toast("Desfeito"); }
       });
       toastEl.appendChild(bt);
     }
@@ -521,6 +544,8 @@
   }
   // Troca de conta: fecha o banco e solta as imagens da conta anterior.
   function trocarBanco() {
+    descartarToast();
+    termo = ""; termoDesp = ""; filtro = "todas"; diaSel = hojeChave();
     fecharBanco();
     bancoTravado = false;
     Object.keys(urlsFotos).forEach(function (id) { URL.revokeObjectURL(urlsFotos[id]); });
@@ -1769,6 +1794,8 @@
     var id = s && s.usuario && s.usuario.id;
     if (!id) return;
     if (id !== userId) {
+      // outra aba usou o app antigo com esta tela de entrar aberta: vale a trava
+      if (!userId && armazem.usouAppAntigo()) { armazem.apagarSessao(); location.reload(); return; }
       // outra conta (ou vindo do modo antigo): começa do que está guardado para ela; os mp-* ficam intactos
       pararSincronia();
       userId = id;
@@ -1787,6 +1814,8 @@
   function sessaoVencida() {
     armazem.apagarSessao();
     modo = "entrar";
+    descartarToast();
+    if (armazem.usouAppAntigo()) { esconderDadosDaConta(); location.reload(); return; }
     clearTimeout(timerSync); clearTimeout(timerRetry);
     timerSync = null; timerRetry = null;
     if (dlg && dlg.open) fecharRegistro();
@@ -1832,11 +1861,16 @@
 
   function avisarContaIndisponivel() {
     if (contaEsperaMigracao && SF.conta.lerHash(location.hash).acao) {
-      toast("A conta ainda não está disponível neste aparelho. Abra o link em outro aparelho.");
+      try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* ignora */ }
+      toastAcao("A conta ainda não está disponível neste aparelho. Abra o link em outro aparelho.", "Entendi", function () {});
     }
   }
 
   if (armazem) ligarConta();
+  if (semCarregar) {
+    main.innerHTML = '<div class="vazio" role="alert">Não deu para carregar o app por inteiro. Confira a internet e recarregue a página.<br><br>' +
+      '<a class="btn primario" href="./">Recarregar</a></div>';
+  }
   render();
   avisarContaIndisponivel();
 })();

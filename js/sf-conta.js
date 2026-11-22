@@ -32,6 +32,7 @@
     senha: "A senha precisa ter de 8 a 128 caracteres.",
     email: "Esse e-mail não parece certo. Confira e tente de novo.",
     token: "Esse link não vale mais. Peça um novo.",
+    armazenamento: "Não deu para guardar o acesso neste aparelho. Libere espaço ou saia do modo restrito e tente de novo.",
     rede: "Sem conexão com o servidor. Confira a internet e tente de novo."
   };
   var MSG_PADRAO = "Algo deu errado. Tente de novo daqui a pouco.";
@@ -233,7 +234,7 @@
         ocupado(b, true, "Entrar");
         return api.entrar(email.input.value.trim(), senha.input.value).then(function (s) {
           var sessao = { token: s.token, usuario: s.usuario };
-          local.gravarSessao(sessao);
+          if (local.gravarSessao(sessao) === false) { ocupado(b, false, "Entrar"); dizerErro(t, "armazenamento"); return; }
           senha.input.value = "";
           esconder();
           if (o.aoEntrar) o.aoEntrar(sessao);
