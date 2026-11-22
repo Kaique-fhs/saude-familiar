@@ -5,7 +5,7 @@
 - Máquina mantida ligada (~US$ 11,50/mês nos créditos), decisão do Kaique.
 - 22/11/2026: `REF` do provisionamento é obrigatório, sem padrão.
 - 22/11/2026: orçamento de US$ 20 mede gasto bruto (`IncludeCredit: false`).
-- 22/11/2026: abrir o cadastro antes dos planos 3 e 4, com 2 travas (ADR-005 em rascunho, aguardando aprovação): conta não vê o `PLANO` do `data.js`; aparelho que já usou o app antigo (`mp-*`) segue local, sem conta.
+- 22/11/2026: abrir o cadastro antes dos planos 3 e 4, com 2 travas (ADR-005): conta não vê o `PLANO` do `data.js`; aparelho que já usou o app antigo (`mp-*`) segue local, sem conta.
 - Rulings e pendências dos planos 1, 2 e 5: `docs/superpowers/plans/2026-11-21-contas-roteiro.md`.
 
 ## Estado atual (22/11/2026)
@@ -24,6 +24,6 @@
 - Sem "Restaurar cópia" para aparelho sem dados até o plano 4 (troca de celular da Rejane).
 - Sem política de privacidade: necessária antes de divulgar a terceiros.
 - Passar ao plano pago antes de 2027-03-23.
-- Gravar o ADR-004 e o ADR-005; alinhar a spec §8.1 e §8.5.
+- Gravar o ADR-004; alinhar a spec §8.1 e §8.5.
 - Menores da revisão: "Nova senha" com sessão não tem voltar; `sair` sem timeout; `sw.js` apaga caches de outros sites da mesma origem; token em `localStorage` de origem compartilhada (domínio próprio resolve).
 - Push é pela conta `Kaique-fhs`; a ativa no gh costuma ser `triokids`, e quem troca é o Kaique.
