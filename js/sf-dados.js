@@ -26,12 +26,10 @@
     if (typeof console !== "undefined" && console.warn) console.warn("Chave não sincroniza (fica só local):", tipo, String(chave).slice(0, 40));
   }
 
-  function paraItens(estado) {
-    var itens = {};
-    function por(tipo, chave, valor) {
-      if (!chaveValida(tipo, chave)) { avisar(tipo, chave); return; }
-      itens[tipo + "|" + chave] = { tipo: tipo, chave: chave, valor: valor };
-    }
+  // Enumera todos os itens do estado, válidos ou não: [{tipo, chave, valor}]. Fonte única da enumeração.
+  function enumerar(estado) {
+    var lista = [];
+    function por(tipo, chave, valor) { lista.push({ tipo: tipo, chave: chave, valor: valor }); }
     (estado.favs || []).forEach(function (id) { por("fav", id, null); });
     (estado.sel || []).forEach(function (id) { por("sel", id, null); });
     Object.keys(estado.checks || {}).forEach(function (k) { if (estado.checks[k]) por("check", k, null); });
@@ -49,6 +47,15 @@
     });
     Object.keys(estado.planos || {}).forEach(function (k) { por("plano", k, estado.planos[k]); });
     Object.keys(estado.metas || {}).forEach(function (k) { por("meta", k, estado.metas[k]); });
+    return lista;
+  }
+
+  function paraItens(estado) {
+    var itens = {};
+    enumerar(estado).forEach(function (it) {
+      if (!chaveValida(it.tipo, it.chave)) { avisar(it.tipo, it.chave); return; }
+      itens[it.tipo + "|" + it.chave] = it;
+    });
     return itens;
   }
 
@@ -139,6 +146,6 @@
   }
 
   raiz.SF = raiz.SF || {};
-  raiz.SF.dados = { NOMES: NOMES, chaveValida: chaveValida, estadoVazio: estadoVazio, paraItens: paraItens, diferencas: diferencas, aplicar: aplicar };
+  raiz.SF.dados = { NOMES: NOMES, chaveValida: chaveValida, estadoVazio: estadoVazio, enumerar: enumerar, paraItens: paraItens, diferencas: diferencas, aplicar: aplicar };
   if (typeof module !== "undefined") module.exports = raiz.SF.dados;
 })(typeof window !== "undefined" ? window : globalThis);
