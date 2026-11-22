@@ -1018,11 +1018,11 @@
       '<div class="linha-acoes"><button type="button" class="btn primario" data-plano-salvar>Salvar plano</button>' +
       '<button type="button" class="btn" data-plano-cancelar>Cancelar</button></div></div>';
   }
-  // Há um formulário de edição aberto (plano; a Task 10 acrescenta o das metas)? Re-render automático não pode apagá-lo.
-  function formEmEdicao() { return !!(main && main.querySelector("#form-plano")); }
+  // Há um formulário de edição aberto (plano ou meta)? Re-render automático não pode apagá-lo.
+  function formEmEdicao() { return !!(main && main.querySelector("#form-plano, #form-meta")); }
   var editorInicial = "", cancelarArmado = false;
   function paresDoEditor() {
-    var f = document.getElementById("form-plano");
+    var f = document.getElementById("form-plano") || document.getElementById("form-meta");
     return f ? Array.from(new FormData(f)) : [];
   }
   function redesenharEditor(plano, erros) {
@@ -1048,6 +1048,40 @@
     salvarTudo();
     location.hash = "#plano";
     toast("Plano salvo. Vale a partir de hoje.");
+  }
+
+  // ---------- metas de exercício (#metas, só com conta) ----------
+  // undefined = lista; null = meta nova; objeto = meta em edição.
+  var metaEmEdicao, metaArmada = null;
+  function telaMetas() {
+    var voltar = '<p><a href="#plano">Voltar ao plano</a></p>';
+    if (metaEmEdicao === undefined) {
+      return '<div class="editor-metas"><h2>Metas de exercício</h2>' + voltar +
+        '<p class="editor-aviso">O que você salvar vale a partir de hoje. Os dias anteriores continuam como estavam.</p>' +
+        '<div id="lista-metas">' + SF.editor.htmlMetas(metas, hojeChave()) + '</div></div>';
+    }
+    return '<div class="editor-metas"><h2>' + (metaEmEdicao ? "Editar meta" : "Nova meta") + '</h2>' +
+      '<p class="editor-aviso">O que você salvar vale a partir de hoje.</p>' +
+      '<div id="editor-meta">' + SF.editor.htmlMeta(metaEmEdicao) + '</div>' +
+      '<div class="linha-acoes"><button type="button" class="btn primario" data-meta-salvar>Salvar meta</button>' +
+      '<button type="button" class="btn" data-meta-cancelar>Cancelar</button></div></div>';
+  }
+  function salvarEditorMeta() {
+    var pares = paresDoEditor();
+    var r = SF.editor.metaDosCampos(pares, metaEmEdicao);
+    if (r.erros.length) {
+      var c = document.getElementById("editor-meta");
+      if (c) c.innerHTML = SF.editor.htmlMeta(r.meta, r.erros);
+      var campo = r.erros[0].campo;
+      var primeiro = document.querySelector('#form-meta [name="' + campo + '"]') || document.querySelector("#form-meta .dias input") || document.getElementById("form-meta");
+      if (primeiro) { if (primeiro.tagName === "FORM") primeiro.setAttribute("tabindex", "-1"); primeiro.focus(); }
+      return;
+    }
+    metas = SF.plano.salvarMeta(metas, r.meta, hojeChave(), Date.now());
+    salvarTudo();
+    metaEmEdicao = undefined;
+    render();
+    toast("Meta salva. Vale a partir de hoje.");
   }
 
   function telaPlano() {
@@ -1544,9 +1578,11 @@
     var hash = location.hash.replace(/^#/, "") || "plano";
     var partes = hash.split("/"), aba = partes[0];
     var html;
+    if (aba !== "metas") { metaEmEdicao = undefined; metaArmada = null; }
     if (aba === "receita") { html = telaReceita(partes[1]); aba = "receitas"; }
     else if (aba === "refeicao") { html = telaRefeicao(partes[1]); aba = "plano"; }
     else if (aba === "plano" && partes[1] === "editar" && modo === "conta") html = telaPlanoEditar();
+    else if (aba === "metas" && modo === "conta") { html = telaMetas(); aba = "plano"; }
     else if (aba === "receitas") html = telaReceitas();
     else if (aba === "favoritas") { filtro = "favoritas"; html = telaReceitas(); aba = "receitas"; }
     else if (aba === "frequencia") html = telaFrequencia();
@@ -1590,12 +1626,28 @@
   }
 
   // ---------- eventos ----------
-  main.addEventListener("submit", function (e) { if (e.target.id === "form-plano") e.preventDefault(); });
+  main.addEventListener("submit", function (e) { if (e.target.id === "form-plano" || e.target.id === "form-meta") e.preventDefault(); });
   main.addEventListener("click", function (e) {
     var b = e.target.closest("button");
     if (!b) return;
     if (b.dataset.acao && b.closest("#form-plano")) acaoEditor(b);
     else if (b.dataset.planoSalvar !== undefined) salvarEditorPlano();
+    else if (b.dataset.metaNova !== undefined) { metaEmEdicao = null; render(); }
+    else if (b.dataset.metaEditar !== undefined) { metaEmEdicao = metas[b.dataset.metaEditar] || null; render(); }
+    else if (b.dataset.metaSalvar !== undefined) salvarEditorMeta();
+    else if (b.dataset.metaCancelar !== undefined) {
+      if (!cancelarArmado && JSON.stringify(paresDoEditor()) !== editorInicial) {
+        cancelarArmado = true; b.textContent = "Toque de novo para descartar";
+      } else { metaEmEdicao = undefined; render(); }
+    }
+    else if (b.dataset.metaEncerrar !== undefined) {
+      if (metaArmada !== b.dataset.metaEncerrar) {
+        metaArmada = b.dataset.metaEncerrar; b.textContent = "Toque de novo para encerrar";
+      } else {
+        metas = SF.plano.encerrarMeta(metas, b.dataset.metaEncerrar, hojeChave()); metaArmada = null;
+        salvarTudo(); render(); toast("Meta encerrada.");
+      }
+    }
     else if (b.dataset.planoCancelar !== undefined) {
       if (!cancelarArmado && JSON.stringify(paresDoEditor()) !== editorInicial) {
         cancelarArmado = true; b.textContent = "Toque de novo para descartar";
