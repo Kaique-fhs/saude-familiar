@@ -364,6 +364,7 @@ table.nutri th:first-child, table.nutri td:first-child { text-align: left; }
 .s-feita .tag-sit { background: var(--primary); color: #fff; }
 .s-agora .tag-sit, .s-proxima .tag-sit { background: var(--accent-soft); color: var(--accent); }
 .s-atrasada .tag-sit { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+.s-pendente .tag-sit { background: transparent; color: var(--muted); border: 1px solid var(--border); }
 .ref-item.s-agora, .ref-item.s-proxima { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
 .ref-item.s-feita .nome { color: var(--muted); }
 .ref-item.s-feita .hora { background: var(--bg); color: var(--muted); }

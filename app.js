@@ -647,7 +647,7 @@
       var ok = marcadas.indexOf(r.id) >= 0, reg = regs[r.id];
       var comidas = reg ? (reg.escolhas || []).map(nomeCurto).filter(function (n) { return !/^Salada de folhas|^Verduras cozidas|^Feijão/.test(n); }) : [];
       linhas.push((ok ? "✅ " : "❌ ") + r.nome + (reg && reg.hora ? " (" + reg.hora + ")" : "") +
-        (comidas.length ? ": " + comidas.join(", ") : "") + (ok && reg && !reg.foto && r.itens && r.itens.length ? " · sem foto" : ""));
+        (comidas.length ? ": " + comidas.join(", ") : "") + (ok && reg && !reg.foto && !fotoOpcional(r.id, k) ? " · sem foto" : ""));
     });
     if (ex.length) {
       linhas.push("", "Exercícios: " + ex.filter(function (e) { return feitosEx.indexOf(e.id) >= 0; }).length + " de " + ex.length);
@@ -700,6 +700,12 @@
 
   // ---------- registro de uma refeição: o que comeu + foto ----------
   var FOTO_OPCIONAL = ["acordar"]; // "Ao acordar" é só água com limão
+  // Foto opcional: "acordar" e qualquer refeição do plano sem itens (meta de exercício sempre pede foto).
+  function fotoOpcional(id, dia) {
+    if (FOTO_OPCIONAL.indexOf(id) >= 0) return true;
+    var r = exPorId(id, dia) ? null : refPorId(id, dia);
+    return !!r && !(r.itens || []).length;
+  }
   var dlg = null, regAtual = null;
   // Meta de exercício valendo naquele dia (ou null se o id é de refeição).
   function exPorId(id, dia) { var l = SF.plano.metasNoDia(modeloAtual().metas, dia); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
@@ -722,15 +728,15 @@
       var esperando = regAtual;
       obterFoto(ant.foto).then(function (b) { if (regAtual === esperando) regAtual.blobSalvo = b || null; }).catch(function () {});
     }
-    var fotoObrig = FOTO_OPCIONAL.indexOf(refId) < 0;
+    var fotoObrig = !fotoOpcional(refId, diaSel);
 
     var h = '<form class="reg" novalidate>' +
       '<div class="reg-topo"><h2 id="reg-titulo">' + esc(r.nome) + '</h2><span class="chip">' + rotuloDia(diaSel) + '</span>' +
       '<button type="button" class="btn-fav" id="reg-fechar" aria-label="Fechar">✕</button></div>' +
       '<p class="descricao">' + (ex ? 'Tire uma foto para registrar o treino (no aparelho, na aula, no espelho da academia...).'
         : 'Marque o que você comeu' + (fotoObrig ? ' e tire uma foto do prato.' : '. A foto é opcional nesta refeição.')) + '</p>';
-    r.itens.forEach(function (it, i) {
-      var opcoes = [it.principal].concat(it.opcoes);
+    (r.itens || []).forEach(function (it, i) {
+      var opcoes = [it.principal].concat(it.opcoes || []);
       if (opcoes.length === 1) {
         var marcado = escolhidas ? escolhidas.indexOf(it.principal) >= 0 : true;
         h += '<label class="reg-op reg-fixo"><input type="checkbox" name="g' + i + '" value="0"' + (marcado ? ' checked' : '') + '><span>' + esc(it.principal) + '</span></label>';
@@ -790,7 +796,7 @@
   }
 
   function atualizarBotaoSalvar() {
-    var precisa = FOTO_OPCIONAL.indexOf(regAtual.ref) < 0;
+    var precisa = !fotoOpcional(regAtual.ref, regAtual.dia);
     var tem = !!(regAtual.blob || regAtual.fotoAntiga);
     var b = dlg.querySelector("#reg-salvar");
     b.disabled = precisa && !tem;
@@ -831,8 +837,8 @@
   function salvarRegistro() {
     var ex = exPorId(regAtual.ref, regAtual.dia);
     var r = ex ? { itens: [] } : refPorId(regAtual.ref, regAtual.dia), form = dlg.querySelector("form"), escolhas = [];
-    r.itens.forEach(function (it, i) {
-      var opcoes = [it.principal].concat(it.opcoes);
+    (r.itens || []).forEach(function (it, i) {
+      var opcoes = [it.principal].concat(it.opcoes || []);
       var marcado = form.querySelector('input[name="g' + i + '"]:checked');
       if (marcado) escolhas.push(opcoes[+marcado.value]);
     });
@@ -1063,14 +1069,15 @@
       '<div class="acoes"><button class="btn' + (s === "feita" ? '' : ' primario') + '" data-registrar="' + r.id + '" data-hoje>' + ICON.camera +
       (s === "feita" ? 'Ver o registro' : 'Marcar o que comi') + '</button></div>' +
       '<h3>O que comer</h3>';
-    r.itens.forEach(function (it) {
+    (r.itens || []).forEach(function (it) {
       h += '<div class="item"><div class="principal">' + esc(it.principal) + '</div>';
-      if (it.opcoes.length) h += '<ul>' + it.opcoes.map(function (o) { return '<li>' + esc(o) + '</li>'; }).join("") + '</ul>';
+      if ((it.opcoes || []).length) h += '<ul>' + it.opcoes.map(function (o) { return '<li>' + esc(o) + '</li>'; }).join("") + '</ul>';
       h += '</div>';
     });
-    if (r.observacoes.length || (r.receitas || []).length) {
-      h += '<div class="obs"><strong>Observações</strong>' + (r.observacoes.length ? '<ul>' +
-        r.observacoes.map(function (o) { return '<li>' + esc(o) + '</li>'; }).join("") + '</ul>' : '');
+    var obs = r.observacoes || [];
+    if (obs.length || (r.receitas || []).length) {
+      h += '<div class="obs"><strong>Observações</strong>' + (obs.length ? '<ul>' +
+        obs.map(function (o) { return '<li>' + esc(o) + '</li>'; }).join("") + '</ul>' : '');
       (r.receitas || []).forEach(function (rid) {
         var rec = porId(rid);
         if (rec) h += '<a class="link-receita" href="#receita/' + rec.id + '">Ver receita: ' + esc(rec.nome) + ' →</a>';
