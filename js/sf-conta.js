@@ -16,6 +16,22 @@
     return !!(s && s.usuario && s.usuario.id) || !(o && o.usouAppAntigo);
   }
 
+  // Onde gravar: "conta" com usuário logado; "antigo" no modo antigo (sem conta) fora de semCarregar; senão nada.
+  function destinoGravacao(o) {
+    o = o || {};
+    if (o.userId) return "conta";
+    if (o.modo === "antigo" && !o.semCarregar) return "antigo";
+    return null;
+  }
+
+  // Seções extras da tela Conta: "antigos" aparece com dados antigos e oferta possível (inclui migrando, para o progresso).
+  function secoesConta(o) {
+    o = o || {};
+    var r = [];
+    if (o.temAntigos && o.podeOferecer) r.push("antigos");
+    return r;
+  }
+
   // Versão do aviso de privacidade: igual à de server/src/aceite.js e à de privacidade.html.
   var VERSAO_AVISO = "1";
   var TEXTO_ACEITE_SAUDE = [
@@ -497,7 +513,7 @@
 
   raiz.SF = raiz.SF || {};
   raiz.SF.conta = {
-    modoInicial: modoInicial, contaDisponivel: contaDisponivel, montarAceite: montarAceite, VERSAO_AVISO: VERSAO_AVISO, lerHash: lerHash, mensagemErro: mensagemErro,
+    modoInicial: modoInicial, destinoGravacao: destinoGravacao, secoesConta: secoesConta, contaDisponivel: contaDisponivel, montarAceite: montarAceite, VERSAO_AVISO: VERSAO_AVISO, lerHash: lerHash, mensagemErro: mensagemErro,
     validarEmail: validarEmail, validarSenha: validarSenha, textoSair: textoSair, apagarConta: apagarConta, sairDaConta: sairDaConta,
     rotuloRejeitado: rotuloRejeitado, confirmacaoApagarOk: confirmacaoApagarOk, montar: montar,
     textoConfirmarSair: textoConfirmarSair, textoStatus: textoStatus, MSG_CONFLITO: MSG_CONFLITO

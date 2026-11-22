@@ -138,3 +138,23 @@ test("rotuloRejeitado cobre plano e meta", () => {
   assert.equal(conta.rotuloRejeitado({ tipo: "plano", chave: "2026-11-22" }), "Plano alimentar: 2026-11-22");
   assert.equal(conta.rotuloRejeitado({ tipo: "meta", chave: "m-1" }), "Meta de exercício: m-1");
 });
+
+test("destinoGravacao: conta com userId, antigo só no modo antigo e sem semCarregar", () => {
+  assert.equal(conta.destinoGravacao({ modo: "conta", userId: "u1" }), "conta");
+  assert.equal(conta.destinoGravacao({ modo: "antigo", userId: "u1" }), "conta");
+  assert.equal(conta.destinoGravacao({ modo: "antigo", userId: null }), "antigo");
+  assert.equal(conta.destinoGravacao({ modo: "antigo" }), "antigo");
+  assert.equal(conta.destinoGravacao({ modo: "antigo", userId: null, semCarregar: true }), null);
+  assert.equal(conta.destinoGravacao({ modo: "entrar", userId: null }), null);
+  assert.equal(conta.destinoGravacao({}), null);
+  assert.equal(conta.destinoGravacao(), null);
+});
+
+test("secoesConta: 'antigos' só com dados antigos e podeOferecer (também migrando)", () => {
+  assert.deepEqual(conta.secoesConta({ temAntigos: true, podeOferecer: true, migrando: false }), ["antigos"]);
+  assert.deepEqual(conta.secoesConta({ temAntigos: true, podeOferecer: true, migrando: true }), ["antigos"]);
+  assert.deepEqual(conta.secoesConta({ temAntigos: false, podeOferecer: true, migrando: false }), []);
+  assert.deepEqual(conta.secoesConta({ temAntigos: true, podeOferecer: false, migrando: false, motivo: "outra-conta" }), []);
+  assert.deepEqual(conta.secoesConta({}), []);
+  assert.deepEqual(conta.secoesConta(), []);
+});
