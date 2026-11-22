@@ -8,7 +8,7 @@
 - 22/11/2026: abrir o cadastro antes dos planos 3 e 4, com 2 travas (ADR-005): conta não vê o `PLANO` do `data.js`; aparelho que já usou o app antigo (`mp-*`) segue local, sem conta.
 - 22/11/2026: cadastro exige aceite versionado do aviso de privacidade (ADR-006); versão nova sobe no servidor antes do site.
 - 22/11/2026: responsável, encarregado, contato e acesso do aviso informados pelo Kaique; pasta Enviados do Gmail limpa a cada 30 dias, à mão.
-- 22/11/2026: plano 3 implementado remove a trava 1 do ADR-005 (conta vê o próprio plano). A trava 2 continua até o plano 4. O ADR que encerra as travas fica com a sessão principal.
+- 22/11/2026: plano 3 implementado remove a trava 1 do ADR-005 (conta vê o próprio plano). O plano 4 implementado remove a trava 2 (aparelho com dados antigos abre no modo antigo, gravando em `mp-*`, com convite para criar conta). O ADR que encerra as travas fica com a sessão principal.
 - Rulings e pendências dos planos 1, 2, 3 e 5: `docs/superpowers/plans/2026-11-21-contas-roteiro.md`.
 
 ## Estado atual (22/11/2026)
@@ -20,20 +20,22 @@
 - Desligar o cadastro: reverter o commit `c2093fd` (só `config.js`, README e o teste dele).
 
 - Plano 3 (plano alimentar e metas por pessoa) implementado no branch `feat/aceite-site`, sem push: site 207 testes ok; servidor 125 ok e 6 pulados (só rodam em Postgres real). Não está implantado nem publicado.
-- Mudanças do plano 3: conta vê o próprio plano (sem plano, convite "Cadastrar meu plano"); rotas `#plano/editar` e `#metas` só com conta; café sem horário aparece "a fazer", não "atrasado"; cache na versão 37; treino vale pela origem da meta.
-- Plano 4 (migração do app antigo) em execução, com ledger próprio.
+- Mudanças do plano 3: conta vê o próprio plano (sem plano, convite "Cadastrar meu plano"); rotas `#plano/editar` e `#metas` só com conta; café sem horário aparece "a fazer", não "atrasado"; treino vale pela origem da meta.
+- Plano 4 (migração do app antigo) implementado no mesmo branch, sem push e sem deploy: site 209 testes ok; servidor 125 ok e 6 pulados. Aparelho com dados antigos e sem sessão abre no modo antigo, gravando em `mp-*`, com a faixa "Crie sua conta para guardar seus dados". A oferta "Levar o que está salvo neste aparelho para a sua conta?" vai só à primeira conta do aparelho, depois da primeira sincronização. Dados antigos só são apagados depois de o servidor confirmar tudo, ou por "Apagar dados antigos" (segundo toque) na Conta, que explica por que a limpeza automática parou. Cache na versão 38.
+- Os planos 3 e 4 também levam a limpeza diária de cadastros não confirmados (f7e68f2) e o segundo e-mail opcional de alerta (b9b2b8e): este ainda não foi aplicado na stack, falta o Kaique dizer o endereço.
+- Menores do plano 4 para a revisão final: lista em "Pendências do plano 4" no roteiro `docs/superpowers/plans/2026-11-21-contas-roteiro.md`.
 - Menor para a revisão final: apagar treino com dois registros da mesma origem (um ativo sem foto, um antigo com foto) remove os dois e o Desfazer restaura um; foto órfã; só com dado legado.
 
 ## Ordem
-1. Terminar o plano 4 (migração); ele remove a trava do aparelho antigo.
-2. Revisão final do branch, push e deploy (o site e o servidor juntos).
-3. Kaique cria a primeira conta em janela anônima: Turnstile real, e-mail, confirmar, entrar, esqueci a senha.
+1. Revisão final do branch `feat/aceite-site`, push e deploy (o site e o servidor juntos).
+2. Kaique cria a primeira conta em janela anônima: Turnstile real, e-mail, confirmar, entrar, esqueci a senha.
+3. A Rejane migra no celular dela. Depois a sessão confere no banco de produção, só por contagens, que a conta dela tem plano, registros e fotos.
 4. Depois, plano 6.
 
 ## Dúvidas em aberto
-- Sem "Restaurar cópia" para aparelho sem dados até o plano 4 (troca de celular da Rejane).
+- Troca de celular da Rejane: a migração do plano 4 cobre o aparelho com dados antigos; ainda não há "Restaurar cópia" para aparelho sem dados.
 - ADR que encerra as travas do ADR-005: rascunho com a sessão principal, aguarda OK do Kaique.
-- Limpeza de cadastros não confirmados; roteiros de incidente e de pedidos de titular.
+- Roteiros de incidente e de pedidos de titular (a limpeza de cadastros não confirmados já está no código, f7e68f2, ainda sem deploy).
 - Passar ao plano pago antes de 2027-03-23.
 - Gravar o ADR-004; alinhar a spec §8.1 e §8.5.
 - Menores da revisão: "Nova senha" com sessão não tem voltar; `sair` sem timeout; `sw.js` apaga caches de outros sites da mesma origem; token em `localStorage` de origem compartilhada (domínio próprio resolve).
