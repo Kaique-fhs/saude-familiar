@@ -26,3 +26,18 @@ test("sw: instala buscando do servidor, sem aceitar a cópia HTTP da versão ant
   const sw = fs.readFileSync(path.join(raiz, "sw.js"), "utf8");
   assert.match(sw, /new Request\(u, \{ cache: "reload" \}\)/);
 });
+
+test("scripts do site no index e no cache, na mesma versão", () => {
+  const index = fs.readFileSync(path.join(raiz, "index.html"), "utf8");
+  const sw = fs.readFileSync(path.join(raiz, "sw.js"), "utf8");
+  const scripts = [...index.matchAll(/<script src="([^"?]+)\?v=(\d+)"/g)].map((m) => ({ src: m[1], v: m[2] }));
+  const versao = (sw.match(/VERSAO = "meu-prato-v(\d+)"/) || [])[1];
+  assert.ok(versao, "VERSAO no sw.js");
+  for (const s of scripts.filter((x) => x.src.startsWith("js/"))) {
+    assert.ok(sw.includes('"./' + s.src + "?v=" + versao + '"'), "fora do cache: " + s.src);
+  }
+  for (const s of scripts) assert.equal(s.v, versao, "versão de " + s.src);
+  const ordem = scripts.map((s) => s.src);
+  assert.ok(ordem.includes("js/sf-plano.js"), "sf-plano.js no index");
+  assert.ok(ordem.indexOf("js/sf-plano.js") < ordem.indexOf("app.js"), "sf-plano antes de app.js");
+});
