@@ -1,7 +1,6 @@
 (function () {
   "use strict";
 
-  var PLANO = window.PLANO;
   var RECEITAS = window.RECEITAS;
   var main = document.getElementById("conteudo");
 
@@ -36,7 +35,6 @@
     armazem = null;
   }
   if (armazem) {
-    PLANO = { refeicoes: [], exercicios: [], compras: [] };
     iniciarConta();
   }
 
@@ -62,6 +60,8 @@
   var ultimoBackup = ler("mp-ultimo-backup", null);
   var treinos = ler("mp-treinos", {}); // { "2026-11-24": ["academia", "pilates"] }
   var registros = ler("mp-registros", {});
+  var planos = ler("mp-planos", {}); // versões do plano alimentar, só com conta
+  var metas = ler("mp-metas", {}); // metas de exercício, só com conta
   var backupsMes = ler("mp-backups-mes", {}); // { "2026-11": "2026-11-30" } dia em que a cópia de cada mês foi salva
 
   // Pede ao navegador para não apagar os dados do app quando faltar espaço (fotos, dias marcados).
@@ -79,6 +79,7 @@
     favs = ler("mp-favs", []); sel = ler("mp-sel", []); checks = ler("mp-checks", {});
     checksPlano = ler("mp-checks-plano", {}); despensa = ler("mp-quero", []); diario = ler("mp-diario", {});
     ultimoBackup = ler("mp-ultimo-backup", null); treinos = ler("mp-treinos", {}); registros = ler("mp-registros", {});
+    planos = ler("mp-planos", {}); metas = ler("mp-metas", {});
     backupsMes = ler("mp-backups-mes", {});
     // modo conta: o que foi relido vira a referência da fila (senão a próxima gravação reenviaria o que outra aba mandou)
     if (sincronia) { ultimoEstado = copiaEstado(); sincronia.rebase(ultimoEstado); }
@@ -103,6 +104,11 @@
     ok = gravar("mp-diario", diario) && ok;
     ok = gravar("mp-registros", registros) && ok;
     ok = gravar("mp-treinos", treinos) && ok;
+    // só com conta: no modo antigo o plano vem do data.js e nada de plano é gravado
+    if (userId) {
+      ok = gravar("mp-planos", planos) && ok;
+      ok = gravar("mp-metas", metas) && ok;
+    }
     return ok;
   }
   var ultimoAvisoFalha = 0;
@@ -389,54 +395,48 @@
   }
 
   // ---------- telas ----------
-  function refeicaoAtual() {
-    var agora = new Date(), m = agora.getHours() * 60 + agora.getMinutes();
-    if (m < 7 * 60) return "acordar";
-    if (m < 11 * 60) return "cafe";
-    if (m < 15 * 60) return "almoco";
-    if (m < 18 * 60) return "lanche";
-    return "jantar";
-  }
-
   // ---------- acompanhamento: refeições cumpridas por dia (só neste aparelho) ----------
-  var NOMES_CURTOS = { acordar: "Ao acordar", cafe: "Café", almoco: "Almoço", lanche: "Lanche", jantar: "Jantar" };
   var MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
   var SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
-  var TOTAL_REF = PLANO.refeicoes.length;
 
   function chaveData(d) {
     return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
   }
   function dataDaChave(k) { var p = k.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
   function hojeChave() { return chaveData(new Date()); }
-  function feitasNoDia(k) { return diario[k] || []; }
-  // Exercícios programados para o dia da semana daquela data.
   var DIAS_LONGOS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
-  function exerciciosDoDia(k) {
-    var ds = dataDaChave(k).getDay();
-    // "desde"/"ate" (AAAA-MM-DD, opcionais): mudar a agenda não muda os dias que já passaram
-    return (PLANO.exercicios || []).filter(function (e) {
-      return e.dias.indexOf(ds) >= 0 && (!e.desde || k >= e.desde) && (!e.ate || k <= e.ate);
-    });
+
+  // ---------- modelo: plano alimentar e metas (js/sf-plano.js) ----------
+  // Modo antigo: o plano do data.js, convertido uma vez. Com conta: o que está no estado (planos e metas).
+  var modeloAntigo = null;
+  function modeloAtual() {
+    if (armazem) return { planos: planos, metas: metas };
+    if (!modeloAntigo) modeloAntigo = SF.plano.deDataJs(window.PLANO);
+    return modeloAntigo;
   }
-  function treinosFeitos(k) {
-    var prog = exerciciosDoDia(k).map(function (e) { return e.id; });
-    return (treinos[k] || []).filter(function (id) { return prog.indexOf(id) >= 0; });
+  function ctxDia() { var m = modeloAtual(); return { planos: m.planos, metas: m.metas, diario: diario, treinos: treinos }; }
+  function planoDe(dia) { return SF.plano.planoNoDia(modeloAtual().planos, dia); }
+  function refeicoesDe(dia) { var p = planoDe(dia); return p ? p.refeicoes : []; }
+  function feitasNoDia(k) { return diario[k] || []; }
+  // Refeições do plano daquele dia que foram marcadas.
+  function refeicoesFeitas(k) { return refeicoesDe(k).filter(function (r) { return feitasNoDia(k).indexOf(r.id) >= 0; }); }
+  // Metas de exercício com dia fixo na semana daquela data, e quais delas foram feitas.
+  function fixasDoDia(k) { return SF.plano.metasFixasDoDia(modeloAtual().metas, k); }
+  function fixasFeitas(k) {
+    var feitos = SF.plano.treinosDoDia(ctxDia(), k);
+    return fixasDoDia(k).filter(function (m) { return feitos.indexOf(m.id) >= 0; });
   }
-  function totalDoDia(k) { return TOTAL_REF + exerciciosDoDia(k).length; }
-  function feitosDoDia(k) { return feitasNoDia(k).length + treinosFeitos(k).length; }
-  // Dia cumprido = as 5 refeições + os exercícios programados para aquele dia.
-  // Sem nada programado o dia não conta (e a sequência não anda para trás sem fim).
-  function diaCompleto(k) { var t = totalDoDia(k); return t > 0 && feitosDoDia(k) >= t; }
+  // Metas semanais (N vezes por semana) valendo naquela data.
+  function semanaisDoDia(k) { return SF.plano.metasNoDia(modeloAtual().metas, k).filter(function (m) { return m.modo === "semana"; }); }
+  function totalDoDia(k) { return SF.plano.totalDoDia(ctxDia(), k); }
+  function feitosDoDia(k) { return SF.plano.feitosDoDia(ctxDia(), k); }
+  // Dia cumprido = as refeições do plano + as metas de dia fixo daquele dia. Sem nada programado o dia não conta.
+  function diaCompleto(k) { return SF.plano.diaCompleto(ctxDia(), k); }
+  function pct(n, t) { return t > 0 ? Math.round(n / t * 100) : 0; }
+  function refeicaoAtual() { return SF.plano.refeicaoAtual(planoDe(hojeChave()), feitasNoDia(hojeChave()), horaAgora()); }
   function juntarNomes(l) { return l.length <= 1 ? l.join("") : l.slice(0, -1).join(", ") + " e " + l[l.length - 1]; }
 
-  function sequencia() {
-    // dias seguidos cumpridos, contando de hoje (ou de ontem, se hoje ainda não fechou)
-    var d = new Date(), n = 0;
-    if (!diaCompleto(chaveData(d))) d.setDate(d.getDate() - 1);
-    while (diaCompleto(chaveData(d))) { n++; d.setDate(d.getDate() - 1); }
-    return n;
-  }
+  function sequencia() { return SF.plano.sequencia(ctxDia(), hojeChave()); }
 
   function rotuloDia(k) {
     if (k === hojeChave()) return "Hoje";
@@ -458,17 +458,18 @@
   }
 
   function blocoDia() {
-    var feitas = feitasNoDia(diaSel), seq = sequencia(), regsDia = registros[diaSel] || {};
+    var refs = refeicoesDe(diaSel), feitas = refeicoesFeitas(diaSel), marcadas = feitasNoDia(diaSel), fixas = fixasDoDia(diaSel), seq = sequencia(), regsDia = registros[diaSel] || {};
     return '<section class="dia" aria-labelledby="titulo-dia">' +
-      '<div class="dia-topo"><h3 id="titulo-dia">' + rotuloDia(diaSel) + ': ' + feitas.length + ' de ' + TOTAL_REF + ' refeições' +
-      (exerciciosDoDia(diaSel).length ? ' · ' + treinosFeitos(diaSel).length + ' de ' + exerciciosDoDia(diaSel).length + ' exercício' + (exerciciosDoDia(diaSel).length === 1 ? '' : 's') : '') + '</h3>' +
+      '<div class="dia-topo"><h3 id="titulo-dia">' + rotuloDia(diaSel) + ': ' + feitas.length + ' de ' + refs.length + ' refeições' +
+      (fixas.length ? ' · ' + fixasFeitas(diaSel).length + ' de ' + fixas.length + ' exercício' + (fixas.length === 1 ? '' : 's') : '') + '</h3>' +
       (seq ? '<span class="sequencia">' + seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') + '</span>' : '') + '</div>' +
-      '<div class="barra" aria-hidden="true"><span style="width:' + Math.round(feitosDoDia(diaSel) / totalDoDia(diaSel) * 100) + '%"></span></div>' +
+      '<div class="barra" aria-hidden="true"><span style="width:' + pct(feitosDoDia(diaSel), totalDoDia(diaSel)) + '%"></span></div>' +
       '<p class="dica-dia">Registre cada refeição e cada exercício com uma foto tirada na hora. O dia só fica completo com as duas partes. Os registros só podem ser feitos no próprio dia; os dias passados ficam para consulta no calendário.</p>' +
-      '<h4 class="titulo-secao-dia">' + ICON.prato + 'Refeições <span class="contagem">' + feitas.length + ' de ' + TOTAL_REF + '</span></h4>' +
+      '<h4 class="titulo-secao-dia">' + ICON.prato + 'Refeições <span class="contagem">' + feitas.length + ' de ' + refs.length + '</span></h4>' +
+      (refs.length ? '' : '<p class="sem-exercicio">Sem plano alimentar nesse dia.</p>') +
       '<ul class="lista refeicoes-dia">' +
-      PLANO.refeicoes.map(function (r) {
-        var ok = feitas.indexOf(r.id) >= 0, reg = regsDia[r.id];
+      refs.map(function (r) {
+        var ok = marcadas.indexOf(r.id) >= 0, reg = regsDia[r.id];
         var icone = reg && reg.foto
           ? '<img class="mini-foto" data-foto="' + esc(reg.foto) + '" alt="">'
           : '<span class="' + (ok ? 'ok' : 'pendente') + '" aria-hidden="true">' + (ok ? ICON.check : ICON.camera) + '</span>';
@@ -485,9 +486,9 @@
   }
 
   function blocoExercicios(k) {
-    var ex = exerciciosDoDia(k), feitos = treinosFeitos(k), regsDia = registros[k] || {};
+    var fixas = fixasDoDia(k), ex = fixas.concat(semanaisDoDia(k)), feitos = SF.plano.treinosDoDia(ctxDia(), k), regsDia = registros[k] || {};
     var titulo = '<h4 class="titulo-secao-dia">' + ICON.peso + 'Exercícios' +
-      (ex.length ? ' <span class="contagem">' + feitos.length + ' de ' + ex.length + '</span>' : '') + '</h4>';
+      (fixas.length ? ' <span class="contagem">' + fixasFeitas(k).length + ' de ' + fixas.length + '</span>' : '') + '</h4>';
     if (!ex.length) return '<div class="exercicios">' + titulo + '<p class="sem-exercicio">Sem exercício programado ' + (k === hojeChave() ? 'hoje' : 'nesse dia') + '. Descanso!</p></div>';
     return '<div class="exercicios">' + titulo + '<ul class="lista refeicoes-dia">' + ex.map(function (e) {
       var ok = feitos.indexOf(e.id) >= 0, reg = regsDia[e.id];
@@ -495,20 +496,28 @@
         ? '<img class="mini-foto" data-foto="' + esc(reg.foto) + '" alt="">'
         : '<span class="' + (ok ? 'ok' : 'pendente') + '" aria-hidden="true">' + (ok ? ICON.check : ICON.camera) + '</span>';
       var passado = k !== hojeChave();
-      var detalhe = reg ? (reg.hora ? reg.hora + " · " : "") + (reg.foto ? "Treino registrado" : "sem foto") : ok ? "Marcado sem foto" : passado ? "Não registrado" : "Toque para registrar com foto";
+      var aFazer = e.modo === "semana" ? "Meta da semana · toque para registrar com foto" : "Toque para registrar com foto";
+      var detalhe = reg ? (reg.hora ? reg.hora + " · " : "") + (reg.foto ? "Treino registrado" : "sem foto") : ok ? "Marcado sem foto" : passado ? "Não registrado" : aFazer;
       return '<li><button class="linha-ref" data-registrar="' + e.id + '" aria-label="' + esc(e.nome) + ': ' + (ok ? "registrado" : "não registrado") + '. ' + esc(detalhe) + '">' + icone +
         '<span class="flex1"><span class="nome">' + esc(e.nome) + '</span><span class="detalhes">' + esc(detalhe) + '</span></span>' +
         '<span class="seta-linha" aria-hidden="true">›</span></button></li>';
     }).join("") + '</ul></div>';
   }
 
+  // Metas ativas hoje: as de dia fixo agrupadas pelo dia da semana, as semanais numa linha própria.
   function blocoAgenda() {
-    var hojeDs = new Date().getDay(), linhas = [];
+    var hoje = hojeChave(), hojeDs = dataDaChave(hoje).getDay(), linhas = [];
+    var ativas = SF.plano.metasNoDia(modeloAtual().metas, hoje);
+    function comMinutos(m, extra) { return esc(m.nome) + (extra || "") + (m.minutos ? " (" + m.minutos + " min)" : ""); }
     for (var ds = 1; ds <= 7; ds++) {
       var d = ds % 7;
-      var ex = (PLANO.exercicios || []).filter(function (e) { return e.dias.indexOf(d) >= 0; }).map(function (e) { return e.nome; });
+      var ex = ativas.filter(function (m) { return m.modo === "dias" && (m.dias || []).indexOf(d) >= 0; }).map(function (m) { return comMinutos(m); });
       if (ex.length) linhas.push('<li' + (d === hojeDs ? ' class="hoje"' : '') + '><b>' + DIAS_LONGOS[d] + (d === hojeDs ? ' (hoje)' : '') + '</b><span>' + juntarNomes(ex) + '</span></li>');
     }
+    var semanais = ativas.filter(function (m) { return m.modo === "semana"; }).map(function (m) {
+      return comMinutos(m, " · " + m.vezes + (m.vezes === 1 ? " vez" : " vezes") + " por semana");
+    });
+    if (semanais.length) linhas.push('<li><b>Na semana</b><span>' + juntarNomes(semanais) + '</span></li>');
     return linhas.length ? '<section class="agenda" aria-labelledby="titulo-agenda"><h3 id="titulo-agenda">' + ICON.peso + 'Exercícios da semana</h3><ul>' + linhas.join("") + '</ul></section>' : '';
   }
 
@@ -612,7 +621,7 @@
 
   // ---------- compartilhar a entrega (foto + texto) no WhatsApp ----------
   function textoEntrega(dia, ref, reg) {
-    var ex = exPorId(ref), r = ex || refPorId(ref);
+    var ex = exPorId(ref, dia), r = ex || refPorId(ref, dia);
     var quando = rotuloDia(dia).toLowerCase() + (reg.hora ? " às " + reg.hora : "");
     var linhas = [(ex ? "💪 " + ex.nome + " feito" : "✅ " + r.nome + " registrado") + " (" + quando + ")"];
     if (!ex) {
@@ -621,26 +630,27 @@
       var rec = reg.receita && porId(reg.receita);
       if (rec) linhas.push("Receita: " + rec.nome);
     }
-    var nEx = exerciciosDoDia(dia).length;
-    linhas.push("No dia: " + feitasNoDia(dia).length + " de " + TOTAL_REF + " refeições" +
-      (nEx ? " · " + treinosFeitos(dia).length + " de " + nEx + " exercício" + (nEx === 1 ? "" : "s") : ""));
+    var nEx = fixasDoDia(dia).length;
+    linhas.push("No dia: " + refeicoesFeitas(dia).length + " de " + refeicoesDe(dia).length + " refeições" +
+      (nEx ? " · " + fixasFeitas(dia).length + " de " + nEx + " exercício" + (nEx === 1 ? "" : "s") : ""));
     if (diaCompleto(dia)) linhas.push("🎉 Dia completo!");
     return linhas.join("\n");
   }
 
   function textoResultadoDia(k) {
-    var regs = registros[k] || {}, feitas = feitasNoDia(k), ex = exerciciosDoDia(k), feitosEx = treinosFeitos(k);
+    var regs = registros[k] || {}, refs = refeicoesDe(k), marcadas = feitasNoDia(k), feitosEx = SF.plano.treinosDoDia(ctxDia(), k);
+    var ex = fixasDoDia(k).concat(semanaisDoDia(k).filter(function (m) { return feitosEx.indexOf(m.id) >= 0; }));
     var dataCompleta = k.split("-").reverse().join("/");
     var linhas = ["📋 Resultado do dia: " + (k === hojeChave() ? "hoje, " : SEMANA[dataDaChave(k).getDay()] + ", ") + dataCompleta, ""];
-    linhas.push("Refeições: " + feitas.length + " de " + TOTAL_REF);
-    PLANO.refeicoes.forEach(function (r) {
-      var ok = feitas.indexOf(r.id) >= 0, reg = regs[r.id];
+    linhas.push("Refeições: " + refeicoesFeitas(k).length + " de " + refs.length);
+    refs.forEach(function (r) {
+      var ok = marcadas.indexOf(r.id) >= 0, reg = regs[r.id];
       var comidas = reg ? (reg.escolhas || []).map(nomeCurto).filter(function (n) { return !/^Salada de folhas|^Verduras cozidas|^Feijão/.test(n); }) : [];
       linhas.push((ok ? "✅ " : "❌ ") + r.nome + (reg && reg.hora ? " (" + reg.hora + ")" : "") +
-        (comidas.length ? ": " + comidas.join(", ") : "") + (ok && reg && !reg.foto && r.id !== "acordar" ? " · sem foto" : ""));
+        (comidas.length ? ": " + comidas.join(", ") : "") + (ok && reg && !reg.foto && r.itens && r.itens.length ? " · sem foto" : ""));
     });
     if (ex.length) {
-      linhas.push("", "Exercícios: " + feitosEx.length + " de " + ex.length);
+      linhas.push("", "Exercícios: " + ex.filter(function (e) { return feitosEx.indexOf(e.id) >= 0; }).length + " de " + ex.length);
       ex.forEach(function (e) {
         var ok = feitosEx.indexOf(e.id) >= 0, reg = regs[e.id];
         linhas.push((ok ? "✅ " : "❌ ") + e.nome + (reg && reg.hora ? " (" + reg.hora + ")" : ""));
@@ -691,15 +701,17 @@
   // ---------- registro de uma refeição: o que comeu + foto ----------
   var FOTO_OPCIONAL = ["acordar"]; // "Ao acordar" é só água com limão
   var dlg = null, regAtual = null;
-  function exPorId(id) { var l = PLANO.exercicios || []; for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
+  // Meta de exercício valendo naquele dia (ou null se o id é de refeição).
+  function exPorId(id, dia) { var l = SF.plano.metasNoDia(modeloAtual().metas, dia); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
   // Onde fica marcado: refeições no diário, exercícios nos treinos.
-  function marcadosDe(id) { return exPorId(id) ? treinos : diario; }
-  function refPorId(id) { for (var i = 0; i < PLANO.refeicoes.length; i++) if (PLANO.refeicoes[i].id === id) return PLANO.refeicoes[i]; return null; }
+  function marcadosDe(id, dia) { return exPorId(id, dia) ? treinos : diario; }
+  // Refeição do plano que valia naquele dia.
+  function refPorId(id, dia) { var l = refeicoesDe(dia); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
   function horaAgora() { var d = new Date(); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); }
 
   function abrirRegistro(refId) {
-    var ex = exPorId(refId);
-    var r = ex ? { id: ex.id, nome: ex.nome, itens: [] } : refPorId(refId);
+    var ex = exPorId(refId, diaSel);
+    var r = ex ? { id: ex.id, nome: ex.nome, itens: [] } : refPorId(refId, diaSel);
     if (!r) return;
     var ant = (registros[diaSel] || {})[refId] || null;
     var leitura = diaSel !== hojeChave();
@@ -741,7 +753,7 @@
       '</div>' +
       '<input type="file" id="reg-arq-camera" accept="image/*" capture="environment" class="sr" tabindex="-1" aria-hidden="true">' +
       '<p class="detalhes reg-regra">A foto precisa ser tirada agora, pela câmera.</p></div>' +
-      '<div class="reg-rodape">' + (ant || marcadosDe(refId)[diaSel] && marcadosDe(refId)[diaSel].indexOf(refId) >= 0 ? '<button type="button" class="btn" id="reg-apagar">Apagar registro</button>' : '') +
+      '<div class="reg-rodape">' + (ant || marcadosDe(refId, diaSel)[diaSel] && marcadosDe(refId, diaSel)[diaSel].indexOf(refId) >= 0 ? '<button type="button" class="btn" id="reg-apagar">Apagar registro</button>' : '') +
       '<button type="submit" class="btn primario" id="reg-salvar">Salvar registro</button></div>' +
       (ant && !leitura ? '<button type="button" class="btn whats" id="reg-compartilhar">' + ICON.whats + 'Compartilhar no WhatsApp</button>' : '') +
       '</form>';
@@ -817,8 +829,8 @@
   }
 
   function salvarRegistro() {
-    var ex = exPorId(regAtual.ref);
-    var r = ex ? { itens: [] } : refPorId(regAtual.ref), form = dlg.querySelector("form"), escolhas = [];
+    var ex = exPorId(regAtual.ref, regAtual.dia);
+    var r = ex ? { itens: [] } : refPorId(regAtual.ref, regAtual.dia), form = dlg.querySelector("form"), escolhas = [];
     r.itens.forEach(function (it, i) {
       var opcoes = [it.principal].concat(it.opcoes);
       var marcado = form.querySelector('input[name="g' + i + '"]:checked');
@@ -840,7 +852,7 @@
       var antes = (registros[dia] || {})[ref];
       registros[dia] = registros[dia] || {};
       registros[dia][ref] = { escolhas: escolhas, receita: receita, foto: fotoId || null, hora: (antes && antes.hora) || horaAgora() };
-      var marcados = marcadosDe(ref);
+      var marcados = marcadosDe(ref, dia);
       var l = (marcados[dia] || []).slice();
       var novo = l.indexOf(ref) < 0;
       if (novo) l.push(ref);
@@ -865,7 +877,7 @@
     if (regAtual.fotoAntiga) { toast("Registro com foto não pode ser apagado."); return; }
     if (dia !== hojeChave()) { fecharRegistro(); toast("Dias passados ficam só para consulta."); rerenderMantendoScroll(); return; }
     var antesReg = (registros[dia] || {})[ref] || null;
-    var marcados = marcadosDe(ref);
+    var marcados = marcadosDe(ref, dia);
     var antesDia = (marcados[dia] || []).slice();
     if (registros[dia]) { delete registros[dia][ref]; if (!Object.keys(registros[dia]).length) delete registros[dia]; }
     var l = antesDia.filter(function (x) { return x !== ref; });
@@ -875,7 +887,7 @@
     rerenderMantendoScroll();
     toast("Registro apagado", function () {
       if (antesReg) { registros[dia] = registros[dia] || {}; registros[dia][ref] = antesReg; }
-      if (antesDia.length) marcadosDe(ref)[dia] = antesDia;
+      if (antesDia.length) marcadosDe(ref, dia)[dia] = antesDia;
     });
     // a foto só é apagada de vez depois que o "Desfazer" some
     if (antesReg && antesReg.foto) setTimeout(function () { apagarSeOrfa(antesReg.foto); }, 7000);
@@ -909,15 +921,19 @@
 
   // Quanto foi feito e quanto era para fazer no dia, conforme a visão escolhida.
   function contagemDia(k, modo) {
-    if (modo === "alimentacao") return { n: feitasNoDia(k).length, tot: TOTAL_REF };
-    if (modo === "exercicio") return { n: treinosFeitos(k).length, tot: exerciciosDoDia(k).length };
+    if (modo === "alimentacao") return { n: refeicoesFeitas(k).length, tot: refeicoesDe(k).length };
+    if (modo === "exercicio") {
+      var fixas = fixasDoDia(k).length, feitas = fixasFeitas(k).length, extras = SF.plano.treinosDoDia(ctxDia(), k).length - feitas;
+      // dia sem meta fixa, mas com meta semanal feita: conta como treino cumprido
+      return fixas || !extras ? { n: feitas, tot: fixas } : { n: extras, tot: extras };
+    }
     return { n: feitosDoDia(k), tot: totalDoDia(k) };
   }
 
   function blocoCalendario() {
     var ano = mesVisto.getFullYear(), mes = mesVisto.getMonth();
     var primeiro = new Date(ano, mes, 1), dias = new Date(ano, mes + 1, 0).getDate();
-    var hoje = hojeChave(), cumpridos = 0, comMeta = 0;
+    var hoje = hojeChave(), cumpridos = 0, comMeta = 0, semanasVistas = {}, semanasOk = 0;
     var h = '<section class="calendario" aria-labelledby="titulo-cal">' +
       '<div class="cal-modos" role="group" aria-label="O que mostrar no calendário">' + MODOS_CAL.map(function (m) {
         return '<button data-modocal="' + m[0] + '" aria-pressed="' + (modoCal === m[0]) + '">' + m[1] + '</button>';
@@ -940,17 +956,25 @@
         var oque = modoCal === "alimentacao" ? "refeições" : modoCal === "exercicio" ? "exercícios" : "itens (refeições e exercícios)";
         desc += n >= tot ? "cumprido" : n ? n + " de " + tot + " " + oque : "nada marcado";
       }
+      if (modoCal === "exercicio") {
+        var seg = SF.plano.segundaDaSemana(k);
+        if (!(seg in semanasVistas)) { semanasVistas[seg] = SF.plano.semanaCumprida(ctxDia(), k) === true; if (semanasVistas[seg]) semanasOk++; }
+        if (semanasVistas[seg]) desc += " (semana cumprida)";
+      }
       h += '<button class="cal-dia ' + classe + (k === hoje ? ' hoje' : '') + (k === diaSel ? ' sel' : '') + '" data-dia="' + k + '"' +
         (futuro ? ' disabled' : '') + ' aria-pressed="' + (k === diaSel) + '" aria-label="' + desc + '">' + dia +
         (n && n < tot ? '<small>' + n + '/' + tot + '</small>' : '') + '</button>';
     }
     var legenda, resumo, nomeMes = MESES[mes];
     if (modoCal === "alimentacao") {
-      legenda = '<span class="ponto completo"></span>5 de 5 refeições <span class="ponto parcial"></span>Em parte';
+      var nRef = refeicoesDe(diaSel).length;
+      legenda = '<span class="ponto completo"></span>' + (nRef ? nRef + ' de ' + nRef + ' refeições' : 'Refeições completas') + ' <span class="ponto parcial"></span>Em parte';
       resumo = '<b>' + cumpridos + '</b> dia' + (cumpridos === 1 ? '' : 's') + ' com alimentação completa em ' + nomeMes + '.';
     } else if (modoCal === "exercicio") {
       legenda = '<span class="ponto completo"></span>Treino feito <span class="ponto parcial"></span>Em parte <span class="ponto descanso"></span>Sem treino';
-      resumo = '<b>' + cumpridos + '</b> de ' + comMeta + ' dia' + (comMeta === 1 ? '' : 's') + ' de treino cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + nomeMes + '.';
+      resumo = '<b>' + cumpridos + '</b> de ' + comMeta + ' dia' + (comMeta === 1 ? '' : 's') + ' de treino cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + nomeMes + '.' +
+        (semanasOk ? ' <b>' + semanasOk + '</b> semana' + (semanasOk === 1 ? '' : 's') + ' cumprida' + (semanasOk === 1 ? '' : 's') + ' nas metas semanais.' : '') +
+        SF.plano.progressoSemanal(ctxDia(), hoje).map(function (p) { return '<br>' + esc(p.meta.nome) + ': ' + p.feitos + ' de ' + p.vezes + ' nesta semana'; }).join("");
     } else {
       legenda = '<span class="ponto completo"></span>Dia cumprido (refeições e exercícios) <span class="ponto parcial"></span>Em parte';
       resumo = '<b>' + cumpridos + '</b> dia' + (cumpridos === 1 ? '' : 's') + ' cumprido' + (cumpridos === 1 ? '' : 's') + ' em ' + nomeMes + '.';
@@ -966,22 +990,10 @@
   // "feita", "agora" (horário atual), "proxima" (a seguinte, quando a atual já foi feita),
   // "atrasada" (horário já passou e não foi marcada) ou "depois".
   function situacoesHoje() {
-    var atual = refeicaoAtual(), feitas = feitasNoDia(hojeChave()), idxAtual = 0, out = {};
-    PLANO.refeicoes.forEach(function (r, i) { if (r.id === atual) idxAtual = i; });
-    var proximaMarcada = feitas.indexOf(atual) < 0;
-    PLANO.refeicoes.forEach(function (r, i) {
-      var s;
-      if (feitas.indexOf(r.id) >= 0) s = "feita";
-      else if (i < idxAtual) s = "atrasada";
-      else if (i === idxAtual) s = "agora";
-      else if (!proximaMarcada) { s = "proxima"; proximaMarcada = true; }
-      else s = "depois";
-      out[r.id] = s;
-    });
-    return out;
+    return SF.plano.situacoes(planoDe(hojeChave()), feitasNoDia(hojeChave()), horaAgora());
   }
 
-  var TEXTO_SITUACAO = { feita: "Feita", agora: "Agora", proxima: "Próxima", atrasada: "Não marcada", depois: "Mais tarde" };
+  var TEXTO_SITUACAO = { feita: "Feita", agora: "Agora", proxima: "Próxima", atrasada: "Não marcada", depois: "Mais tarde", pendente: "a fazer" };
 
   function semPlano(titulo) {
     return '<h2 class="titulo-secao">' + titulo + '</h2>' +
@@ -990,26 +1002,27 @@
   }
 
   function telaPlano() {
-    if (!TOTAL_REF) return semPlano("Meu plano");
-    var atual = refPorId(refeicaoAtual()), t = PLANO.nutrientes.total, hoje = hojeChave();
-    var sit = situacoesHoje(), regsHoje = registros[hoje] || {}, n = feitasNoDia(hoje).length, seq = sequencia();
-    var atrasadas = PLANO.refeicoes.filter(function (r) { return sit[r.id] === "atrasada"; });
-    var ex = exerciciosDoDia(hoje), feitosEx = treinosFeitos(hoje);
+    var hoje = hojeChave(), planoHoje = planoDe(hoje);
+    if (!planoHoje) return semPlano("Meu plano");
+    var refs = planoHoje.refeicoes, atual = refeicaoAtual(), nutri = planoHoje.nutrientes, t = nutri && nutri.total;
+    var sit = situacoesHoje(), regsHoje = registros[hoje] || {}, n = refeicoesFeitas(hoje).length, seq = sequencia();
+    var atrasadas = refs.filter(function (r) { return sit[r.id] === "atrasada"; });
+    var ex = fixasDoDia(hoje), feitosEx = fixasFeitas(hoje);
     var h = '<h2 class="titulo-secao">Meu plano do dia</h2>' +
       '<section class="agora-topo" aria-label="Agora">' +
-      '<p class="agora-hora"><b>' + horaAgora() + '</b> · hora ' + (atual.id === "acordar" ? 'de acordar' : 'do ' + esc(atual.nome.toLowerCase())) + '</p>' +
-      '<p class="agora-progresso">' + n + ' de ' + TOTAL_REF + ' refeições feitas hoje' +
+      '<p class="agora-hora"><b>' + horaAgora() + '</b> · ' + (!atual ? 'todas as refeições de hoje feitas' : 'hora ' + (atual.id === "acordar" ? 'de acordar' : 'do ' + esc(atual.nome.toLowerCase()))) + '</p>' +
+      '<p class="agora-progresso">' + n + ' de ' + refs.length + ' refeições feitas hoje' +
       (seq ? ' · ' + seq + ' dia' + (seq === 1 ? '' : 's') + ' seguido' + (seq === 1 ? '' : 's') : '') + '</p>' +
-      '<div class="barra" aria-hidden="true"><span style="width:' + Math.round(n / TOTAL_REF * 100) + '%"></span></div>' +
+      '<div class="barra" aria-hidden="true"><span style="width:' + pct(n, refs.length) + '%"></span></div>' +
       (atrasadas.length ? '<p class="agora-aviso">' + (atrasadas.length === 1 ? esc(atrasadas[0].nome) + ' ainda não foi marcada.' : atrasadas.length + ' refeições anteriores ainda não foram marcadas.') + '</p>' : '') +
       (ex.length ? '<a class="agora-ex" href="#frequencia">' + ICON.peso + 'Hoje tem ' + esc(juntarNomes(ex.map(function (e) { return e.nome; }))) +
         ' · ' + feitosEx.length + ' de ' + ex.length + ' feito' + (ex.length === 1 ? '' : 's') + ' →</a>' : '') +
       '</section>' +
       '<p class="descricao">Toque numa refeição para ver o que comer e as opções de troca.</p>' +
       '<ul class="plano-lista">';
-    PLANO.refeicoes.forEach(function (r) {
+    refs.forEach(function (r) {
       var s = sit[r.id], reg = regsHoje[r.id];
-      var detalhe = s === "feita" ? (reg ? resumoRegistro(reg) : "Marcada") : r.kcal + " kcal";
+      var detalhe = s === "feita" ? (reg ? resumoRegistro(reg) : "Marcada") : r.kcal != null ? r.kcal + " kcal" : "";
       h += '<li class="ref-item s-' + s + '">' +
         '<a class="ref-linha" href="#refeicao/' + r.id + '">' +
         '<span class="hora">' + rotuloHora(r) + '</span>' +
@@ -1021,31 +1034,31 @@
         '</li>';
     });
     h += '</ul>' +
-      '<div class="resumo" aria-label="Total do dia">' +
+      (t ? '<div class="resumo" aria-label="Total do dia">' +
       '<div><b>' + t.kcal + '</b><span>kcal</span></div>' +
       '<div><b>' + t.proteinas + '</b><span>proteínas</span></div>' +
       '<div><b>' + t.carboidratos + '</b><span>carboidratos</span></div>' +
-      '<div><b>' + t.lipidios + '</b><span>gorduras</span></div></div>' +
+      '<div><b>' + t.lipidios + '</b><span>gorduras</span></div></div>' : '') +
       blocoAgenda() +
-      '<h3 class="subtitulo">Nutrientes por refeição</h3><div class="tabela-wrap"><table class="nutri">' +
+      (t && nutri.linhas ? '<h3 class="subtitulo">Nutrientes por refeição</h3><div class="tabela-wrap"><table class="nutri">' +
       '<thead><tr><th>Refeição</th><th>Prot.</th><th>Gord.</th><th>Carb.</th><th>Calorias</th></tr></thead><tbody>' +
-      PLANO.nutrientes.linhas.map(function (l) { return '<tr>' + l.map(function (c) { return '<td>' + c + '</td>'; }).join("") + '</tr>'; }).join("") +
+      nutri.linhas.map(function (l) { return '<tr>' + l.map(function (c) { return '<td>' + c + '</td>'; }).join("") + '</tr>'; }).join("") +
       '<tr><td><b>Total</b></td><td><b>' + t.proteinas + '</b></td><td><b>' + t.lipidios + '</b></td><td><b>' + t.carboidratos + '</b></td><td><b>' + t.kcal + ' kcal</b></td></tr>' +
-      '</tbody></table></div>' +
-      '<p class="rodape">Plano prescrito em ' + PLANO.prescritoEm + '. Siga sempre a orientação da sua nutricionista.</p>';
+      '</tbody></table></div>' : '') +
+      (planoHoje.prescritoEm ? '<p class="rodape">Plano prescrito em ' + planoHoje.prescritoEm + '. Siga sempre a orientação da sua nutricionista.</p>' : '');
     return h;
   }
 
   function telaRefeicao(id) {
-    if (!TOTAL_REF) return semPlano("Meu plano");
-    var r = refPorId(id);
+    if (!planoDe(hojeChave())) return semPlano("Meu plano");
+    var r = refPorId(id, hojeChave());
     if (!r) return '<div class="vazio">Refeição não encontrada. <a href="#plano">Voltar</a></div>';
     var s = situacoesHoje()[r.id], reg = (registros[hojeChave()] || {})[r.id];
-    var i = PLANO.refeicoes.indexOf(r), ant = PLANO.refeicoes[i - 1], prox = PLANO.refeicoes[i + 1];
+    var refs = refeicoesDe(hojeChave()), i = refs.indexOf(r), ant = refs[i - 1], prox = refs[i + 1];
     var h = '<a class="btn voltar" href="#plano">' + ICON.back + 'Plano do dia</a>' +
       '<article class="detalhe refeicao-detalhe s-' + s + '">' +
       '<div class="ref-cabeca"><span class="hora">' + rotuloHora(r) + '</span><h2>' + esc(r.nome) + '</h2></div>' +
-      '<div class="meta"><span class="chip">' + r.kcal + ' kcal</span><span class="tag-sit">' + (s === "feita" ? ICON.check : '') + TEXTO_SITUACAO[s] + '</span></div>' +
+      '<div class="meta">' + (r.kcal != null ? '<span class="chip">' + r.kcal + ' kcal</span>' : '') + '<span class="tag-sit">' + (s === "feita" ? ICON.check : '') + TEXTO_SITUACAO[s] + '</span></div>' +
       (s === "feita" && reg ? '<p class="descricao">' + esc(resumoRegistro(reg)) + '</p>' : '') +
       '<div class="acoes"><button class="btn' + (s === "feita" ? '' : ' primario') + '" data-registrar="' + r.id + '" data-hoje>' + ICON.camera +
       (s === "feita" ? 'Ver o registro' : 'Marcar o que comi') + '</button></div>' +
@@ -1142,7 +1155,7 @@
 
 
   function telaFrequencia() {
-    if (!TOTAL_REF) return semPlano("Frequência");
+    if (!planoDe(hojeChave())) return semPlano("Frequência");
     return '<h2 class="titulo-secao">Frequência</h2>' +
       '<p class="descricao">Marque as refeições que você fez e acompanhe no calendário os dias em que cumpriu o plano.</p>' +
       lembreteBackup() + blocoDia() + blocoCalendario() + telaBackup();
@@ -1190,10 +1203,11 @@
         h += '</ul>';
       });
     }
-    if (!PLANO.compras.length) return h;
+    var compras = (planoDe(hojeChave()) || {}).compras || [];
+    if (!compras.length) return h;
     h += '<details class="refeicao"><summary><h3>Lista do plano alimentar</h3>' + ICON.chevron + '</summary><div class="corpo">' +
       '<p class="descricao">Lista de compras básica que veio com o plano.</p><ul class="lista">' +
-      PLANO.compras.map(function (c) {
+      compras.map(function (c) {
         return '<li><label><input type="checkbox" data-checkplano="' + esc(c) + '"' + (checksPlano[c] ? " checked" : "") + '><span><span class="nome">' + esc(c) + '</span></span></label></li>';
       }).join("") + '</ul></div></details>';
     return h;
@@ -1402,7 +1416,7 @@
         checks = d.checks && typeof d.checks === "object" ? d.checks : {};
         checksPlano = d.checksPlano && typeof d.checksPlano === "object" ? d.checksPlano : {};
         despensa = Array.isArray(d.quero) ? d.quero.filter(function (p) { return TODOS_PRODUTOS[p]; }) : [];
-        var idsRef = PLANO.refeicoes.map(function (r) { return r.id; }), novoDiario = {};
+        var idsRef = SF.plano.idsDeRefeicao(modeloAtual().planos), idsEx = SF.plano.idsDeMeta(modeloAtual().metas), novoDiario = {};
         if (d.diario && typeof d.diario === "object") {
           Object.keys(d.diario).forEach(function (k) {
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !Array.isArray(d.diario[k])) return;
@@ -1421,7 +1435,7 @@
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || typeof d.registros[k] !== "object") return;
             Object.keys(d.registros[k]).forEach(function (ref) {
               var x = d.registros[k][ref];
-              if ((idsRef.indexOf(ref) < 0 && !exPorId(ref)) || !x || typeof x !== "object") return;
+              if ((idsRef.indexOf(ref) < 0 && idsEx.indexOf(ref) < 0) || !x || typeof x !== "object") return;
               // mantém a referência da foto mesmo se a imagem não veio nesta cópia (vem na cópia do mês dela)
               var foto = typeof x.foto === "string" && /^f-[\w-]+$/.test(x.foto) ? x.foto : null;
               novosReg[k] = novosReg[k] || {};
@@ -1443,7 +1457,7 @@
             registros[k][ref] = novosReg[k][ref];
           });
         });
-        var idsEx = (PLANO.exercicios || []).map(function (e) { return e.id; }), novosTreinos = {};
+        var novosTreinos = {};
         if (d.treinos && typeof d.treinos === "object") {
           Object.keys(d.treinos).forEach(function (k) {
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !Array.isArray(d.treinos[k])) return;
@@ -1651,7 +1665,7 @@
   var MSG_SESSAO = "Sua sessão terminou. Entre de novo: o que você marcou continua guardado neste aparelho.";
 
   function estadoApp() {
-    return { favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, despensa: despensa, diario: diario, treinos: treinos, registros: registros };
+    return { favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, despensa: despensa, diario: diario, treinos: treinos, registros: registros, planos: planos, metas: metas };
   }
   function copiaEstado() { return SF.dados.aplicar(estadoApp(), []); }
   function buscar(u, i) { return window.fetch(u, i); }
@@ -1784,6 +1798,7 @@
   function aplicarEstadoRemoto(novo) {
     favs = novo.favs; sel = novo.sel; checks = novo.checks; checksPlano = novo.checksPlano;
     despensa = novo.despensa; diario = novo.diario; treinos = novo.treinos; registros = novo.registros;
+    planos = novo.planos || {}; metas = novo.metas || {};
     if (!gravarDados()) avisarFalhaGravacao();
     ultimoEstado = copiaEstado();
     atualizarContador();
