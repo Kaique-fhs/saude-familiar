@@ -11,19 +11,16 @@
 - Rulings e pendências dos planos 1, 2 e 5: `docs/superpowers/plans/2026-11-21-contas-roteiro.md`.
 
 ## Estado atual (22/11/2026)
-- Máquina roda `d530cfb` de `feat/contas-ec2` (22/11 17:51 UTC, ~5 s de 502): 004 nos dois bancos, zero contas, sem erro nos logs, `test:pg` 58/58.
+- Máquina roda `9e23f0e` (22/11 22:21 UTC, ~13 s de 502 intermitente): 4 migrações nos dois bancos, zero contas, sem erro nos logs, `saude-logs.timer` ativo (rodado à mão: sucesso, nada a apagar). `test:pg` 58/58 em `d530cfb`.
 - Recusa do aceite não testada por fora: o captcha de teste recusou o token fictício antes dela (causa não verificada). A `fumaca.sh` depende desse token.
-- `feat/aceite-site` (local): aviso completo (versão 1, 22/11/2026, transferência por consentimento, decisão do Kaique sem advogado), TRAVA DE PUBLICAÇÃO verde. Traz `saude-logs.timer` (cópias de log apagadas após 22 dias), ainda não implantado. Rascunhos em `docs/privacidade/`, sem commit.
+- Site no ar desde 22/11 (`main` = `feat/contas-ec2` = `9e23f0e`, Pages built): cadastro ligado à API de produção, aviso versão 1 sem campo em aberto. `/docs/`, `/server/`, `/tests/`, `handoff.md`, `CLAUDE.md`, `README.md`, `_config.yml`: 404.
 - `feat/aceite` nunca vai ao `main` (a tela dele não manda o aceite).
 - E-mail de alerta: SNS registrou entrega às 15:32 UTC; recebimento na caixa não confirmado.
 - Desligar o cadastro: reverter o commit `c2093fd` (só `config.js`, README e o teste dele).
 
 ## Ordem
-2. Antes do push do site: conferir o celular da Rejane (sem `mp-*` cai no login) e salvar cópia; ciência de que o `main` público passa a ter docs internos.
-3. Push de `feat/aceite-site` para `feat/contas-ec2` e `main`, com `--atomic`, feito pelo Kaique. Depois, deploy com `REF=feat/contas-ec2` (liga o `saude-logs.timer`).
-4. Conferir build do Pages, `config.js` e aviso no ar, 404 em `/docs/`, `/handoff.md`, `/server/`.
-5. Kaique cria a primeira conta em janela anônima: Turnstile real, e-mail, confirmar, entrar, esqueci a senha.
-6. Planos 3 (plano e metas por pessoa) e 4 (migração); o 4 remove a trava do aparelho antigo. Depois, plano 6.
+1. Kaique cria a primeira conta em janela anônima: Turnstile real, e-mail, confirmar, entrar, esqueci a senha.
+2. Planos 3 (plano e metas por pessoa) e 4 (migração); o 4 remove a trava do aparelho antigo. Depois, plano 6.
 
 ## Dúvidas em aberto
 - Sem "Restaurar cópia" para aparelho sem dados até o plano 4 (troca de celular da Rejane).
