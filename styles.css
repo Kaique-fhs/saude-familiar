@@ -575,3 +575,11 @@ body.pagina-aviso { padding: 0; }
 #form-meta fieldset label { display: inline-block; margin: 4px 12px 4px 0; min-height: 32px; }
 #form-meta .erro { color: #b3261e; margin: 2px 0 6px; font-weight: 600; }
 #form-meta [aria-invalid="true"] { border-color: #b3261e; }
+
+/* oferta de migração do app antigo */
+dialog#oferta-migracao { border: 0; border-radius: var(--radius); padding: 0; width: calc(100% - 32px); max-width: 420px; background: var(--card); color: var(--fg); }
+dialog#oferta-migracao::backdrop { background: rgba(0,0,0,.55); }
+dialog#oferta-migracao .oferta { padding: 20px 16px; }
+dialog#oferta-migracao h2 { margin: 0 0 8px; font-family: "Rubik", sans-serif; font-size: 1.25rem; }
+dialog#oferta-migracao p { margin: 0 0 16px; color: var(--muted); }
+dialog#oferta-migracao .acoes { flex-wrap: wrap; }

@@ -10,18 +10,21 @@
     return "entrar";
   }
 
-  // Trava temporária até a migração (plano 4): aparelho do app antigo, sem sessão, fica sem conta.
-  function contaDisponivel(o) {
-    var s = o && o.sessao;
-    return !!(s && s.usuario && s.usuario.id) || !(o && o.usouAppAntigo);
-  }
-
   // Onde gravar: "conta" com usuário logado; "antigo" no modo antigo (sem conta) fora de semCarregar; senão nada.
   function destinoGravacao(o) {
     o = o || {};
     if (o.userId) return "conta";
     if (o.modo === "antigo" && !o.semCarregar) return "antigo";
     return null;
+  }
+
+  // Texto da seção "Dados antigos" para cada motivo em que a conclusão da migração fica parada.
+  function textoMigracao(motivo) {
+    if (motivo === "rejeitados" || motivo === "conflito") return "Alguns itens antigos não foram aceitos pela conta. Os dados antigos continuam neste aparelho.";
+    if (motivo === "faltando") return "Alguns itens que vieram deste aparelho não estão mais na sua conta (talvez você os tenha apagado). Os dados antigos continuam aqui; apague-os quando quiser.";
+    if (motivo === "puladas") return "Alguns dados antigos deste aparelho não puderam ser lidos. Eles continuam aqui; apague-os quando quiser.";
+    if (motivo === "bloqueado") return "Feche as outras abas do app para terminar de limpar este aparelho.";
+    return "";
   }
 
   // Seções extras da tela Conta: "antigos" aparece com dados antigos e oferta possível (inclui migrando, para o progresso).
@@ -137,7 +140,16 @@
     return Promise.resolve().then(function () { return o.api.sair(); }).catch(function () { /* sai mesmo sem rede */ }).then(function () {
       o.local.apagarSessao();
       if (o.pendentes > 0) return { limpezaFalhou: false };
+      // Sair não apaga dados antigos não migrados: o marcador da migração (global) continua com o dono.
+      var marcador = typeof o.local.lerGlobal === "function" ? o.local.lerGlobal("migracao", null) : null;
       o.local.apagarUsuario(o.userId);
+      if (marcador && typeof o.local.gravarGlobal === "function") {
+        // saiu no meio da migração: a próxima entrada oferece de novo (a junção é união, nada se perde)
+        if (marcador.estado === "migrando") {
+          marcador = Object.assign({}, marcador, { estado: "oferecida", juntado: false });
+        }
+        o.local.gravarGlobal("migracao", marcador);
+      }
       return limpar(o.aoApagar, o.userId).then(function (falhou) { return { limpezaFalhou: falhou }; });
     });
   }
@@ -443,6 +455,32 @@
         ]));
       }
 
+      // Dados do app antigo ainda neste aparelho: levar para a conta ou apagar (segundo toque confirma).
+      var mig = o.migracao ? o.migracao() : null;
+      if (mig && secoesConta(mig).indexOf("antigos") >= 0) {
+        var antigos = el("section", { "class": "conta-bloco", "aria-labelledby": "sf-ant-t" }, [
+          el("h3", { id: "sf-ant-t", texto: "Dados antigos deste aparelho" }),
+          el("p", { "class": "conta-sub", texto: textoMigracao(mig.motivo) || (mig.migrando
+            ? "Seus dados antigos estão sendo levados para a conta. Eles só saem deste aparelho quando tudo estiver guardado."
+            : "Este aparelho ainda tem dados do app antigo (refeições, favoritas, fotos). Leve para a sua conta para guardá-los.") })
+        ]);
+        var levar = botao("Levar para a conta", "primario flex");
+        levar.addEventListener("click", function () { esconder(); if (mig.aoLevar) mig.aoLevar(); });
+        antigos.appendChild(levar);
+        var apagarAntigos = botao("Apagar dados antigos", "perigo flex");
+        var avisoApagar = el("p", { "class": "conta-aviso", texto: "Isso apaga do aparelho o que ainda não foi levado para a conta. Não dá para desfazer. Toque de novo para apagar." });
+        avisoApagar.hidden = true;
+        var confirmouApagar = false;
+        apagarAntigos.addEventListener("click", function () {
+          if (!confirmouApagar) { confirmouApagar = true; avisoApagar.hidden = false; apagarAntigos.textContent = "Apagar mesmo"; return; }
+          esconder();
+          if (mig.aoApagarAntigos) mig.aoApagarAntigos();
+        });
+        antigos.appendChild(avisoApagar);
+        antigos.appendChild(apagarAntigos);
+        t.caixa.appendChild(antigos);
+      }
+
       var perigo = el("section", { "class": "conta-bloco conta-perigo", "aria-labelledby": "sf-ap-t" }, [
         el("h3", { id: "sf-ap-t", texto: "Apagar minha conta" }),
         el("p", { "class": "conta-sub", texto: "Isso apaga sua conta, seus dados e suas fotos no servidor. Não dá para desfazer." })
@@ -513,7 +551,7 @@
 
   raiz.SF = raiz.SF || {};
   raiz.SF.conta = {
-    modoInicial: modoInicial, destinoGravacao: destinoGravacao, secoesConta: secoesConta, contaDisponivel: contaDisponivel, montarAceite: montarAceite, VERSAO_AVISO: VERSAO_AVISO, lerHash: lerHash, mensagemErro: mensagemErro,
+    modoInicial: modoInicial, destinoGravacao: destinoGravacao, secoesConta: secoesConta, textoMigracao: textoMigracao, montarAceite: montarAceite, VERSAO_AVISO: VERSAO_AVISO, lerHash: lerHash, mensagemErro: mensagemErro,
     validarEmail: validarEmail, validarSenha: validarSenha, textoSair: textoSair, apagarConta: apagarConta, sairDaConta: sairDaConta,
     rotuloRejeitado: rotuloRejeitado, confirmacaoApagarOk: confirmacaoApagarOk, montar: montar,
     textoConfirmarSair: textoConfirmarSair, textoStatus: textoStatus, MSG_CONFLITO: MSG_CONFLITO

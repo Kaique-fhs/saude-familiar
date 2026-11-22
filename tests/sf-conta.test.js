@@ -126,14 +126,6 @@ test("textoStatus traduz o status da sincronização para o cabeçalho", () => {
   assert.equal(conta.MSG_CONFLITO, "Esta refeição já foi registrada em outro aparelho");
 });
 
-test("contaDisponivel: aparelho do app antigo fica sem conta até a migração", () => {
-  const s = { token: "t", usuario: { id: "u" } };
-  assert.equal(conta.contaDisponivel({ sessao: null, usouAppAntigo: false }), true);
-  assert.equal(conta.contaDisponivel({ sessao: null, usouAppAntigo: true }), false);
-  assert.equal(conta.contaDisponivel({ sessao: { token: "t" }, usouAppAntigo: true }), false);
-  assert.equal(conta.contaDisponivel({ sessao: s, usouAppAntigo: true }), true);
-});
-
 test("rotuloRejeitado cobre plano e meta", () => {
   assert.equal(conta.rotuloRejeitado({ tipo: "plano", chave: "2026-11-22" }), "Plano alimentar: 2026-11-22");
   assert.equal(conta.rotuloRejeitado({ tipo: "meta", chave: "m-1" }), "Meta de exercício: m-1");
@@ -157,4 +149,46 @@ test("secoesConta: 'antigos' só com dados antigos e podeOferecer (também migra
   assert.deepEqual(conta.secoesConta({ temAntigos: true, podeOferecer: false, migrando: false, motivo: "outra-conta" }), []);
   assert.deepEqual(conta.secoesConta({}), []);
   assert.deepEqual(conta.secoesConta(), []);
+});
+
+test("sairDaConta mantém o marcador da migração; apagarConta do dono o apaga", async () => {
+  function armazemFalso() {
+    const mapa = new Map();
+    const st = { get length() { return mapa.size; }, key: (i) => [...mapa.keys()][i] ?? null, getItem: (k) => (mapa.has(k) ? mapa.get(k) : null), setItem: (k, v) => mapa.set(k, String(v)), removeItem: (k) => mapa.delete(k) };
+    return require("../js/sf-local.js").criar({ storage: st });
+  }
+  const api = { sair: async () => {}, apagarConta: async () => {} };
+  const l1 = armazemFalso();
+  l1.gravarGlobal("migracao", { dono: "u1", estado: "recusada" });
+  l1.gravar("u1", "mp-favs", ["x"]);
+  await conta.sairDaConta({ api, local: l1, userId: "u1", pendentes: 0, aoApagar: async () => {} });
+  assert.deepEqual(l1.lerGlobal("migracao", null), { dono: "u1", estado: "recusada" }, "sair não apaga o marcador");
+  assert.equal(l1.ler("u1", "mp-favs", null), null, "sair limpa os dados da conta");
+  const l2 = armazemFalso();
+  l2.gravarGlobal("migracao", { dono: "u1", estado: "recusada" });
+  await conta.apagarConta({ api, local: l2, userId: "u1", senha: "x", aoApagar: async () => {} });
+  assert.equal(l2.lerGlobal("migracao", null), null, "apagar a conta apaga o marcador do dono");
+});
+
+test("textoMigracao: um texto por motivo de bloqueio, vazio sem motivo", () => {
+  assert.equal(conta.textoMigracao("rejeitados"), "Alguns itens antigos não foram aceitos pela conta. Os dados antigos continuam neste aparelho.");
+  assert.equal(conta.textoMigracao("conflito"), conta.textoMigracao("rejeitados"));
+  assert.match(conta.textoMigracao("faltando"), /^Alguns itens que vieram deste aparelho não estão mais na sua conta \(talvez você os tenha apagado\)\. Os dados antigos continuam aqui; apague-os quando quiser\.$/);
+  assert.equal(conta.textoMigracao("puladas"), "Alguns dados antigos deste aparelho não puderam ser lidos. Eles continuam aqui; apague-os quando quiser.");
+  assert.equal(conta.textoMigracao("bloqueado"), "Feche as outras abas do app para terminar de limpar este aparelho.");
+  assert.equal(conta.textoMigracao(null), "");
+  assert.equal(conta.textoMigracao("enviando"), "");
+});
+
+test("sairDaConta no meio da migração devolve o marcador a 'oferecida' sem juntado", async () => {
+  const mapa = new Map();
+  const st = { get length() { return mapa.size; }, key: (i) => [...mapa.keys()][i] ?? null, getItem: (k) => (mapa.has(k) ? mapa.get(k) : null), setItem: (k, v) => mapa.set(k, String(v)), removeItem: (k) => mapa.delete(k) };
+  const l = require("../js/sf-local.js").criar({ storage: st });
+  l.gravarGlobal("migracao", { dono: "u1", estado: "migrando", juntado: true, fotos: ["f1"], faltando: [] });
+  await conta.sairDaConta({ api: { sair: async () => {} }, local: l, userId: "u1", pendentes: 0, aoApagar: async () => {} });
+  const m = l.lerGlobal("migracao", null);
+  assert.equal(m.dono, "u1");
+  assert.equal(m.estado, "oferecida");
+  assert.equal(m.juntado, false);
+  assert.deepEqual(m.fotos, ["f1"]);
 });

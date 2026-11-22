@@ -42,12 +42,14 @@ test("scripts do site no index e no cache, na mesma versão", () => {
   assert.ok(ordem.indexOf("js/sf-plano.js") < ordem.indexOf("app.js"), "sf-plano antes de app.js");
   assert.ok(ordem.includes("js/sf-editor.js"), "sf-editor.js no index");
   assert.ok(ordem.indexOf("js/sf-editor.js") < ordem.indexOf("app.js"), "sf-editor antes de app.js");
+  assert.ok(ordem.includes("js/sf-migracao.js"), "sf-migracao.js no index");
+  assert.ok(ordem.indexOf("js/sf-migracao.js") < ordem.indexOf("app.js"), "sf-migracao antes de app.js");
 });
 
-test("versão de cache 37", () => {
+test("versão de cache 38", () => {
   const index = fs.readFileSync(path.join(raiz, "index.html"), "utf8");
   const sw = fs.readFileSync(path.join(raiz, "sw.js"), "utf8");
-  assert.match(sw, /VERSAO = "meu-prato-v37"/);
-  assert.ok(index.includes("app.js?v=37"));
-  assert.ok(!/\?v=(?!37)\d+/.test(index), "todo ?v= do index vale 37");
+  assert.match(sw, /VERSAO = "meu-prato-v38"/);
+  assert.ok(index.includes("app.js?v=38"));
+  assert.ok(!/\?v=(?!38)\d+/.test(index), "todo ?v= do index vale 38");
 });

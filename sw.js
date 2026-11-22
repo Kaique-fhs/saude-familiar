@@ -1,23 +1,24 @@
 // Guarda o site no aparelho para abrir sem internet.
 // Mudanças nos arquivos chegam sozinhas na abertura seguinte do app.
 // Aumentar VERSAO (e o ?v= no index.html) é opcional: faz a mudança valer já na próxima abertura.
-var VERSAO = "meu-prato-v37";
+var VERSAO = "meu-prato-v38";
 var ARQUIVOS = [
   "./",
   "./index.html",
   "./privacidade.html",
-  "./styles.css?v=37",
-  "./config.js?v=37",
-  "./data.js?v=37",
-  "./js/sf-api.js?v=37",
-  "./js/sf-local.js?v=37",
-  "./js/sf-dados.js?v=37",
-  "./js/sf-fotos.js?v=37",
-  "./js/sf-sincronia.js?v=37",
-  "./js/sf-conta.js?v=37",
-  "./js/sf-plano.js?v=37",
-  "./js/sf-editor.js?v=37",
-  "./app.js?v=37",
+  "./styles.css?v=38",
+  "./config.js?v=38",
+  "./data.js?v=38",
+  "./js/sf-api.js?v=38",
+  "./js/sf-local.js?v=38",
+  "./js/sf-dados.js?v=38",
+  "./js/sf-fotos.js?v=38",
+  "./js/sf-sincronia.js?v=38",
+  "./js/sf-conta.js?v=38",
+  "./js/sf-plano.js?v=38",
+  "./js/sf-editor.js?v=38",
+  "./js/sf-migracao.js?v=38",
+  "./app.js?v=38",
   "./logo.svg",
   "./icon-192.png",
   "./icon-512.png",

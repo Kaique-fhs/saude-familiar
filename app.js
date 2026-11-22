@@ -26,26 +26,28 @@
     else if (!window.SF_CONFIG || CONFIG.apiUrl) semCarregar = guardado.sessao || !guardado.antigo;
   }
   if (semCarregar) modo = "entrar";
-  // Trava até a migração: aparelho do app antigo, sem sessão, nem monta a conta: segue igual, tudo local.
-  var contaEsperaMigracao = false;
-  if (armazem && !SF.conta.contaDisponivel({ sessao: armazem.sessao(), usouAppAntigo: armazem.usouAppAntigo() })) {
-    contaEsperaMigracao = true;
-    armazem = null;
-  }
   if (armazem) {
     iniciarConta();
   }
 
   // ---------- armazenamento local (no modo conta, no prefixo do usuário) ----------
+  // Onde o app lê e grava agora: "conta" (sf:<id>:*), "antigo" (mp-*) ou null (tela de entrar, sem nada por baixo).
+  function destinoAtual() {
+    if (SF.conta && SF.conta.destinoGravacao) return SF.conta.destinoGravacao({ modo: modo, userId: userId, semCarregar: semCarregar });
+    return userId ? "conta" : semCarregar ? null : "antigo";
+  }
   function ler(chave, padrao) {
-    if (userId) return armazem.ler(userId, chave, padrao);
+    var destino = destinoAtual();
+    if (destino === "conta") return armazem.ler(userId, chave, padrao);
+    if (destino !== "antigo") return padrao;
     try { var v = localStorage.getItem(chave); return v ? JSON.parse(v) : padrao; }
     catch (e) { return padrao; }
   }
   function gravar(chave, valor) {
-    if (userId) return armazem.gravar(userId, chave, valor);
-    // com conta montada (ou por carregar), nada vira mp-*: isso prenderia o aparelho no modo antigo
-    if (armazem || semCarregar) return false;
+    var destino = destinoAtual();
+    if (destino === "conta") return armazem.gravar(userId, chave, valor);
+    // só o modo antigo grava mp-*; na tela de entrar nada é gravado
+    if (destino !== "antigo") return false;
     try { localStorage.setItem(chave, JSON.stringify(valor)); return true; } catch (e) { return false; }
   }
   var favs = ler("mp-favs", []);
@@ -168,7 +170,7 @@
       bt.addEventListener("click", function () {
         var f = desfazerAtual; desfazerAtual = null;
         toastEl.classList.remove("show", "com-acao");
-        if (f && dono === userId && (!armazem || modo === "conta")) { f(); salvarTudo(); rerenderMantendoScroll(); toast("Desfeito"); }
+        if (f && dono === userId && destinoAtual() !== null) { f(); salvarTudo(); rerenderMantendoScroll(); toast("Desfeito"); }
       });
       toastEl.appendChild(bt);
     }
@@ -408,7 +410,7 @@
   // Modo antigo: o plano do data.js, convertido uma vez. Com conta: o que está no estado (planos e metas).
   var modeloAntigo = null;
   function modeloAtual() {
-    if (armazem) return { planos: planos, metas: metas };
+    if (userId) return { planos: planos, metas: metas };
     if (!modeloAntigo) modeloAntigo = SF.plano.deDataJs(window.PLANO);
     return modeloAntigo;
   }
@@ -1769,7 +1771,6 @@
   window.addEventListener("hashchange", function () {
     // link de confirmar e-mail ou de nova senha aberto com o app já aberto nesta aba
     if (armazem && SF.conta.lerHash(location.hash).acao) { contaUI.iniciar(); return; }
-    avisarContaIndisponivel();
     render(); window.scrollTo(0, 0);
   });
 
@@ -1817,7 +1818,7 @@
   // Tudo aqui só roda com armazem (apiUrl preenchido).
   var ultimoEstado = null; // cópia do estado como foi gravado ou lido por último (o "antes" da fila)
   var timerSync = null, timerRetry = null;
-  var statusEl = null, caixaContaEl = null;
+  var statusEl = null, caixaContaEl = null, faixaContaEl = null;
   var MSG_SESSAO = "Sua sessão terminou. Entre de novo: o que você marcou continua guardado neste aparelho.";
 
   function estadoApp() {
@@ -1837,14 +1838,17 @@
         return Array.isArray(f) ? f.length : 0;
       },
       podeVoltar: function () { return modo !== "entrar"; },
-      aoVoltar: function () {}
+      aoVoltar: function () {},
+      migracao: dadosMigracao
     });
     modo = "entrar"; // até decidir, a tela que iniciar() desenhar não oferece "Voltar ao app"
     var inicio = contaUI.iniciar();
     var s = armazem.sessao();
     if (s && s.usuario && s.usuario.id) { modo = "conta"; userId = s.usuario.id; return; }
     if (s) armazem.apagarSessao(); // sessão sem usuário: não serve
-    if (inicio === "conta" || inicio === "antigo") contaUI.mostrar("entrar");
+    // sem sessão e com dados do app antigo: o app abre e grava em mp-*, sem tela de entrar por cima
+    if (SF.conta.modoInicial({ sessao: null, temDadosAntigos: armazem.temDadosAntigos() }) === "antigo") modo = "antigo";
+    else if (inicio === "conta") contaUI.mostrar("entrar");
   }
 
   function ligarConta() {
@@ -1864,6 +1868,23 @@
     caixaContaEl.appendChild(botao);
     topo.appendChild(caixaContaEl);
 
+    // Modo antigo (aparelho com dados e sem sessão): o app funciona; a faixa convida a criar a conta.
+    faixaContaEl = document.createElement("div");
+    faixaContaEl.className = "faixa-conta";
+    var textoFaixa = document.createElement("p");
+    textoFaixa.textContent = "Crie sua conta para guardar seus dados";
+    var acoesFaixa = document.createElement("div");
+    acoesFaixa.className = "acoes";
+    [["Criar conta", "cadastro", "btn primario"], ["Entrar", "entrar", "btn"]].forEach(function (d) {
+      var b = document.createElement("button");
+      b.type = "button"; b.className = d[2]; b.textContent = d[0];
+      b.addEventListener("click", function () { contaUI.mostrar(d[1]); });
+      acoesFaixa.appendChild(b);
+    });
+    faixaContaEl.appendChild(textoFaixa);
+    faixaContaEl.appendChild(acoesFaixa);
+    topo.parentNode.insertBefore(faixaContaEl, topo.nextSibling);
+
     window.addEventListener("online", rodarSync);
     setInterval(function () { if (sincronia && sincronia.pendentes() > 0) rodarSync(); }, 60000);
     if (modo === "conta") comecarSincronia();
@@ -1877,13 +1898,15 @@
   function atualizarCabecalhoConta() {
     if (!caixaContaEl) return;
     caixaContaEl.hidden = modo !== "conta";
+    if (faixaContaEl) faixaContaEl.hidden = modo !== "antigo";
     if (modo === "conta" && sincronia) mostrarStatus(sincronia.status(), true);
   }
 
   // semAviso: só atualiza o texto (o aviso de conflito aparece uma vez, quando o status muda para ele)
   function mostrarStatus(s, semAviso) {
     if (!statusEl) return;
-    statusEl.textContent = SF.conta.textoStatus(s);
+    // "Levando fotos: N de M" fica até a cópia terminar
+    if (!copiandoFotos) statusEl.textContent = SF.conta.textoStatus(s);
     statusEl.setAttribute("data-status", s);
     if (s === "conflito" && !semAviso) toast(SF.conta.MSG_CONFLITO);
   }
@@ -1924,6 +1947,8 @@
   function pararSincronia() {
     if (sincroniaLigada) sincroniaLigada.sim = false;
     sincronia = null; sincroniaLigada = null; fotosSF = null; ultimoEstado = null;
+    migracaoAvaliada = false; bloqueioMotivo = null; avisoBloqueioDado = false;
+    if (dlgOferta && dlgOferta.open) dlgOferta.close();
     clearTimeout(timerSync); clearTimeout(timerRetry);
     timerSync = null; timerRetry = null;
   }
@@ -1947,6 +1972,7 @@
         clearTimeout(timerRetry);
         timerRetry = setTimeout(function () { timerRetry = null; rodarSync(); }, Math.max(s.esperaMs(), 2000));
       }
+      aposSincronia(s, st);
     }).catch(function () {});
   }
 
@@ -1965,8 +1991,6 @@
     var id = s && s.usuario && s.usuario.id;
     if (!id) return;
     if (id !== userId) {
-      // outra aba usou o app antigo com esta tela de entrar aberta: vale a trava
-      if (!userId && armazem.usouAppAntigo()) { armazem.apagarSessao(); location.reload(); return; }
       // outra conta (ou vindo do modo antigo): começa do que está guardado para ela; os mp-* ficam intactos
       pararSincronia();
       userId = id;
@@ -2030,11 +2054,203 @@
     if (modo === "conta") aoSair();
   }
 
-  function avisarContaIndisponivel() {
-    if (contaEsperaMigracao && SF.conta.lerHash(location.hash).acao) {
-      try { history.replaceState(null, "", location.pathname + location.search); } catch (e) { /* ignora */ }
-      toastAcao("A conta ainda não está disponível neste aparelho. Abra o link em outro aparelho.", "Entendi", function () {});
+  // ---------- migração do app antigo para a conta (js/sf-migracao.js) ----------
+  // Marcador global sf:migracao: {dono, estado: oferecida | recusada | migrando | concluida, juntado, fotos, faltando}.
+  // Nada de mp-* nem do banco meu-prato é apagado fora de SF.migracao.concluir e do "Apagar dados antigos" confirmado.
+  var migracaoAvaliada = false, migracaoEmCurso = false, migracaoConcluindo = false, copiandoFotos = false;
+  var bloqueioMotivo = null, avisoBloqueioDado = false, dlgOferta = null;
+  var BANCO_ANTIGO = "meu-prato";
+
+  function marcadorMigracao() { return armazem.lerGlobal("migracao", null); }
+  function podeOferecerMigracao() {
+    return !!(userId && SF.migracao && SF.migracao.podeOferecer(marcadorMigracao(), userId, armazem.temDadosAntigos()));
+  }
+  function dadosMigracao() {
+    var m = userId ? marcadorMigracao() : null;
+    return {
+      temAntigos: !!userId && armazem.temDadosAntigos(),
+      podeOferecer: podeOferecerMigracao(),
+      migrando: !!(m && m.dono === userId && m.estado === "migrando"),
+      motivo: bloqueioMotivo,
+      aoLevar: levarParaConta,
+      aoApagarAntigos: apagarDadosAntigos
+    };
+  }
+  function lerAntigosDoAparelho() {
+    return SF.migracao.lerAntigos(function (k) { return guardado.storage.getItem(k); });
+  }
+
+  // Foto do banco antigo (meu-prato): sem criar o banco se ele não existir; null se a foto não está lá.
+  function lerFotoAntiga(id) {
+    return new Promise(function (ok, erro) {
+      if (!window.indexedDB) { ok(null); return; }
+      var criou = false, r;
+      try { r = indexedDB.open(BANCO_ANTIGO, 1); } catch (e) { erro(e); return; }
+      r.onupgradeneeded = function () { criou = true; try { r.transaction.abort(); } catch (e) { /* segue */ } };
+      r.onerror = function () { if (criou) ok(null); else erro(r.error || new Error("banco antigo")); };
+      r.onsuccess = function () {
+        var db = r.result;
+        try {
+          var tx = db.transaction("fotos", "readonly"), q = tx.objectStore("fotos").get(id);
+          tx.oncomplete = function () { db.close(); ok(q.result === undefined ? null : q.result); };
+          tx.onerror = tx.onabort = function () { db.close(); erro(tx.error || new Error("transação")); };
+        } catch (e) { db.close(); erro(e); }
+      };
+    });
+  }
+
+  function depsMigracao(id) {
+    function mesmaConta() { return id === userId && modo === "conta"; }
+    return {
+      userId: id, PLANO: window.PLANO, storage: guardado.storage,
+      marcador: function () { return Promise.resolve(marcadorMigracao()); },
+      gravarMarcador: function (m) { return Promise.resolve(armazem.gravarGlobal("migracao", m)); },
+      lerAntigo: function () { return Promise.resolve(lerAntigosDoAparelho().estado); },
+      estadoConta: function () { return Promise.resolve(copiaEstado()); },
+      // Troca o estado do app pelo juntado; false se não coube (nada é enviado nem apagado).
+      gravarEstado: function (final) {
+        if (!mesmaConta()) return Promise.resolve(false);
+        favs = final.favs; sel = final.sel; checks = final.checks; checksPlano = final.checksPlano;
+        despensa = final.despensa; diario = final.diario; treinos = final.treinos; registros = final.registros;
+        planos = final.planos || {}; metas = final.metas || {};
+        if (!gravarDados()) { recarregarEstado(); return Promise.resolve(false); }
+        salvarTudo();
+        if (!(dlg && dlg.open)) rerenderMantendoScroll();
+        return Promise.resolve(true);
+      },
+      copiarFotos: function (ids, aoProgresso) {
+        return SF.migracao.copiarFotos(ids, {
+          existeNaConta: function (f) { return lerFoto(f).then(function (v) { return !!v; }); },
+          lerAntiga: lerFotoAntiga,
+          gravarNaConta: function (f, blob) {
+            if (!mesmaConta()) return Promise.reject(new Error("conta trocada"));
+            return salvarFoto(f, blob);
+          },
+          aoProgresso: aoProgresso
+        });
+      },
+      aoProgresso: function (i, n) { if (statusEl && id === userId) statusEl.textContent = "Levando fotos: " + i + " de " + n; },
+      aoErro: function () {}
+    };
+  }
+
+  function levarParaConta() {
+    if (migracaoEmCurso || modo !== "conta" || !sincronia) return Promise.resolve();
+    var id = userId, s = sincronia;
+    migracaoEmCurso = true; copiandoFotos = true;
+    return SF.migracao.executar(depsMigracao(id)).then(function (r) {
+      migracaoEmCurso = false; copiandoFotos = false;
+      if (id !== userId || s !== sincronia) return;
+      mostrarStatus(s.status(), true);
+      if (r === "sem-espaco") { toastAcao("Não coube no aparelho. Libere espaço e tente de novo pela Conta.", "Entendi", function () {}); return; }
+      if (r === "erro-fotos") { toastAcao("Não deu para copiar as fotos antigas. Tente de novo pela Conta.", "Entendi", function () {}); return; }
+      var m = marcadorMigracao(), n = m && Array.isArray(m.faltando) ? m.faltando.length : 0;
+      if (n > 0) toastAcao(n + " fotos antigas não estavam no aparelho", "Entendi", function () {});
+      else toast("Seus dados antigos foram enviados. Falta conferir tudo na conta.");
+      rodarSync();
+    }, function () {
+      migracaoEmCurso = false; copiandoFotos = false;
+      if (id === userId) { mostrarStatus(s.status(), true); toast("Não deu para levar os dados agora. Tente de novo pela Conta."); }
+    });
+  }
+
+  function recusarOferta() {
+    var m = marcadorMigracao();
+    if (m && m.dono === userId && m.estado === "oferecida") {
+      m.estado = "recusada"; m.em = Date.now();
+      armazem.gravarGlobal("migracao", m);
     }
+  }
+
+  function abrirOferta() {
+    if (dlgOferta && dlgOferta.open) return;
+    if (!dlgOferta) {
+      dlgOferta = document.createElement("dialog");
+      dlgOferta.id = "oferta-migracao";
+      dlgOferta.setAttribute("aria-labelledby", "oferta-titulo");
+      document.body.appendChild(dlgOferta);
+    }
+    dlgOferta.innerHTML = '<div class="oferta"><h2 id="oferta-titulo">Levar o que está salvo neste aparelho para a sua conta?</h2>' +
+      '<p>Este aparelho tem dados do app antigo (refeições marcadas, favoritas, fotos). Leve para a sua conta para guardá-los com segurança e vê-los em outros aparelhos.</p>' +
+      '<div class="acoes"><button type="button" class="btn primario flex" data-oferta="levar">Levar para a conta</button>' +
+      '<button type="button" class="btn flex" data-oferta="agora-nao">Agora não</button></div></div>';
+    dlgOferta.querySelector('[data-oferta="levar"]').addEventListener("click", function () { dlgOferta.close(); levarParaConta(); });
+    dlgOferta.querySelector('[data-oferta="agora-nao"]').addEventListener("click", function () { dlgOferta.close(); recusarOferta(); });
+    dlgOferta.showModal();
+  }
+
+  // Depois da primeira sincronização completa sem erro: oferece (só ao dono do marcador) ou retoma.
+  function avaliarMigracao() {
+    if (!podeOferecerMigracao()) return;
+    var m = marcadorMigracao();
+    if (!m) { m = { dono: userId, estado: "oferecida" }; armazem.gravarGlobal("migracao", m); }
+    if (m.estado === "oferecida") {
+      if (dlg && dlg.open) { migracaoAvaliada = false; return; } // quadro de registro aberto: tenta na próxima sincronização
+      abrirOferta();
+    } else if (m.estado === "migrando") levarParaConta();
+  }
+
+  function avisarBloqueio(motivo) {
+    bloqueioMotivo = motivo;
+    if (avisoBloqueioDado) return;
+    avisoBloqueioDado = true;
+    toastAcao(SF.conta.textoMigracao(motivo) + " Veja em Conta.", "Entendi", function () {});
+  }
+
+  // Com `migrando` e `juntado`: confere e, só se tudo estiver na conta, apaga o antigo.
+  function tentarConcluir(s) {
+    if (migracaoEmCurso || migracaoConcluindo || modo !== "conta" || s !== sincronia) return;
+    var m = marcadorMigracao();
+    if (!m || m.dono !== userId || m.estado !== "migrando" || m.juntado !== true) return;
+    var id = userId, l = lerAntigosDoAparelho();
+    migracaoConcluindo = true;
+    SF.migracao.concluir({
+      userId: id, storage: guardado.storage,
+      status: s.status(), pendentes: s.pendentes(), rejeitados: s.rejeitados(), houveConflito: s.houveConflito(),
+      puladas: l.puladas, conta: copiaEstado(), antigo: l.estado,
+      marcador: function () { return Promise.resolve(marcadorMigracao()); },
+      gravarMarcador: function (novo) { return Promise.resolve(armazem.gravarGlobal("migracao", novo)); },
+      // histórico de cópias: vai para a conta se lá ainda não tem; falha de gravação rejeita (nada é apagado)
+      copiarParaConta: function (nomes) {
+        nomes.forEach(function (n) {
+          var v = null;
+          try { var cru = guardado.storage.getItem(n); v = cru ? JSON.parse(cru) : null; } catch (e) { v = null; }
+          if (v === null || armazem.ler(id, n, null) !== null) return;
+          if (!armazem.gravar(id, n, v)) throw new Error("sem espaço");
+        });
+        if (id === userId) { ultimoBackup = ler("mp-ultimo-backup", null); backupsMes = ler("mp-backups-mes", {}); }
+        return Promise.resolve();
+      },
+      apagarBancoAntigo: function () { return SF.fotos.apagarBancoFotos({ indexedDB: window.indexedDB, nome: BANCO_ANTIGO }); },
+      apagarChaves: function (chaves) { chaves.forEach(function (k) { try { guardado.storage.removeItem(k); } catch (e) { /* ignora */ } }); return Promise.resolve(); }
+    }).then(function (r) {
+      migracaoConcluindo = false;
+      if (id !== userId) return;
+      if (r.pronto) {
+        bloqueioMotivo = null;
+        toast("Pronto: tudo o que estava neste aparelho está na sua conta.");
+      } else if (/^(rejeitados|conflito|puladas|faltando|bloqueado)$/.test(r.motivo)) avisarBloqueio(r.motivo);
+      else bloqueioMotivo = null;
+    }, function () { migracaoConcluindo = false; });
+  }
+
+  function aposSincronia(s, st) {
+    if (!SF.migracao || !userId) return;
+    if (!migracaoAvaliada && st === "ok") { migracaoAvaliada = true; avaliarMigracao(); return; }
+    if (migracaoAvaliada) tentarConcluir(s);
+  }
+
+  // "Apagar dados antigos" (já confirmado na Conta): mp-* e o banco meu-prato; marcador concluída.
+  function apagarDadosAntigos() {
+    if (!podeOferecerMigracao() || migracaoEmCurso || migracaoConcluindo) return;
+    var id = userId;
+    SF.fotos.apagarBancoFotos({ indexedDB: window.indexedDB, nome: BANCO_ANTIGO }).then(function (b) {
+      if (b && b.bloqueado) { toast("Feche as outras janelas do app e tente de novo."); return; }
+      SF.migracao.chavesAntigas(guardado.storage).forEach(function (k) { try { guardado.storage.removeItem(k); } catch (e) { /* ignora */ } });
+      armazem.gravarGlobal("migracao", { dono: id, estado: "concluida", juntado: false, fotos: [], faltando: [], em: Date.now() });
+      bloqueioMotivo = null;
+      toast("Dados antigos apagados deste aparelho.");
+    }, function () { toast("Não deu para apagar os dados antigos agora."); });
   }
 
   if (armazem) ligarConta();
@@ -2043,5 +2259,4 @@
       '<a class="btn primario" href="./">Recarregar</a></div>';
   }
   render();
-  avisarContaIndisponivel();
 })();
