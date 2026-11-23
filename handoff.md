@@ -5,38 +5,34 @@
 - Máquina mantida ligada (~US$ 11,50/mês nos créditos), decisão do Kaique.
 - 22/11/2026: `REF` do provisionamento é obrigatório, sem padrão.
 - 22/11/2026: orçamento de US$ 20 mede gasto bruto (`IncludeCredit: false`).
-- 22/11/2026: abrir o cadastro antes dos planos 3 e 4, com 2 travas (ADR-005): conta não vê o `PLANO` do `data.js`; aparelho que já usou o app antigo (`mp-*`) segue local, sem conta.
+- 22/11/2026: cadastro aberto antes dos planos 3 e 4, com 2 travas (ADR-005). Os planos 3 e 4 implementados removem as duas: conta vê o próprio plano; aparelho com dados antigos abre no modo antigo (`mp-*`), com convite para criar conta. O ADR-007 (rascunho, aguarda o OK do Kaique) encerra as travas.
 - 22/11/2026: cadastro exige aceite versionado do aviso de privacidade (ADR-006); versão nova sobe no servidor antes do site.
 - 22/11/2026: responsável, encarregado, contato e acesso do aviso informados pelo Kaique; pasta Enviados do Gmail limpa a cada 30 dias, à mão.
-- 22/11/2026: plano 3 implementado remove a trava 1 do ADR-005 (conta vê o próprio plano). O plano 4 implementado remove a trava 2 (aparelho com dados antigos abre no modo antigo, gravando em `mp-*`, com convite para criar conta). O ADR que encerra as travas fica com a sessão principal.
+- 22/11/2026: treino vale pela origem da meta. Uma revisão final só, cobrindo os planos 3 e 4. Cache do app fica na versão 38 (nada foi publicado depois da 36).
 - Rulings e pendências dos planos 1, 2, 3 e 5: `docs/superpowers/plans/2026-11-21-contas-roteiro.md`.
 
 ## Estado atual (22/11/2026)
-- Máquina roda `9e23f0e` (22/11 22:21 UTC, ~13 s de 502 intermitente): 4 migrações nos dois bancos, zero contas, sem erro nos logs, `saude-logs.timer` ativo (rodado à mão: sucesso, nada a apagar). `test:pg` 58/58 em `d530cfb`.
+- Planos 3 e 4 concluídos e revisados (revisão final do branch e uma onda de correção, aprovada). Tudo no branch `feat/aceite-site` (HEAD 3031488), SEM push e SEM deploy. Site 217 testes ok; servidor 125 ok e 6 pulados (só rodam em Postgres real).
+- No ar: site versão 36 e máquina em `9e23f0e` (`main` = `feat/contas-ec2`). Cadastro ligado, aviso versão 1, zero contas, 4 migrações nos dois bancos, `saude-logs.timer` ativo.
+- Plano 3: plano alimentar e metas por pessoa (conta vê o próprio plano; `#plano/editar` e `#metas` só com conta). Plano 4: migração do app antigo (oferta "Levar o que está salvo neste aparelho para a sua conta?" só à primeira conta; dados antigos só apagados depois de o servidor confirmar tudo, ou por "Apagar dados antigos" na Conta).
+- Também vão neste push: limpeza diária de cadastros não confirmados (f7e68f2, timer `saude-limpeza@`), validação de plano/meta no `/sync`, e o segundo e-mail opcional de alerta (b9b2b8e): este ainda não foi aplicado na stack; falta o Kaique dizer o endereço. Antes de aplicar, conferir o change set do Budget (`BudgetName` fixo; se aparecer `Replacement: True`, trocar por `AWS::Budgets::BudgetsAction` ou assinatura SNS).
 - Recusa do aceite não testada por fora: o captcha de teste recusou o token fictício antes dela (causa não verificada). A `fumaca.sh` depende desse token.
-- Site no ar desde 22/11 (`main` = `feat/contas-ec2` = `9e23f0e`, Pages built): cadastro ligado à API de produção, aviso versão 1 sem campo em aberto. `/docs/`, `/server/`, `/tests/`, `handoff.md`, `CLAUDE.md`, `README.md`, `_config.yml`: 404.
-- `feat/aceite` nunca vai ao `main` (a tela dele não manda o aceite).
+- `feat/aceite` nunca vai ao `main`. Desligar o cadastro: reverter o commit `c2093fd`.
 - E-mail de alerta: SNS registrou entrega às 15:32 UTC; recebimento na caixa não confirmado.
-- Desligar o cadastro: reverter o commit `c2093fd` (só `config.js`, README e o teste dele).
+- Untracked no worktree: `docs/privacidade/` (não é desta rodada).
 
-- Plano 3 (plano alimentar e metas por pessoa) implementado no branch `feat/aceite-site`, sem push: site 207 testes ok; servidor 125 ok e 6 pulados (só rodam em Postgres real). Não está implantado nem publicado.
-- Mudanças do plano 3: conta vê o próprio plano (sem plano, convite "Cadastrar meu plano"); rotas `#plano/editar` e `#metas` só com conta; café sem horário aparece "a fazer", não "atrasado"; treino vale pela origem da meta.
-- Plano 4 (migração do app antigo) implementado no mesmo branch, sem push e sem deploy: site 209 testes ok; servidor 125 ok e 6 pulados. Aparelho com dados antigos e sem sessão abre no modo antigo, gravando em `mp-*`, com a faixa "Crie sua conta para guardar seus dados". A oferta "Levar o que está salvo neste aparelho para a sua conta?" vai só à primeira conta do aparelho, depois da primeira sincronização. Dados antigos só são apagados depois de o servidor confirmar tudo, ou por "Apagar dados antigos" (segundo toque) na Conta, que explica por que a limpeza automática parou. Cache na versão 38.
-- Os planos 3 e 4 também levam a limpeza diária de cadastros não confirmados (f7e68f2) e o segundo e-mail opcional de alerta (b9b2b8e): este ainda não foi aplicado na stack, falta o Kaique dizer o endereço.
-- Menores do plano 4 para a revisão final: lista em "Pendências do plano 4" no roteiro `docs/superpowers/plans/2026-11-21-contas-roteiro.md`.
-- Menor para a revisão final: apagar treino com dois registros da mesma origem (um ativo sem foto, um antigo com foto) remove os dois e o Desfazer restaura um; foto órfã; só com dado legado.
-
-## Ordem
-1. Revisão final do branch `feat/aceite-site`, push e deploy (o site e o servidor juntos).
-2. Kaique cria a primeira conta em janela anônima: Turnstile real, e-mail, confirmar, entrar, esqueci a senha.
-3. A Rejane migra no celular dela. Depois a sessão confere no banco de produção, só por contagens, que a conta dela tem plano, registros e fotos.
-4. Depois, plano 6.
+## Próximos passos
+1. Kaique faz o push de `feat/aceite-site` para `feat/contas-ec2` e `main` (conta `Kaique-fhs`).
+2. Deploy da máquina com `REF=feat/contas-ec2` e conferência.
+3. A Rejane abre o app no celular, entra e aceita levar os dados.
+4. A sessão confere no banco de produção, só por contagens, plano, registros e fotos da conta dela.
+5. Depois, plano 6 (tirar `PLANO` do `data.js`).
 
 ## Dúvidas em aberto
-- Troca de celular da Rejane: a restauração de cópia existe com conta. A cópia é um arquivo exportado, então a Rejane precisa ter salvo uma do aparelho antigo para usar num celular novo.
-- ADR que encerra as travas do ADR-005: rascunho com a sessão principal, aguarda OK do Kaique.
-- Roteiros de incidente e de pedidos de titular (a limpeza de cadastros não confirmados já está no código, f7e68f2, ainda sem deploy).
+- ADR-007 (encerra as duas travas do ADR-005): aguarda OK do Kaique. Gravar o ADR-004; alinhar a spec §8.1 e §8.5.
+- Ficaram para depois (revisão final): corrida rara na limpeza (`server/src/tarefas.js:16-22`: cadastro refeito durante a limpeza pode ser apagado; usar `for update skip locked`); `mp-*` recriados por aba antiga depois de concluída ficam invisíveis; sair da conta sem pendências apaga o banco de fotos da conta e leva as fotos descartadas pela junção antes da cópia mensal; `gravarGlobal` cheio deixa o marcador em migrando+juntado; `fotosDescartadas` faz `JSON.parse` a cada `fotoEmUso` (desempenho).
+- Menores do plano 3 e 4 (testes que faltam, cosméticos, aria-live no aviso "Toque de novo", minutos decimal): lista em `.superpowers/sdd/2026-11-22-plano-e-metas/progress.md` e `.superpowers/sdd/2026-11-22-migracao-app-antigo/progress.md`.
+- Troca de celular da Rejane: a cópia é um arquivo exportado, então ela precisa ter salvo uma do aparelho antigo.
+- Roteiros de incidente e de pedidos de titular ainda não existem.
 - Passar ao plano pago antes de 2027-03-23.
-- Gravar o ADR-004; alinhar a spec §8.1 e §8.5.
-- Menores da revisão: "Nova senha" com sessão não tem voltar; `sair` sem timeout; `sw.js` apaga caches de outros sites da mesma origem; token em `localStorage` de origem compartilhada (domínio próprio resolve).
-- Push é pela conta `Kaique-fhs`; a ativa no gh costuma ser `triokids`, e quem troca é o Kaique.
+- Menores antigos: "Nova senha" com sessão não tem voltar; `sair` sem timeout; `sw.js` apaga caches de outros sites da mesma origem; token em `localStorage` de origem compartilhada (domínio próprio resolve).
