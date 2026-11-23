@@ -139,17 +139,17 @@
   function sairDaConta(o) {
     return Promise.resolve().then(function () { return o.api.sair(); }).catch(function () { /* sai mesmo sem rede */ }).then(function () {
       o.local.apagarSessao();
-      if (o.pendentes > 0) return { limpezaFalhou: false };
       // Sair não apaga dados antigos não migrados: o marcador da migração (global) continua com o dono.
       var marcador = typeof o.local.lerGlobal === "function" ? o.local.lerGlobal("migracao", null) : null;
-      o.local.apagarUsuario(o.userId);
-      if (marcador && typeof o.local.gravarGlobal === "function") {
-        // saiu no meio da migração: a próxima entrada oferece de novo (a junção é união, nada se perde)
-        if (marcador.estado === "migrando") {
-          marcador = Object.assign({}, marcador, { estado: "oferecida", juntado: false });
-        }
-        o.local.gravarGlobal("migracao", marcador);
+      // saiu no meio da migração (com ou sem pendências): o aparelho volta ao modo antigo e a próxima
+      // entrada oferece de novo, para juntar também o que for marcado até lá (a junção é união, nada se perde)
+      if (marcador && marcador.estado === "migrando") {
+        marcador = Object.assign({}, marcador, { estado: "oferecida", juntado: false });
       }
+      var regravar = function () { if (marcador && typeof o.local.gravarGlobal === "function") o.local.gravarGlobal("migracao", marcador); };
+      if (o.pendentes > 0) { regravar(); return { limpezaFalhou: false }; }
+      o.local.apagarUsuario(o.userId);
+      regravar();
       return limpar(o.aoApagar, o.userId).then(function (falhou) { return { limpezaFalhou: falhou }; });
     });
   }

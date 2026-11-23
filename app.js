@@ -48,7 +48,16 @@
     if (destino === "conta") return armazem.gravar(userId, chave, valor);
     // só o modo antigo grava mp-*; na tela de entrar nada é gravado
     if (destino !== "antigo") return false;
-    try { localStorage.setItem(chave, JSON.stringify(valor)); return true; } catch (e) { return false; }
+    try { localStorage.setItem(chave, JSON.stringify(valor)); } catch (e) { return false; }
+    rebaixarMigracaoAposAntigo();
+    return true;
+  }
+  // Gravou no modo antigo com a junção já feita (sessão vencida, saiu com pendências): o marcador volta à oferta,
+  // senão o que foi gravado agora nunca chegaria à conta (SF.migracao.marcadorAposGravarAntigo).
+  function rebaixarMigracaoAposAntigo() {
+    if (!armazem || !SF.migracao || !SF.migracao.marcadorAposGravarAntigo) return;
+    var novo = SF.migracao.marcadorAposGravarAntigo(armazem.lerGlobal("migracao", null));
+    if (novo) armazem.gravarGlobal("migracao", novo);
   }
   var favs = ler("mp-favs", []);
   var sel = ler("mp-sel", []);

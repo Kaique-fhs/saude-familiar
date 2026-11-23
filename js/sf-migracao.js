@@ -227,6 +227,17 @@
     return "migrando";
   }
 
+  // O app gravou no modo antigo (mp-*): com a junção já feita, o que foi gravado agora ficaria fora da conta.
+  // Volta o marcador à oferta (`oferecida`, juntado false) para a próxima entrada juntar de novo; a junção é união,
+  // refazê-la não perde nada. Devolve o marcador novo, ou null se não há o que mudar. Não muda o que recebe.
+  function marcadorAposGravarAntigo(marcador) {
+    if (!marcador || marcador.estado !== "migrando" || marcador.juntado !== true) return null;
+    var m = {};
+    Object.keys(marcador).forEach(function (k) { m[k] = marcador[k]; });
+    m.estado = "oferecida"; m.juntado = false; m.em = Date.now();
+    return m;
+  }
+
   var HISTORICO = ["mp-ultimo-backup", "mp-backups-mes", "mp-modo-cal"];
 
   // Só apaga o que é antigo se conferir(...).pronto; banco antigo bloqueado (outra aba) não marca concluída.
@@ -246,6 +257,7 @@
 
   raiz.SF = raiz.SF || {};
   raiz.SF.migracao = { lerAntigos: lerAntigos, juntar: juntar, fotosDe: fotosDe, podeOferecer: podeOferecer, conferir: conferir,
-    copiarFotos: copiarFotos, semFotosFaltando: semFotosFaltando, chavesAntigas: chavesAntigas, executar: executar, concluir: concluir };
+    copiarFotos: copiarFotos, semFotosFaltando: semFotosFaltando, chavesAntigas: chavesAntigas, executar: executar, concluir: concluir,
+    marcadorAposGravarAntigo: marcadorAposGravarAntigo };
   if (typeof module !== "undefined") module.exports = raiz.SF.migracao;
 })(typeof window !== "undefined" ? window : globalThis);

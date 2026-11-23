@@ -192,3 +192,19 @@ test("sairDaConta no meio da migração devolve o marcador a 'oferecida' sem jun
   assert.equal(m.juntado, false);
   assert.deepEqual(m.fotos, ["f1"]);
 });
+
+test("sairDaConta com pendências no meio da migração também devolve o marcador a 'oferecida'", async () => {
+  const mapa = new Map();
+  const st = { get length() { return mapa.size; }, key: (i) => [...mapa.keys()][i] ?? null, getItem: (k) => (mapa.has(k) ? mapa.get(k) : null), setItem: (k, v) => mapa.set(k, String(v)), removeItem: (k) => mapa.delete(k) };
+  const l = require("../js/sf-local.js").criar({ storage: st });
+  l.gravarGlobal("migracao", { dono: "u1", estado: "migrando", juntado: true, fotos: ["f1"], faltando: [] });
+  l.gravar("u1", "fila", [{ tipo: "fav", chave: "a" }]);
+  const r = await conta.sairDaConta({ api: { sair: async () => {} }, local: l, userId: "u1", pendentes: 3, aoApagar: async () => { throw new Error("não devia limpar"); } });
+  assert.deepEqual(r, { limpezaFalhou: false });
+  const m = l.lerGlobal("migracao", null);
+  assert.equal(m.dono, "u1");
+  assert.equal(m.estado, "oferecida");
+  assert.equal(m.juntado, false);
+  assert.deepEqual(l.ler("u1", "fila", null), [{ tipo: "fav", chave: "a" }]); // dados da conta ficam
+  assert.equal(l.sessao(), null);
+});

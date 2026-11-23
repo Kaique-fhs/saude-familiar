@@ -379,3 +379,38 @@ test("concluir: não apaga nada se copiar o histórico falhar", async () => {
   assert.equal(d.__log.apagadas, null);
   assert.equal(d.__log.banco, 0);
 });
+
+test("marcadorAposGravarAntigo: migrando com juntado volta à oferta; o resto fica igual", () => {
+  const m = { dono: "u1", estado: "migrando", juntado: true, fotos: ["f1"], faltando: [], em: 1 };
+  const r = M.marcadorAposGravarAntigo(m);
+  assert.equal(r.estado, "oferecida");
+  assert.equal(r.juntado, false);
+  assert.equal(r.dono, "u1");
+  assert.deepEqual(r.fotos, ["f1"]);
+  assert.equal(m.estado, "migrando"); // não muda o que recebe
+  assert.equal(m.juntado, true);
+  assert.equal(M.marcadorAposGravarAntigo(null), null);
+  assert.equal(M.marcadorAposGravarAntigo({ dono: "u1", estado: "migrando", juntado: false }), null);
+  assert.equal(M.marcadorAposGravarAntigo({ dono: "u1", estado: "oferecida", juntado: false }), null);
+  assert.equal(M.marcadorAposGravarAntigo({ dono: "u1", estado: "concluida", juntado: false }), null);
+  assert.equal(M.marcadorAposGravarAntigo({ dono: "u1", estado: "recusada" }), null);
+});
+
+test("executar: o que o modo antigo gravou depois da junção chega à conta na próxima vez", async () => {
+  let gravado = null;
+  let antigo = estadoComFotos();
+  const d = depsExec({ lerAntigo: () => antigo, gravarEstado: (e) => { gravado = e; return true; } });
+  assert.equal(await M.executar(d), "migrando");
+  assert.equal(d.__marc().juntado, true);
+  // a sessão venceu e o aparelho voltou ao modo antigo: a pessoa marcou mais um dia
+  antigo = Object.assign(estadoComFotos(), { diario: { "2026-11-01": ["x"], "2026-11-03": ["novo"] } });
+  const rebaixado = M.marcadorAposGravarAntigo(d.__marc());
+  d.gravarMarcador(rebaixado);
+  const daConta = gravado;
+  d.estadoConta = () => daConta;
+  gravado = null;
+  assert.equal(await M.executar(d), "migrando");
+  assert.ok(gravado, "juntou de novo");
+  assert.deepEqual(gravado.diario["2026-11-03"], ["novo"]);
+  assert.deepEqual(gravado.diario["2026-11-01"], ["x"]);
+});
