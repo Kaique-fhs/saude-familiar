@@ -209,3 +209,17 @@ test("nomes reservados (__proto__, constructor, prototype) não valem como meta,
   assert.equal(e.metas.polui, undefined);
   assert.equal(e.registros["2026-11-22"], undefined);
 });
+
+test("idDaCopia: com conta vale o formato (plano pode ter outros ids); sem conta, só os ids do plano", () => {
+  const conta = { conta: true, ids: [] };
+  assert.equal(D.idDaCopia("feito", "2026-11-20", "cafe", conta), true); // conta sem plano: não descarta
+  assert.equal(D.idDaCopia("treino", "2026-11-20", "academia", conta), true);
+  assert.equal(D.idDaCopia("registro", "2026-11-20", "r-abc", conta), true);
+  assert.equal(D.idDaCopia("feito", "2026-11-20", "Café", conta), false); // formato inválido
+  assert.equal(D.idDaCopia("registro", "2026-11-20", "__proto__", conta), false);
+  assert.equal(D.idDaCopia("feito", "2026-11-20", 7, conta), false);
+  const antigo = { conta: false, ids: ["cafe", "academia"] };
+  assert.equal(D.idDaCopia("feito", "2026-11-20", "cafe", antigo), true);
+  assert.equal(D.idDaCopia("feito", "2026-11-20", "r-abc", antigo), false);
+  assert.equal(D.idDaCopia("treino", "2026-11-20", "academia", antigo), true);
+});

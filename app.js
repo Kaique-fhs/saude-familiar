@@ -1533,6 +1533,12 @@
   }
 
 
+  // Que ids de um dia da cópia entram (SF.dados.idDaCopia). Sem js/sf-dados.js só existe o modo antigo: ids do data.js.
+  function idDaCopiaApp(tipo, dia, id, ctx) {
+    if (SF.dados && SF.dados.idDaCopia) return SF.dados.idDaCopia(tipo, dia, id, ctx);
+    return !ctx.conta && ctx.ids.indexOf(id) >= 0;
+  }
+
   function restaurarBackup(arquivo) {
     var leitor = new FileReader();
     leitor.onload = function () {
@@ -1548,12 +1554,16 @@
         despensa = Array.isArray(d.quero) ? d.quero.filter(function (p) { return TODOS_PRODUTOS[p]; }) : [];
         var diasIgn = {};
         var idsRef = SF.plano.idsDeRefeicao(modeloAtual().planos), idsEx = SF.plano.idsDeMeta(modeloAtual().metas), novoDiario = {};
+        // com conta vale o formato da chave (o plano da conta pode ter outros ids ou nem existir); sem conta, os ids do data.js
+        var comConta = !!userId;
+        var ctxRef = { conta: comConta, ids: idsRef }, ctxEx = { conta: comConta, ids: idsEx }, ctxReg = { conta: comConta, ids: idsRef.concat(idsEx) };
         if (d.diario && typeof d.diario === "object") {
           Object.keys(d.diario).forEach(function (k) {
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !Array.isArray(d.diario[k])) return;
-            var l = d.diario[k].filter(function (id, i, arr) { return idsRef.indexOf(id) >= 0 && arr.indexOf(id) === i; });
+            var aceito = function (id) { return idDaCopiaApp("feito", k, id, ctxRef); };
+            var l = d.diario[k].filter(function (id, i, arr) { return aceito(id) && arr.indexOf(id) === i; });
             if (l.length) novoDiario[k] = l;
-            if (d.diario[k].some(function (id) { return idsRef.indexOf(id) < 0; })) diasIgn[k] = true;
+            if (d.diario[k].some(function (id) { return !aceito(id); })) diasIgn[k] = true;
           });
         }
         var hojeK = hojeChave();
@@ -1567,7 +1577,7 @@
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || typeof d.registros[k] !== "object") return;
             Object.keys(d.registros[k]).forEach(function (ref) {
               var x = d.registros[k][ref];
-              if (idsRef.indexOf(ref) < 0 && idsEx.indexOf(ref) < 0) { diasIgn[k] = true; return; }
+              if (!idDaCopiaApp("registro", k, ref, ctxReg)) { diasIgn[k] = true; return; }
               if (!x || typeof x !== "object") return;
               // mantém a referência da foto mesmo se a imagem não veio nesta cópia (vem na cópia do mês dela)
               var foto = typeof x.foto === "string" && /^f-[\w-]+$/.test(x.foto) ? x.foto : null;
@@ -1594,9 +1604,10 @@
         if (d.treinos && typeof d.treinos === "object") {
           Object.keys(d.treinos).forEach(function (k) {
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !Array.isArray(d.treinos[k])) return;
-            var l = d.treinos[k].filter(function (id, i, arr) { return idsEx.indexOf(id) >= 0 && arr.indexOf(id) === i; });
+            var aceito = function (id) { return idDaCopiaApp("treino", k, id, ctxEx); };
+            var l = d.treinos[k].filter(function (id, i, arr) { return aceito(id) && arr.indexOf(id) === i; });
             if (l.length) novosTreinos[k] = l;
-            if (d.treinos[k].some(function (id) { return idsEx.indexOf(id) < 0; })) diasIgn[k] = true;
+            if (d.treinos[k].some(function (id) { return !aceito(id); })) diasIgn[k] = true;
           });
         }
         Object.keys(novosTreinos).forEach(function (k) { if (k <= hojeK) treinos[k] = unir(treinos[k], novosTreinos[k]); });

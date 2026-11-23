@@ -25,6 +25,15 @@
     return true;
   }
 
+  // Restaurar cópia: o id de um dia entra? Com conta vale só o formato da chave (o plano da conta pode ter outros
+  // ids, ou ainda nem existir; id sem plano não conta no dia e não faz mal). Sem conta, só os ids do plano (o data.js).
+  // ctx: { conta: bool, ids: [ids aceitos sem conta] }.
+  function idDaCopia(tipo, dia, id, ctx) {
+    if (typeof id !== "string") return false;
+    if (ctx && ctx.conta) return chaveValida(tipo, dia + "|" + id);
+    return ((ctx && ctx.ids) || []).indexOf(id) >= 0;
+  }
+
   function avisar(tipo, chave) {
     if (typeof console !== "undefined" && console.warn) console.warn("Chave não sincroniza (fica só local):", tipo, String(chave).slice(0, 40));
   }
@@ -149,6 +158,6 @@
   }
 
   raiz.SF = raiz.SF || {};
-  raiz.SF.dados = { NOMES: NOMES, chaveValida: chaveValida, nomeReservado: nomeReservado, estadoVazio: estadoVazio, enumerar: enumerar, paraItens: paraItens, diferencas: diferencas, aplicar: aplicar };
+  raiz.SF.dados = { NOMES: NOMES, chaveValida: chaveValida, nomeReservado: nomeReservado, idDaCopia: idDaCopia, estadoVazio: estadoVazio, enumerar: enumerar, paraItens: paraItens, diferencas: diferencas, aplicar: aplicar };
   if (typeof module !== "undefined") module.exports = raiz.SF.dados;
 })(typeof window !== "undefined" ? window : globalThis);
