@@ -20,8 +20,8 @@ Parameters:
     Type: String
     Default: ""
     Description: >-
-      Segundo e-mail (opcional) que tambem recebe alarmes e avisos de orcamento:
-      o EmailAlerta e a caixa do app, que nem sempre alguem abre.
+      Segundo e-mail (opcional) que tambem recebe os alarmes (nao o orcamento:
+      mudar os assinantes recriaria o Budget, de nome fixo). O EmailAlerta e a caixa do app.
     AllowedPattern: "^$|^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
   TipoInstancia:
     Type: String
@@ -291,11 +291,6 @@ Resources:
           Subscribers:
             - SubscriptionType: EMAIL
               Address: !Ref EmailAlerta
-            - !If
-              - TemEmailPessoal
-              - SubscriptionType: EMAIL
-                Address: !Ref EmailAlertaPessoal
-              - !Ref AWS::NoValue
         - Notification:
             NotificationType: FORECASTED
             ComparisonOperator: GREATER_THAN
@@ -304,11 +299,6 @@ Resources:
           Subscribers:
             - SubscriptionType: EMAIL
               Address: !Ref EmailAlerta
-            - !If
-              - TemEmailPessoal
-              - SubscriptionType: EMAIL
-                Address: !Ref EmailAlertaPessoal
-              - !Ref AWS::NoValue
 
   AlarmeRecuperacao:
     Type: AWS::CloudWatch::Alarm

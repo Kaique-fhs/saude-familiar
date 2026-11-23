@@ -65,12 +65,9 @@ class Template(unittest.TestCase):
         self.assertEqual(a["Properties"], {"TopicArn": {"Ref": "TopicoAlertas"}, "Protocol": "email",
                                            "Endpoint": {"Ref": "EmailAlertaPessoal"}})
         self.assertEqual(props("AssinaturaAlertas")["Endpoint"], {"Ref": "EmailAlerta"})
-        pessoal = {"Fn::If": ["TemEmailPessoal",
-                              {"SubscriptionType": "EMAIL", "Address": {"Ref": "EmailAlertaPessoal"}},
-                              {"Ref": "AWS::NoValue"}]}
+        # O orcamento fica so com o EmailAlerta: mudar os assinantes recria o Budget, e o BudgetName e fixo.
         for n in props("Orcamento")["NotificationsWithSubscribers"]:
-            self.assertEqual(n["Subscribers"],
-                             [{"SubscriptionType": "EMAIL", "Address": {"Ref": "EmailAlerta"}}, pessoal])
+            self.assertEqual(n["Subscribers"], [{"SubscriptionType": "EMAIL", "Address": {"Ref": "EmailAlerta"}}])
 
     def test_recursos_esperados(self):
         esperados = {"GrupoSeguranca", "PapelMaquina", "PerfilMaquina", "Maquina", "IpFixo",
