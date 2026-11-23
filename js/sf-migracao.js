@@ -70,10 +70,14 @@
     return r;
   }
 
+  // Chave reservada (__proto__...) como índice de objeto comum trocaria o protótipo: fica fora da junção
+  // (no app antigo ela continua, e lerAntigos já a conta em `puladas`, o que impede apagar).
+  function livre(k) { return !dadosModulo().nomeReservado(k); }
+
   function uniaoPorDia(a, b) {
     var r = {};
-    Object.keys(a || {}).forEach(function (d) { r[d] = (a[d] || []).slice(); });
-    Object.keys(b || {}).forEach(function (d) { r[d] = uniao(r[d], b[d]); });
+    Object.keys(a || {}).filter(livre).forEach(function (d) { r[d] = (a[d] || []).slice(); });
+    Object.keys(b || {}).filter(livre).forEach(function (d) { r[d] = uniao(r[d], b[d]); });
     return r;
   }
 
@@ -99,10 +103,10 @@
     r.diario = uniaoPorDia(conta.diario, antigo.diario);
     r.treinos = uniaoPorDia(conta.treinos, antigo.treinos);
     var regs = {};
-    Object.keys(conta.registros || {}).forEach(function (d) { regs[d] = copiaProfunda(conta.registros[d]); });
-    Object.keys(antigo.registros || {}).forEach(function (d) {
+    Object.keys(conta.registros || {}).filter(livre).forEach(function (d) { regs[d] = copiaProfunda(conta.registros[d]); });
+    Object.keys(antigo.registros || {}).filter(livre).forEach(function (d) {
       regs[d] = regs[d] || {};
-      Object.keys(antigo.registros[d] || {}).forEach(function (ref) {
+      Object.keys(antigo.registros[d] || {}).filter(livre).forEach(function (ref) {
         if (!(ref in regs[d])) regs[d][ref] = copiaProfunda(antigo.registros[d][ref]);
       });
     });

@@ -6,6 +6,8 @@ const TIPOS_COM_DATA = new Set(['feito', 'treino', 'registro']);
 const CHAVE_COM_DATA = /^\d{4}-\d{2}-\d{2}\|[a-z0-9_-]{1,60}$/;
 const CHAVE_PLANO = /^(inicio|\d{4}-\d{2}-\d{2})$/;
 const CHAVE_META = /^[a-z0-9_-]{1,60}$/;
+// Ids que, como chave de um objeto comum no cliente (metas, planos, registros do dia), mexeriam no protótipo.
+const RESERVADOS = new Set(['__proto__', 'constructor', 'prototype']);
 const MAX_VALOR_BYTES = 64 * 1024;
 const MAX_MUDANCAS = 500;
 const TOLERANCIA_FUTURO = 5 * 60 * 1000;
@@ -25,9 +27,9 @@ function validarMudanca(x) {
   if (!x || typeof x !== 'object' || Array.isArray(x)) return null;
   if (!TIPOS.includes(x.tipo)) return null;
   if (typeof x.chave !== 'string' || x.chave.length < 1 || x.chave.length > 200) return null;
-  if (TIPOS_COM_DATA.has(x.tipo) && !CHAVE_COM_DATA.test(x.chave)) return null;
-  if (x.tipo === 'plano' && !CHAVE_PLANO.test(x.chave)) return null;
-  if (x.tipo === 'meta' && !CHAVE_META.test(x.chave)) return null;
+  if (TIPOS_COM_DATA.has(x.tipo) && (!CHAVE_COM_DATA.test(x.chave) || RESERVADOS.has(x.chave.slice(x.chave.indexOf('|') + 1)))) return null;
+  if (x.tipo === 'plano' && (!CHAVE_PLANO.test(x.chave) || RESERVADOS.has(x.chave))) return null;
+  if (x.tipo === 'meta' && (!CHAVE_META.test(x.chave) || RESERVADOS.has(x.chave))) return null;
   if (typeof x.ativo !== 'boolean') return null;
   if ((x.tipo === 'plano' || x.tipo === 'meta') && x.ativo
     && (x.valor === null || typeof x.valor !== 'object' || Array.isArray(x.valor))) return null;

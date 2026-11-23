@@ -192,3 +192,20 @@ test("copiar não divide objetos de plano", () => {
   assert.equal(est.planos.inicio.refeicoes[0].nome, "Almoço");
   assert.deepEqual(est.metas["m-1"].dias, [1, 3]);
 });
+
+test("nomes reservados (__proto__, constructor, prototype) não valem como meta, plano nem id do dia", () => {
+  ["__proto__", "constructor", "prototype"].forEach((n) => {
+    assert.equal(D.chaveValida("meta", n), false, "meta " + n);
+    assert.equal(D.chaveValida("plano", n), false, "plano " + n);
+    ["feito", "treino", "registro"].forEach((t) => assert.equal(D.chaveValida(t, "2026-11-22|" + n), false, t + " " + n));
+  });
+  assert.equal(D.chaveValida("meta", "proto"), true);
+  // remoto com __proto__ não troca o protótipo de metas nem de registros do dia
+  const e = D.aplicar(D.estadoVazio(), [
+    { tipo: "meta", chave: "__proto__", valor: { polui: true }, ativo: true },
+    { tipo: "registro", chave: "2026-11-22|__proto__", valor: { polui: true }, ativo: true }
+  ]);
+  assert.equal(Object.getPrototypeOf(e.metas), Object.prototype);
+  assert.equal(e.metas.polui, undefined);
+  assert.equal(e.registros["2026-11-22"], undefined);
+});

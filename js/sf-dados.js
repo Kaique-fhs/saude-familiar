@@ -9,6 +9,9 @@
   var CHAVE_PLANO = /^(inicio|\d{4}-\d{2}-\d{2})$/;
   var CHAVE_META = /^[a-z0-9_-]{1,60}$/;
   var COM_DATA = { feito: true, treino: true, registro: true };
+  // Ids que, como chave de um objeto comum (metas, planos, registros do dia), mexeriam no protótipo.
+  var RESERVADOS = ["__proto__", "constructor", "prototype"];
+  function nomeReservado(id) { return RESERVADOS.indexOf(id) >= 0; }
 
   function estadoVazio() {
     return { favs: [], sel: [], checks: {}, checksPlano: {}, despensa: [], diario: {}, treinos: {}, registros: {}, planos: {}, metas: {} };
@@ -16,9 +19,9 @@
 
   function chaveValida(tipo, chave) {
     if (typeof chave !== "string" || chave.length < 1 || chave.length > 200) return false;
-    if (COM_DATA[tipo] && !FORMATO_DATA.test(chave)) return false;
-    if (tipo === "plano") return CHAVE_PLANO.test(chave);
-    if (tipo === "meta") return CHAVE_META.test(chave);
+    if (COM_DATA[tipo] && (!FORMATO_DATA.test(chave) || nomeReservado(chave.slice(chave.indexOf("|") + 1)))) return false;
+    if (tipo === "plano") return CHAVE_PLANO.test(chave) && !nomeReservado(chave);
+    if (tipo === "meta") return CHAVE_META.test(chave) && !nomeReservado(chave);
     return true;
   }
 
@@ -146,6 +149,6 @@
   }
 
   raiz.SF = raiz.SF || {};
-  raiz.SF.dados = { NOMES: NOMES, chaveValida: chaveValida, estadoVazio: estadoVazio, enumerar: enumerar, paraItens: paraItens, diferencas: diferencas, aplicar: aplicar };
+  raiz.SF.dados = { NOMES: NOMES, chaveValida: chaveValida, nomeReservado: nomeReservado, estadoVazio: estadoVazio, enumerar: enumerar, paraItens: paraItens, diferencas: diferencas, aplicar: aplicar };
   if (typeof module !== "undefined") module.exports = raiz.SF.dados;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -414,3 +414,17 @@ test("executar: o que o modo antigo gravou depois da junção chega à conta na 
   assert.deepEqual(gravado.diario["2026-11-03"], ["novo"]);
   assert.deepEqual(gravado.diario["2026-11-01"], ["x"]);
 });
+
+test("juntar: __proto__ vindo do app antigo não troca protótipo nem polui Object.prototype", () => {
+  const antigo = JSON.parse('{"favs":[],"sel":[],"despensa":[],"checks":{},"checksPlano":{},' +
+    '"diario":{"__proto__":["x"],"2026-11-01":["cafe"]},"treinos":{"__proto__":["y"]},' +
+    '"registros":{"__proto__":{"polui":{"foto":null}},"2026-11-01":{"__proto__":{"polui":true},"cafe":{"foto":null}}}}');
+  const r = M.juntar(conta({}), antigo, undefined);
+  assert.equal(({}).polui, undefined);
+  assert.equal(Object.getPrototypeOf(r.diario), Object.prototype);
+  assert.equal(Object.getPrototypeOf(r.treinos), Object.prototype);
+  assert.equal(Object.getPrototypeOf(r.registros), Object.prototype);
+  assert.equal(Object.getPrototypeOf(r.registros["2026-11-01"]), Object.prototype);
+  assert.deepEqual(Object.keys(r.registros["2026-11-01"]), ["cafe"]);
+  assert.deepEqual(r.diario["2026-11-01"], ["cafe"]);
+});

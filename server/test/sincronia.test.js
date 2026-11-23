@@ -169,6 +169,13 @@ test('plano e meta: chave e valor validados', async () => {
     m({ tipo: 'meta', chave: 'M A', valor: { id: 'x' } }),
     m({ tipo: 'plano', chave: 'inicio', valor: 'texto' }),
     m({ tipo: 'plano', chave: 'inicio', valor: [] }),
+    // nomes reservados: um objeto indexado por eles trocaria o protótipo no cliente
+    m({ tipo: 'meta', chave: '__proto__', valor: { id: 'x' } }),
+    m({ tipo: 'meta', chave: 'constructor', valor: { id: 'x' } }),
+    m({ tipo: 'meta', chave: 'prototype', valor: { id: 'x' } }),
+    m({ tipo: 'registro', chave: '2026-11-22|__proto__', valor: { foto: null } }),
+    m({ tipo: 'treino', chave: '2026-11-22|constructor' }),
+    m({ tipo: 'feito', chave: '2026-11-22|prototype' }),
   ];
   for (const r0 of ruins) {
     const r = await enviar(app, token, [r0]);
