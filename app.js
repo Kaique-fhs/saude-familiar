@@ -20,11 +20,14 @@
     guardado = { storage: st, sessao: temSessao, antigo: temMp };
   } catch (e) { guardado = null; }
   if (guardado) {
-    var completo = !!(SF.api && SF.local && SF.dados && SF.fotos && SF.sincronia && SF.conta);
+    var completo = !!(SF.api && SF.local && SF.dados && SF.fotos && SF.sincronia && SF.conta && SF.plano);
     if (CONFIG.apiUrl && completo) armazem = SF.local.criar({ storage: guardado.storage });
     // config.js ou um script não carregou: só quem é do app antigo, sem sessão, segue sem conta.
     else if (!window.SF_CONFIG || CONFIG.apiUrl) semCarregar = guardado.sessao || !guardado.antigo;
   }
+  // Sem js/sf-plano.js nem o modo antigo funciona (o plano do data.js passa por ele): nada é lido nem gravado
+  // e aparece o aviso de recarregar, como quando falta outro script. Os dados ficam intactos no aparelho.
+  if (!SF.plano) { armazem = null; semCarregar = true; }
   if (semCarregar) modo = "entrar";
   if (armazem) {
     iniciarConta();
@@ -48,7 +51,16 @@
     if (destino === "conta") return armazem.gravar(userId, chave, valor);
     // só o modo antigo grava mp-*; na tela de entrar nada é gravado
     if (destino !== "antigo") return false;
-    try { localStorage.setItem(chave, JSON.stringify(valor)); return true; } catch (e) { return false; }
+    try { localStorage.setItem(chave, JSON.stringify(valor)); } catch (e) { return false; }
+    rebaixarMigracaoAposAntigo();
+    return true;
+  }
+  // Gravou no modo antigo com a junção já feita (sessão vencida, saiu com pendências): o marcador volta à oferta,
+  // senão o que foi gravado agora nunca chegaria à conta (SF.migracao.marcadorAposGravarAntigo).
+  function rebaixarMigracaoAposAntigo() {
+    if (!armazem || !SF.migracao || !SF.migracao.marcadorAposGravarAntigo) return;
+    var novo = SF.migracao.marcadorAposGravarAntigo(armazem.lerGlobal("migracao", null));
+    if (novo) armazem.gravarGlobal("migracao", novo);
   }
   var favs = ler("mp-favs", []);
   var sel = ler("mp-sel", []);
@@ -604,7 +616,11 @@
       urlFoto(img.dataset.foto).then(function (u) { if (u) img.src = u; else img.classList.add("sem-foto"); }).catch(function () {});
     });
   }
+  // Fotos antigas que a migração descartou (a conta já tinha registro no mesmo dia e refeição): ficam guardadas
+  // no banco da conta e vão na cópia do mês delas (spec §8.4). [{dia, ref, foto}]
+  function fotosDescartadas() { return userId && armazem ? armazem.ler(userId, "fotos-descartadas", []) : []; }
   function fotoEmUso(id) {
+    if (fotosDescartadas().some(function (x) { return x && x.foto === id; })) return true; // nunca vira órfã
     return Object.keys(registros).some(function (k) {
       return Object.keys(registros[k]).some(function (ref) { return registros[k][ref].foto === id; });
     });
@@ -902,6 +918,8 @@
     if (dia !== hojeChave()) { fecharRegistro(); toast("Dias passados ficam só para consulta."); rerenderMantendoScroll(); return; }
     var exApagar = exPorId(ref, dia);
     var ids = exApagar ? idsDaOrigem(ref) : [ref]; // exercício: apaga a marca de todos os ids da mesma origem
+    // registro com foto não se troca nem se apaga: vale para qualquer registro do dia da mesma origem
+    if (ids.some(function (o) { var r = (registros[dia] || {})[o]; return !!(r && r.foto); })) { toast("Registro com foto não pode ser apagado."); return; }
     var rmReg = exApagar ? registroDaMeta(dia, ref) : null;
     var antesReg = rmReg ? rmReg.reg : (registros[dia] || {})[ref] || null;
     var chaveReg = rmReg ? rmReg.chave : ref;
@@ -1440,6 +1458,7 @@
     return Object.keys(ms).sort().reverse();
   }
   function mesTemFotos(m) {
+    if (fotosDescartadas().some(function (x) { return x && typeof x.dia === "string" && chaveMes(x.dia) === m; })) return true;
     return Object.keys(registros).some(function (k) {
       return chaveMes(k) === m && Object.keys(registros[k]).some(function (ref) { return !!registros[k][ref].foto; });
     });
@@ -1452,6 +1471,7 @@
       if (chaveMes(k) !== mes) return;
       Object.keys(registros[k]).forEach(function (ref) { var f = registros[k][ref].foto; if (f && ids.indexOf(f) < 0) ids.push(f); });
     });
+    fotosDescartadas().forEach(function (x) { if (x && typeof x.dia === "string" && chaveMes(x.dia) === mes && x.foto && ids.indexOf(x.foto) < 0) ids.push(x.foto); });
     var fotos = {}, faltando = 0;
     // cada foto separada: se uma falhar, as outras continuam
     return ids.reduce(function (p, id) {
@@ -1510,7 +1530,7 @@
     fotosParaCopia(mes).then(function (res) {
       var fotos = res.fotos;
       // todos os dados (sem fotos) vão em toda cópia; as fotos, só as do mês escolhido
-      var dados = { app: "meu-prato", versao: 4, salvoEm: new Date().toISOString(), mesFotos: mes, favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario, registros: registros, treinos: treinos, fotos: fotos };
+      var dados = { app: "meu-prato", versao: 4, salvoEm: new Date().toISOString(), mesFotos: mes, favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario, registros: registros, treinos: treinos, fotos: fotos, fotosDescartadas: fotosDescartadas() };
       var c = { mes: mes, faltando: res.faltando, texto: JSON.stringify(dados), nome: "saude-familiar-" + mes + "-salvo-em-" + hojeChave() + ".json", feitaEm: Date.now(), arquivo: null };
       try { c.arquivo = new File([c.texto], c.nome, { type: "application/json" }); } catch (e) { c.arquivo = null; }
       if (podeCompartilhar(c.arquivo)) {
@@ -1523,6 +1543,12 @@
     });
   }
 
+
+  // Que ids de um dia da cópia entram (SF.dados.idDaCopia). Sem js/sf-dados.js só existe o modo antigo: ids do data.js.
+  function idDaCopiaApp(tipo, dia, id, ctx) {
+    if (SF.dados && SF.dados.idDaCopia) return SF.dados.idDaCopia(tipo, dia, id, ctx);
+    return !ctx.conta && ctx.ids.indexOf(id) >= 0;
+  }
 
   function restaurarBackup(arquivo) {
     var leitor = new FileReader();
@@ -1539,12 +1565,16 @@
         despensa = Array.isArray(d.quero) ? d.quero.filter(function (p) { return TODOS_PRODUTOS[p]; }) : [];
         var diasIgn = {};
         var idsRef = SF.plano.idsDeRefeicao(modeloAtual().planos), idsEx = SF.plano.idsDeMeta(modeloAtual().metas), novoDiario = {};
+        // com conta vale o formato da chave (o plano da conta pode ter outros ids ou nem existir); sem conta, os ids do data.js
+        var comConta = !!userId;
+        var ctxRef = { conta: comConta, ids: idsRef }, ctxEx = { conta: comConta, ids: idsEx }, ctxReg = { conta: comConta, ids: idsRef.concat(idsEx) };
         if (d.diario && typeof d.diario === "object") {
           Object.keys(d.diario).forEach(function (k) {
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !Array.isArray(d.diario[k])) return;
-            var l = d.diario[k].filter(function (id, i, arr) { return idsRef.indexOf(id) >= 0 && arr.indexOf(id) === i; });
+            var aceito = function (id) { return idDaCopiaApp("feito", k, id, ctxRef); };
+            var l = d.diario[k].filter(function (id, i, arr) { return aceito(id) && arr.indexOf(id) === i; });
             if (l.length) novoDiario[k] = l;
-            if (d.diario[k].some(function (id) { return idsRef.indexOf(id) < 0; })) diasIgn[k] = true;
+            if (d.diario[k].some(function (id) { return !aceito(id); })) diasIgn[k] = true;
           });
         }
         var hojeK = hojeChave();
@@ -1558,7 +1588,7 @@
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || typeof d.registros[k] !== "object") return;
             Object.keys(d.registros[k]).forEach(function (ref) {
               var x = d.registros[k][ref];
-              if (idsRef.indexOf(ref) < 0 && idsEx.indexOf(ref) < 0) { diasIgn[k] = true; return; }
+              if (!idDaCopiaApp("registro", k, ref, ctxReg)) { diasIgn[k] = true; return; }
               if (!x || typeof x !== "object") return;
               // mantém a referência da foto mesmo se a imagem não veio nesta cópia (vem na cópia do mês dela)
               var foto = typeof x.foto === "string" && /^f-[\w-]+$/.test(x.foto) ? x.foto : null;
@@ -1585,9 +1615,10 @@
         if (d.treinos && typeof d.treinos === "object") {
           Object.keys(d.treinos).forEach(function (k) {
             if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !Array.isArray(d.treinos[k])) return;
-            var l = d.treinos[k].filter(function (id, i, arr) { return idsEx.indexOf(id) >= 0 && arr.indexOf(id) === i; });
+            var aceito = function (id) { return idDaCopiaApp("treino", k, id, ctxEx); };
+            var l = d.treinos[k].filter(function (id, i, arr) { return aceito(id) && arr.indexOf(id) === i; });
             if (l.length) novosTreinos[k] = l;
-            if (d.treinos[k].some(function (id) { return idsEx.indexOf(id) < 0; })) diasIgn[k] = true;
+            if (d.treinos[k].some(function (id) { return !aceito(id); })) diasIgn[k] = true;
           });
         }
         Object.keys(novosTreinos).forEach(function (k) { if (k <= hojeK) treinos[k] = unir(treinos[k], novosTreinos[k]); });
@@ -2117,6 +2148,14 @@
         salvarTudo();
         if (!(dlg && dlg.open)) rerenderMantendoScroll();
         return Promise.resolve(true);
+      },
+      // Guarda (somando ao que já havia) as fotos antigas que a junção descarta; falha rejeita e nada é juntado.
+      guardarDescartadas: function (lista) {
+        if (!lista.length) return Promise.resolve();
+        if (!mesmaConta()) return Promise.reject(new Error("conta trocada"));
+        var atual = armazem.ler(id, "fotos-descartadas", []);
+        lista.forEach(function (x) { if (!atual.some(function (y) { return y && y.foto === x.foto; })) atual.push(x); });
+        return armazem.gravar(id, "fotos-descartadas", atual) ? Promise.resolve() : Promise.reject(new Error("sem espaço"));
       },
       copiarFotos: function (ids, aoProgresso) {
         return SF.migracao.copiarFotos(ids, {

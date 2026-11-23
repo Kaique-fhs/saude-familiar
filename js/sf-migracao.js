@@ -70,10 +70,14 @@
     return r;
   }
 
+  // Chave reservada (__proto__...) como índice de objeto comum trocaria o protótipo: fica fora da junção
+  // (no app antigo ela continua, e lerAntigos já a conta em `puladas`, o que impede apagar).
+  function livre(k) { return !dadosModulo().nomeReservado(k); }
+
   function uniaoPorDia(a, b) {
     var r = {};
-    Object.keys(a || {}).forEach(function (d) { r[d] = (a[d] || []).slice(); });
-    Object.keys(b || {}).forEach(function (d) { r[d] = uniao(r[d], b[d]); });
+    Object.keys(a || {}).filter(livre).forEach(function (d) { r[d] = (a[d] || []).slice(); });
+    Object.keys(b || {}).filter(livre).forEach(function (d) { r[d] = uniao(r[d], b[d]); });
     return r;
   }
 
@@ -99,10 +103,10 @@
     r.diario = uniaoPorDia(conta.diario, antigo.diario);
     r.treinos = uniaoPorDia(conta.treinos, antigo.treinos);
     var regs = {};
-    Object.keys(conta.registros || {}).forEach(function (d) { regs[d] = copiaProfunda(conta.registros[d]); });
-    Object.keys(antigo.registros || {}).forEach(function (d) {
+    Object.keys(conta.registros || {}).filter(livre).forEach(function (d) { regs[d] = copiaProfunda(conta.registros[d]); });
+    Object.keys(antigo.registros || {}).filter(livre).forEach(function (d) {
       regs[d] = regs[d] || {};
-      Object.keys(antigo.registros[d] || {}).forEach(function (ref) {
+      Object.keys(antigo.registros[d] || {}).filter(livre).forEach(function (ref) {
         if (!(ref in regs[d])) regs[d][ref] = copiaProfunda(antigo.registros[d][ref]);
       });
     });
@@ -124,6 +128,21 @@
       Object.keys(d).forEach(function (ref) {
         var f = d[ref] && d[ref].foto;
         if (typeof f === "string" && f && !vistas[f]) { vistas[f] = true; r.push(f); }
+      });
+    });
+    return r;
+  }
+
+  // Fotos dos registros antigos que a junção descarta (a conta já tem registro no mesmo dia e refeição, com outra
+  // foto ou sem foto): [{dia, ref, foto}]. Elas ficam guardadas no aparelho até a próxima cópia mensal (spec §8.4).
+  function fotosDescartadas(conta, antigo) {
+    var r = [], regsConta = (conta && conta.registros) || {};
+    Object.keys((antigo && antigo.registros) || {}).filter(livre).forEach(function (dia) {
+      var d = antigo.registros[dia] || {}, dc = Object.prototype.hasOwnProperty.call(regsConta, dia) ? regsConta[dia] || {} : {};
+      Object.keys(d).filter(livre).forEach(function (ref) {
+        var f = d[ref] && d[ref].foto;
+        if (typeof f !== "string" || !f || !Object.prototype.hasOwnProperty.call(dc, ref)) return;
+        if ((dc[ref] && dc[ref].foto) !== f) r.push({ dia: dia, ref: ref, foto: f });
       });
     });
     return r;
@@ -216,6 +235,10 @@
     }
     if (!jaJuntou) {
       var conta = await deps.estadoConta();
+      // antes de gravar a junção: a foto antiga descartada fica guardada, não vira órfã
+      if (deps.guardarDescartadas) {
+        await deps.guardarDescartadas(fotosDescartadas(conta, antigo).filter(function (x) { return res.faltando.indexOf(x.foto) < 0; }));
+      }
       var final = semFotosFaltando(juntar(conta, antigo, deps.PLANO), res.faltando);
       var gravou = await deps.gravarEstado(final);
       if (gravou === false) {
@@ -225,6 +248,17 @@
     }
     await deps.gravarMarcador(marcadorCom(atual, deps.userId, { estado: "migrando", juntado: true, fotos: res.copiadas, faltando: res.faltando }));
     return "migrando";
+  }
+
+  // O app gravou no modo antigo (mp-*): com a junção já feita, o que foi gravado agora ficaria fora da conta.
+  // Volta o marcador à oferta (`oferecida`, juntado false) para a próxima entrada juntar de novo; a junção é união,
+  // refazê-la não perde nada. Devolve o marcador novo, ou null se não há o que mudar. Não muda o que recebe.
+  function marcadorAposGravarAntigo(marcador) {
+    if (!marcador || marcador.estado !== "migrando" || marcador.juntado !== true) return null;
+    var m = {};
+    Object.keys(marcador).forEach(function (k) { m[k] = marcador[k]; });
+    m.estado = "oferecida"; m.juntado = false; m.em = Date.now();
+    return m;
   }
 
   var HISTORICO = ["mp-ultimo-backup", "mp-backups-mes", "mp-modo-cal"];
@@ -246,6 +280,7 @@
 
   raiz.SF = raiz.SF || {};
   raiz.SF.migracao = { lerAntigos: lerAntigos, juntar: juntar, fotosDe: fotosDe, podeOferecer: podeOferecer, conferir: conferir,
-    copiarFotos: copiarFotos, semFotosFaltando: semFotosFaltando, chavesAntigas: chavesAntigas, executar: executar, concluir: concluir };
+    copiarFotos: copiarFotos, semFotosFaltando: semFotosFaltando, chavesAntigas: chavesAntigas, executar: executar, concluir: concluir,
+    marcadorAposGravarAntigo: marcadorAposGravarAntigo, fotosDescartadas: fotosDescartadas };
   if (typeof module !== "undefined") module.exports = raiz.SF.migracao;
 })(typeof window !== "undefined" ? window : globalThis);
