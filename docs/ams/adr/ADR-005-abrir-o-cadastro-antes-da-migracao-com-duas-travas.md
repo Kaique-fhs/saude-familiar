@@ -1,5 +1,6 @@
 # ADR-005 - Abrir o cadastro antes da migracao com duas travas
 
+**Emendada por:** ADR-007
 **Status:** Aceito
 **Data:** 22/11/2026
 
