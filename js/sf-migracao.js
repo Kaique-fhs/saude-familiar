@@ -133,6 +133,21 @@
     return r;
   }
 
+  // Fotos dos registros antigos que a junção descarta (a conta já tem registro no mesmo dia e refeição, com outra
+  // foto ou sem foto): [{dia, ref, foto}]. Elas ficam guardadas no aparelho até a próxima cópia mensal (spec §8.4).
+  function fotosDescartadas(conta, antigo) {
+    var r = [], regsConta = (conta && conta.registros) || {};
+    Object.keys((antigo && antigo.registros) || {}).filter(livre).forEach(function (dia) {
+      var d = antigo.registros[dia] || {}, dc = Object.prototype.hasOwnProperty.call(regsConta, dia) ? regsConta[dia] || {} : {};
+      Object.keys(d).filter(livre).forEach(function (ref) {
+        var f = d[ref] && d[ref].foto;
+        if (typeof f !== "string" || !f || !Object.prototype.hasOwnProperty.call(dc, ref)) return;
+        if ((dc[ref] && dc[ref].foto) !== f) r.push({ dia: dia, ref: ref, foto: f });
+      });
+    });
+    return r;
+  }
+
   function podeOferecer(marcador, userId, temDadosAntigos) {
     if (!temDadosAntigos) return false;
     if (!marcador) return true;
@@ -220,6 +235,10 @@
     }
     if (!jaJuntou) {
       var conta = await deps.estadoConta();
+      // antes de gravar a junção: a foto antiga descartada fica guardada, não vira órfã
+      if (deps.guardarDescartadas) {
+        await deps.guardarDescartadas(fotosDescartadas(conta, antigo).filter(function (x) { return res.faltando.indexOf(x.foto) < 0; }));
+      }
       var final = semFotosFaltando(juntar(conta, antigo, deps.PLANO), res.faltando);
       var gravou = await deps.gravarEstado(final);
       if (gravou === false) {
@@ -262,6 +281,6 @@
   raiz.SF = raiz.SF || {};
   raiz.SF.migracao = { lerAntigos: lerAntigos, juntar: juntar, fotosDe: fotosDe, podeOferecer: podeOferecer, conferir: conferir,
     copiarFotos: copiarFotos, semFotosFaltando: semFotosFaltando, chavesAntigas: chavesAntigas, executar: executar, concluir: concluir,
-    marcadorAposGravarAntigo: marcadorAposGravarAntigo };
+    marcadorAposGravarAntigo: marcadorAposGravarAntigo, fotosDescartadas: fotosDescartadas };
   if (typeof module !== "undefined") module.exports = raiz.SF.migracao;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -428,3 +428,26 @@ test("juntar: __proto__ vindo do app antigo não troca protótipo nem polui Obje
   assert.deepEqual(Object.keys(r.registros["2026-11-01"]), ["cafe"]);
   assert.deepEqual(r.diario["2026-11-01"], ["cafe"]);
 });
+
+test("fotosDescartadas: foto antiga de registro que a conta já tem no mesmo dia e refeição", () => {
+  const c = conta({ registros: { "2026-11-01": { cafe: reg("da-conta"), almoco: reg("igual") } } });
+  const a = Object.assign(D.estadoVazio(), {
+    registros: { "2026-11-01": { cafe: reg("antiga"), almoco: reg("igual"), jantar: reg("nova") }, "2026-11-02": { cafe: reg(null) } }
+  });
+  assert.deepEqual(M.fotosDescartadas(c, a), [{ dia: "2026-11-01", ref: "cafe", foto: "antiga" }]);
+  assert.deepEqual(M.fotosDescartadas(conta({}), a), []);
+});
+
+test("executar: guarda as fotos antigas descartadas pela junção (menos as que faltaram)", async () => {
+  const guardadas = [];
+  const d = depsExec({
+    estadoConta: () => conta({ registros: { "2026-11-01": { cafe: reg("da-conta"), almoco: reg("outra") } } }),
+    copiarFotos: async () => ({ copiadas: ["f1"], faltando: ["f2"] }),
+    guardarDescartadas: async (l) => { guardadas.push(l); }
+  });
+  assert.equal(await M.executar(d), "migrando");
+  assert.deepEqual(guardadas, [[{ dia: "2026-11-01", ref: "cafe", foto: "f1" }]]);
+  // retomada com juntado: não junta, não guarda de novo
+  assert.equal(await M.executar(d), "migrando");
+  assert.equal(guardadas.length, 1);
+});

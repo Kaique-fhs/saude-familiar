@@ -616,7 +616,11 @@
       urlFoto(img.dataset.foto).then(function (u) { if (u) img.src = u; else img.classList.add("sem-foto"); }).catch(function () {});
     });
   }
+  // Fotos antigas que a migração descartou (a conta já tinha registro no mesmo dia e refeição): ficam guardadas
+  // no banco da conta e vão na cópia do mês delas (spec §8.4). [{dia, ref, foto}]
+  function fotosDescartadas() { return userId && armazem ? armazem.ler(userId, "fotos-descartadas", []) : []; }
   function fotoEmUso(id) {
+    if (fotosDescartadas().some(function (x) { return x && x.foto === id; })) return true; // nunca vira órfã
     return Object.keys(registros).some(function (k) {
       return Object.keys(registros[k]).some(function (ref) { return registros[k][ref].foto === id; });
     });
@@ -1454,6 +1458,7 @@
     return Object.keys(ms).sort().reverse();
   }
   function mesTemFotos(m) {
+    if (fotosDescartadas().some(function (x) { return x && typeof x.dia === "string" && chaveMes(x.dia) === m; })) return true;
     return Object.keys(registros).some(function (k) {
       return chaveMes(k) === m && Object.keys(registros[k]).some(function (ref) { return !!registros[k][ref].foto; });
     });
@@ -1466,6 +1471,7 @@
       if (chaveMes(k) !== mes) return;
       Object.keys(registros[k]).forEach(function (ref) { var f = registros[k][ref].foto; if (f && ids.indexOf(f) < 0) ids.push(f); });
     });
+    fotosDescartadas().forEach(function (x) { if (x && typeof x.dia === "string" && chaveMes(x.dia) === mes && x.foto && ids.indexOf(x.foto) < 0) ids.push(x.foto); });
     var fotos = {}, faltando = 0;
     // cada foto separada: se uma falhar, as outras continuam
     return ids.reduce(function (p, id) {
@@ -1524,7 +1530,7 @@
     fotosParaCopia(mes).then(function (res) {
       var fotos = res.fotos;
       // todos os dados (sem fotos) vão em toda cópia; as fotos, só as do mês escolhido
-      var dados = { app: "meu-prato", versao: 4, salvoEm: new Date().toISOString(), mesFotos: mes, favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario, registros: registros, treinos: treinos, fotos: fotos };
+      var dados = { app: "meu-prato", versao: 4, salvoEm: new Date().toISOString(), mesFotos: mes, favs: favs, sel: sel, checks: checks, checksPlano: checksPlano, quero: despensa, diario: diario, registros: registros, treinos: treinos, fotos: fotos, fotosDescartadas: fotosDescartadas() };
       var c = { mes: mes, faltando: res.faltando, texto: JSON.stringify(dados), nome: "saude-familiar-" + mes + "-salvo-em-" + hojeChave() + ".json", feitaEm: Date.now(), arquivo: null };
       try { c.arquivo = new File([c.texto], c.nome, { type: "application/json" }); } catch (e) { c.arquivo = null; }
       if (podeCompartilhar(c.arquivo)) {
@@ -2142,6 +2148,14 @@
         salvarTudo();
         if (!(dlg && dlg.open)) rerenderMantendoScroll();
         return Promise.resolve(true);
+      },
+      // Guarda (somando ao que já havia) as fotos antigas que a junção descarta; falha rejeita e nada é juntado.
+      guardarDescartadas: function (lista) {
+        if (!lista.length) return Promise.resolve();
+        if (!mesmaConta()) return Promise.reject(new Error("conta trocada"));
+        var atual = armazem.ler(id, "fotos-descartadas", []);
+        lista.forEach(function (x) { if (!atual.some(function (y) { return y && y.foto === x.foto; })) atual.push(x); });
+        return armazem.gravar(id, "fotos-descartadas", atual) ? Promise.resolve() : Promise.reject(new Error("sem espaço"));
       },
       copiarFotos: function (ids, aoProgresso) {
         return SF.migracao.copiarFotos(ids, {
