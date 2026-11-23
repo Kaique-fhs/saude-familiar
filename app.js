@@ -20,11 +20,14 @@
     guardado = { storage: st, sessao: temSessao, antigo: temMp };
   } catch (e) { guardado = null; }
   if (guardado) {
-    var completo = !!(SF.api && SF.local && SF.dados && SF.fotos && SF.sincronia && SF.conta);
+    var completo = !!(SF.api && SF.local && SF.dados && SF.fotos && SF.sincronia && SF.conta && SF.plano);
     if (CONFIG.apiUrl && completo) armazem = SF.local.criar({ storage: guardado.storage });
     // config.js ou um script não carregou: só quem é do app antigo, sem sessão, segue sem conta.
     else if (!window.SF_CONFIG || CONFIG.apiUrl) semCarregar = guardado.sessao || !guardado.antigo;
   }
+  // Sem js/sf-plano.js nem o modo antigo funciona (o plano do data.js passa por ele): nada é lido nem gravado
+  // e aparece o aviso de recarregar, como quando falta outro script. Os dados ficam intactos no aparelho.
+  if (!SF.plano) { armazem = null; semCarregar = true; }
   if (semCarregar) modo = "entrar";
   if (armazem) {
     iniciarConta();
