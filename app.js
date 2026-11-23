@@ -911,6 +911,8 @@
     if (dia !== hojeChave()) { fecharRegistro(); toast("Dias passados ficam só para consulta."); rerenderMantendoScroll(); return; }
     var exApagar = exPorId(ref, dia);
     var ids = exApagar ? idsDaOrigem(ref) : [ref]; // exercício: apaga a marca de todos os ids da mesma origem
+    // registro com foto não se troca nem se apaga: vale para qualquer registro do dia da mesma origem
+    if (ids.some(function (o) { var r = (registros[dia] || {})[o]; return !!(r && r.foto); })) { toast("Registro com foto não pode ser apagado."); return; }
     var rmReg = exApagar ? registroDaMeta(dia, ref) : null;
     var antesReg = rmReg ? rmReg.reg : (registros[dia] || {})[ref] || null;
     var chaveReg = rmReg ? rmReg.chave : ref;
